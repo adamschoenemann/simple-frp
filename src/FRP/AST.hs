@@ -4,6 +4,7 @@ module FRP.AST where
 import FRP.Pretty
 
 type Name = String
+type Pointer = String
 
 data Type
   = TyParam Name
@@ -46,6 +47,9 @@ data Term
   | TmLit Lit
   | TmBinOp BinOp Term Term
   | TmITE Term Term Term
+  | TmPntr Pointer
+  | TmPntrDeref Pointer
+  | TmAlloc
   deriving (Show)
 
 instance Pretty Term where
@@ -74,19 +78,29 @@ instance Pretty Term where
         <+> text "then" <+> ppr (n+1) trmt
         <+> text "else" <+> ppr (n+1) trmf
 
+data Value
+  = VTup Value Value
+  | VInl Value
+  | VInr Value
+  | VLam Name Term
+  | VPntr Pointer
+  | VAlloc
+  | VStable Value
+  | VCons Value Value
+  deriving (Show)
 
 data Pattern
   = PBind Name
-  | PUncons Pattern Pattern
-  | PUndelay Pattern
+  | PCons Pattern Pattern
+  | PDelay Pattern
   | PStable Pattern
   deriving (Show)
 
 instance Pretty Pattern where
   ppr n pat = case pat of
     PBind nm      -> text nm
-    PUncons p1 p2 -> text "cons" <> parens (ppr (n+1) p1 <> comma <+> ppr (n+1) p2)
-    PUndelay p1   -> text "δ" <> parens (ppr (n+1) p1)
+    PCons p1 p2 -> text "cons" <> parens (ppr (n+1) p1 <> comma <+> ppr (n+1) p2)
+    PDelay p1   -> text "δ" <> parens (ppr (n+1) p1)
     PStable p1    -> text "stable" <> parens (ppr (n+1) p1)
 
 

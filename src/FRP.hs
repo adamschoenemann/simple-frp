@@ -1,9 +1,10 @@
 
 module FRP
   ( module FRP.AST
-  , Decl(..)
-  , Program(..))
+  , module FRP.Semantics
+  )
   where
 
 import FRP.AST
+import FRP.Semantics
 

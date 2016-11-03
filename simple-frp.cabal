@@ -15,8 +15,8 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     FRP, FRP.AST, FRP.Pretty
-  build-depends:       base >= 4.7 && < 5, pretty
+  exposed-modules:     FRP, FRP.AST, FRP.Pretty, FRP.Semantics
+  build-depends:       base >= 4.7 && < 5, pretty, containers
   default-language:    Haskell2010
 
 executable simple-frp-exe
