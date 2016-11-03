@@ -4,7 +4,7 @@ synopsis:            Initial project template from stack
 description:         Please see README.md
 homepage:            https://github.com/githubuser/simple-frp#readme
 license:             BSD3
-license-file:        LICENSE
+license-file:        LICENSE.txt
 author:              Author name here
 maintainer:          example@example.com
 copyright:           2016 Author name here
@@ -15,8 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     FRP
-  other-modules:       FRP.AST
+  exposed-modules:     FRP, FRP.AST, FRP.Pretty
   build-depends:       base >= 4.7 && < 5, pretty
   default-language:    Haskell2010
 
