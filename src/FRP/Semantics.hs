@@ -2,15 +2,22 @@
 module FRP.Semantics where
 
 import Data.Map.Strict
+import Control.Monad.State
 
 import FRP.AST
 
+type EvalM = StateT Store Maybe Value
+
 type Store = Map String Value
 
--- evalStep :: (Store, trm) -> Maybe (Store, Value)
--- evalStep (sig, e) = case e of
---   TmFst trm -> let (sig', e') = evalStep
---   TmSnd trm
+evalStep :: Term -> EvalM
+evalStep e = case e of
+  TmFst trm -> do
+    VTup x y <- evalStep trm
+    return x
+  TmSnd trm -> do
+    VTup x y <- evalStep trm
+    return y
 --   TmTup trm1 trm2
 --   TmInl trm
 --   TmInr trm
