@@ -41,6 +41,7 @@ data Term
   | TmVar Name
   | TmApp Term Term
   | TmCons Term Term
+  | TmStable Term
   | TmDelay Term Term
   | TmPromote Term
   | TmLet Pattern Term Term
@@ -51,6 +52,29 @@ data Term
   | TmPntrDeref Pointer
   | TmAlloc
   deriving (Show)
+
+isValue :: Term -> Bool
+isValue tm = case tm of
+  TmFst _             -> True
+  TmSnd _             -> True
+  TmTup _ _           -> True
+  TmInl _             -> True
+  TmInr _             -> True
+  TmCase _ _ _        -> False
+  TmLam _ _           -> True
+  TmVar _             -> False
+  TmApp _ _           -> False
+  TmCons _ _          -> True
+  TmStable _          -> True
+  TmDelay _ _         -> False
+  TmPromote _         -> False
+  TmLet _ _ _         -> False
+  TmLit _             -> False
+  TmBinOp _ _ _       -> False
+  TmITE _ _ _         -> False
+  TmPntr _            -> True
+  TmPntrDeref _       -> False
+  TmAlloc             -> True
 
 instance Pretty Term where
   ppr n term = case term of
@@ -68,6 +92,7 @@ instance Pretty Term where
     TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
     TmCons hd tl         -> text "cons" <+> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
     TmDelay alloc trm    -> text "δ_" <> ppr (n+1) alloc <> parens (ppr (n+1) trm)
+    TmStable trm         -> text "stable" <> parens (ppr (n+1) trm)
     TmPromote trm        -> text "promote" <> parens (ppr (n+1) trm)
     TmLet ptn trm trm'   -> text "let" <+> ppr (n+1) ptn <+> text "="
                               <+> ppr (n+1) trm <+> text "in" $$ ppr (n+1) trm'
@@ -80,17 +105,6 @@ instance Pretty Term where
     TmPntr pntr          -> char '&' <> text pntr
     TmPntrDeref pntr     -> char '*' <> text pntr
     TmAlloc              -> text "♢"
-
-data Value
-  = VTup Value Value
-  | VInl Value
-  | VInr Value
-  | VLam Name Term
-  | VPntr Pointer
-  | VAlloc
-  | VStable Value
-  | VCons Value Value
-  deriving (Show)
 
 data Pattern
   = PBind Name
@@ -123,7 +137,7 @@ data BinOp
   deriving (Show)
 
 instance Pretty BinOp where
-  ppr n op = text $ case op of
+  ppr _ op = text $ case op of
     Add  -> "+"
     Sub  -> "-"
     Mult -> "*"
@@ -144,7 +158,7 @@ data Lit
   deriving (Show)
 
 instance Pretty Lit where
-  ppr n lit = case lit of
+  ppr _ lit = case lit of
     LInt  i -> int i
     LBool b -> text $ show b
 
