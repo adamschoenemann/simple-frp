@@ -77,6 +77,9 @@ instance Pretty Term where
       text "if" <+> ppr n b
         <+> text "then" <+> ppr (n+1) trmt
         <+> text "else" <+> ppr (n+1) trmf
+    TmPntr pntr          -> char '&' <> text pntr
+    TmPntrDeref pntr     -> char '*' <> text pntr
+    TmAlloc              -> text "♢"
 
 data Value
   = VTup Value Value
