@@ -4,7 +4,7 @@ module FRP.AST where
 import FRP.Pretty
 
 type Name = String
-type Pointer = String
+type Label = Int
 
 data Type
   = TyParam Name
@@ -48,8 +48,8 @@ data Term
   | TmLit Lit
   | TmBinOp BinOp Term Term
   | TmITE Term Term Term
-  | TmPntr Pointer
-  | TmPntrDeref Pointer
+  | TmPntr Label
+  | TmPntrDeref Label
   | TmAlloc
   deriving (Show)
 
@@ -90,7 +90,7 @@ instance Pretty Term where
     TmLam b trm          -> text "\\" <> text b <> char '.' <+> ppr (n+1) trm
     TmVar v              -> text v
     TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
-    TmCons hd tl         -> text "cons" <+> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
+    TmCons hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
     TmDelay alloc trm    -> text "δ_" <> ppr (n+1) alloc <> parens (ppr (n+1) trm)
     TmStable trm         -> text "stable" <> parens (ppr (n+1) trm)
     TmPromote trm        -> text "promote" <> parens (ppr (n+1) trm)
@@ -102,8 +102,8 @@ instance Pretty Term where
       text "if" <+> ppr n b
         <+> text "then" <+> ppr (n+1) trmt
         <+> text "else" <+> ppr (n+1) trmf
-    TmPntr pntr          -> char '&' <> text pntr
-    TmPntrDeref pntr     -> char '*' <> text pntr
+    TmPntr pntr          -> text "&[" <> int pntr <> text "]"
+    TmPntrDeref pntr     -> text "*[" <> int pntr <> text "]"
     TmAlloc              -> text "♢"
 
 data Pattern
@@ -128,7 +128,6 @@ data BinOp
   | Div
   | And
   | Or
-  | Neg
   | Leq
   | Lt
   | Geq
@@ -144,7 +143,6 @@ instance Pretty BinOp where
     Div  -> "/"
     And  -> "&&"
     Or   -> "||"
-    Neg  -> "!"
     Leq  -> "<="
     Lt   -> "<"
     Geq  -> ">="
@@ -155,7 +153,7 @@ instance Pretty BinOp where
 data Lit
   = LInt Int
   | LBool Bool
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance Pretty Lit where
   ppr _ lit = case lit of

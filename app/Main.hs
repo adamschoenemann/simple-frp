@@ -64,3 +64,12 @@ frp_sum_acc = Decl ty name body where
     TmApp (TmApp (TmApp (TmVar "sum_acc") (TmVar "us'"))
                  (TmVar "ns'"))
           (TmVar "x")
+
+frp_const_10 :: Decl
+frp_const_10 = Decl ty name body where
+  ty = TyArr (TyStream TyAlloc) (TyStream TyNat)
+  name = "const_10"
+  body = TmApp (_body frp_const) (TmLit (LInt 10))
+
+frp_constProg :: Program
+frp_constProg = Program { _main = frp_const_10, _decls = []}
