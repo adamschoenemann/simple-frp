@@ -87,7 +87,7 @@ instance Pretty Term where
       text "case" <+> parens (ppr (n+1) trm <+> comma
         <+> text "inl" <+> text vl <+> text "->" <+> ppr (n+1) trml
         <+> text "inr" <+> text vr <+> text "->" <+> ppr (n+1) trmr)
-    TmLam b trm          -> text "\\" <> text b <> char '.' <+> ppr (n+1) trm
+    TmLam b trm          -> prns (text "\\" <> text b <> char '.' <+> ppr (n+1) trm)
     TmVar v              -> text v
     TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
     TmCons hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
@@ -105,6 +105,10 @@ instance Pretty Term where
     TmPntr pntr          -> text "&[" <> int pntr <> text "]"
     TmPntrDeref pntr     -> text "*[" <> int pntr <> text "]"
     TmAlloc              -> text "♢"
+    where
+      prns = if (n > 0)
+             then parens
+             else id
 
 data Pattern
   = PBind Name

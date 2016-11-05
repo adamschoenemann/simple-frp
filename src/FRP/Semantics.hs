@@ -4,16 +4,20 @@ module FRP.Semantics where
 import Data.Map.Strict (Map)
 import Data.Map.Strict as M
 import Control.Monad.State
+import Debug.Trace
 
 import FRP.AST
+import FRP.Pretty
 
 data Qualifier
   = QNow
   | QStable
   | QLater
+  deriving (Show)
 
 data StoreVal
   = SVal Term Qualifier
+  deriving (Show)
 
 type Scope = Map Name Term
 type Store = Map Label StoreVal
@@ -22,7 +26,7 @@ data EvalState = EvalState
   { _store :: Store
   , _scope :: Scope
   , _labelGen :: Int
-  }
+  } deriving (Show)
 
 
 type EvalM a = State EvalState a
@@ -43,15 +47,39 @@ putVar x t = do
   let scope' = insert x t scope
   put $ st { _scope = scope' }
 
+local :: s -> State s a -> State s a
+local x comp = do
+  y <- get
+  put x
+  z <- comp
+  put y
+  return z
+
+-- this is very hard to implement for some reason
+-- or is it even here the error lies?
 localVar :: Name -> Term -> EvalM a -> EvalM a
 localVar x t eval = do
-  scope <- getScope
   st <- get
-  let scope' = insert x t scope
-  put $ st { _scope = scope' }
-  r <- eval
-  put st
-  return r
+  let scope' = insert x t $ _scope st
+  local (st { _scope = scope' }) eval
+
+  -- scope <- getScope
+  -- st <- get
+  -- let scope' = insert x t scope
+  -- let st' = st { _scope = scope' }
+  -- let (r, st'') = runEval eval st'
+  -- return r
+
+  -- st <- get
+  -- let scope = _scope st
+  -- let scope' = insert x t $ scope
+  -- put $ st { _scope = scope' }
+  -- r <- eval
+  -- -- st' <- get
+  -- -- put $ st' { _scope = scope }
+  -- return r
+
+
 
 allocVal :: StoreVal -> EvalM Label
 allocVal v = do
@@ -79,7 +107,12 @@ genLabel = do
   return gen
 
 evalStep :: Term -> EvalM Term
-evalStep e = case e of
+evalStep e = do
+  s <- get
+  traceM (show $ _scope s)
+  evalStep' e
+
+evalStep' e = case e of
   TmFst trm -> do
     TmTup x y <- evalStep trm
     return x
@@ -92,14 +125,27 @@ evalStep e = case e of
   TmCase trm (nml, trml) (nmr, trmr) -> do
     res <- evalStep trm
     case res of
-      TmInl vl -> (subst nml `with` vl `inTerm` trml) >>= evalStep
-      TmInr vr -> (subst nmr `with` vr `inTerm` trmr) >>= evalStep
+      TmInl vl -> (subst nml `with` vl `inTerm` trml)
+      TmInr vr -> (subst nmr `with` vr `inTerm` trmr)
       _        -> error "not well-typed"
   TmLam nm trm -> return $ TmLam nm trm
   TmApp e1 e2 -> do
+    -- traceM ("apply " ++ ppshow e1 ++ " to " ++ ppshow e2)
     TmLam x e1' <- evalStep e1
     v2 <- evalStep e2
-    evalStep =<< (subst x `with` v2 `inTerm` e1')
+    st <- get
+    let scope = _scope st
+    modify (\s ->
+                let scope = _scope s
+                    scope' = insert x v2 scope
+                in  s {_scope = scope'}
+           )
+    r <- evalStep e1'
+    st' <- get
+    put $ st' { _scope = scope }
+    return r
+
+    -- (subst x `with` v2 `inTerm` e1')
   TmCons hd tl -> do
     hd' <- evalStep hd
     tl' <- evalStep tl
@@ -126,11 +172,11 @@ evalStep e = case e of
       subst x `with` (TmPntrDeref lbl) `inTerm` e'
     PStable (PBind x) -> do
       TmStable v <- evalStep e
-      evalStep =<< (subst x `with` v `inTerm` e')
+      (subst x `with` v `inTerm` e')
     PCons (PBind x) (PDelay (PBind xs)) -> do
       TmCons v (TmPntr l) <- evalStep e
       e'' <- subst x `with` v `inTerm` e'
-      evalStep =<< (subst xs `with` (TmPntr l) `inTerm` e'')
+      subst xs `with` (TmPntr l) `inTerm` e''
     _ -> error $ "unexpected pattern " ++ show pat ++ ". This should not typecheck"
   TmAlloc -> return TmAlloc
   TmPntr l -> return $ TmPntr l
@@ -172,20 +218,22 @@ evalStep e = case e of
 tmConstInt :: Int -> Term
 tmConstInt x = TmLam "x" (TmLit (LInt x))
 
-runEval :: EvalM a -> EvalState -> a
-runEval e = fst . runState e
+runEval :: EvalM a -> EvalState -> (a, EvalState)
+runEval e = runState e
 
-runEvalInit :: EvalM a -> a
+runEvalInit :: EvalM a -> (a, EvalState)
 runEvalInit e = runEval e $ initialState
 
 evalTerm :: Term -> Term
-evalTerm = runEvalInit . evalStep
+evalTerm = fst . runEvalInit . evalStep
 
 -- (subst n x v) replaces all occurences of n with x in the expression v
 -- but in this implementation it just assigns the variable
 -- to the local scope
 subst :: Name -> Term -> Term -> EvalM Term
-subst name term term' = localVar name term (return term')
+subst name term term' =
+  trace ("substituting " ++ name ++ " with " ++ (ppshow term) ++ " in " ++ ppshow term')
+    localVar name term (evalStep term')
 
 -- helper for more readable substitution syntax
 with :: (Term -> Term -> m Term) -> Term -> (Term -> m Term)
@@ -197,6 +245,6 @@ inTerm  = ($)
 
 execProgramStep :: Program -> EvalState -> Term
 execProgramStep (Program main decls) state =
-  runEval (evalStep $ startMain) state where
+  fst $ runEval (evalStep $ startMain) state where
     mainBody = _body main
     startMain = TmApp mainBody (TmCons TmAlloc TmAlloc)

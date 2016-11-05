@@ -14,3 +14,6 @@ class Pretty p where
   ppshow :: p -> String
   ppshow = render . ppr 0
 
+  ppputStrLn :: p -> IO ()
+  ppputStrLn = putStrLn . ppshow
+
