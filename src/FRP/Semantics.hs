@@ -79,6 +79,14 @@ localVar x t eval = do
   -- -- put $ st' { _scope = scope }
   -- return r
 
+  -- StateT $ \s ->
+  --       let (TmLam x e1', s') = runEval (evalStep e1) s
+  --           (v2, s'') = runEval (evalStep e2) s'
+  --           scope = _scope s''
+  --           scope' = insert x v2 scope
+  --           s''' = s'' {_scope = scope'}
+  --           (r, s'''') = runEval (evalStep e1') s'''
+  --       in return (r, s'''' {_scope = scope})
 
 
 allocVal :: StoreVal -> EvalM Label
@@ -125,27 +133,14 @@ evalStep' e = case e of
   TmCase trm (nml, trml) (nmr, trmr) -> do
     res <- evalStep trm
     case res of
-      TmInl vl -> (subst nml `with` vl `inTerm` trml)
-      TmInr vr -> (subst nmr `with` vr `inTerm` trmr)
+      TmInl vl -> evalStep $ subst nml `with` vl `inTerm` trml
+      TmInr vr -> evalStep $ subst nmr `with` vr `inTerm` trmr
       _        -> error "not well-typed"
   TmLam nm trm -> return $ TmLam nm trm
   TmApp e1 e2 -> do
-    -- traceM ("apply " ++ ppshow e1 ++ " to " ++ ppshow e2)
     TmLam x e1' <- evalStep e1
     v2 <- evalStep e2
-    st <- get
-    let scope = _scope st
-    modify (\s ->
-                let scope = _scope s
-                    scope' = insert x v2 scope
-                in  s {_scope = scope'}
-           )
-    r <- evalStep e1'
-    st' <- get
-    put $ st' { _scope = scope }
-    return r
-
-    -- (subst x `with` v2 `inTerm` e1')
+    evalStep (subst x v2 e1')
   TmCons hd tl -> do
     hd' <- evalStep hd
     tl' <- evalStep tl
@@ -166,17 +161,17 @@ evalStep' e = case e of
   TmPromote e ->
     TmStable <$> evalStep e
   TmLet pat e e' -> case pat of
-    PBind x -> subst x `with` e `inTerm` e'
+    PBind x -> evalStep $ subst x `with` e `inTerm` e'
     PDelay (PBind x) -> do
       TmPntr lbl <- evalStep e
-      subst x `with` (TmPntrDeref lbl) `inTerm` e'
+      evalStep $ subst x `with` (TmPntrDeref lbl) `inTerm` e'
     PStable (PBind x) -> do
       TmStable v <- evalStep e
-      (subst x `with` v `inTerm` e')
+      evalStep $ subst x `with` v `inTerm` e'
     PCons (PBind x) (PDelay (PBind xs)) -> do
       TmCons v (TmPntr l) <- evalStep e
-      e'' <- subst x `with` v `inTerm` e'
-      subst xs `with` (TmPntr l) `inTerm` e''
+      e'' <- evalStep $ subst x `with` v `inTerm` e'
+      evalStep $ subst xs `with` (TmPntr l) `inTerm` e''
     _ -> error $ "unexpected pattern " ++ show pat ++ ". This should not typecheck"
   TmAlloc -> return TmAlloc
   TmPntr l -> return $ TmPntr l
@@ -230,17 +225,38 @@ evalTerm = fst . runEvalInit . evalStep
 -- (subst n x v) replaces all occurences of n with x in the expression v
 -- but in this implementation it just assigns the variable
 -- to the local scope
-subst :: Name -> Term -> Term -> EvalM Term
-subst name term term' =
-  trace ("substituting " ++ name ++ " with " ++ (ppshow term) ++ " in " ++ ppshow term')
-    localVar name term (evalStep term')
+subst :: Name -> Term -> Term -> Term
+subst name nterm term' = go term' where
+  go term'' = case term'' of
+    TmVar x | x == name -> nterm
+    TmVar x -> term''
+    TmFst trm                          -> TmFst $ go trm
+    TmSnd trm                          -> TmFst $ go trm
+    TmTup trm1 trm2                    -> TmTup (go trm1) (go trm2)
+    TmInl trm                          -> TmInl $ go trm
+    TmInr trm                          -> TmInr $ go trm
+    TmCase trm (nml, trml) (nmr, trmr) -> undefined
+    TmLam nm trm                       -> TmLam nm (go trm)
+    TmApp trm1 trm2                    -> TmApp (go trm1) (go trm2)
+    TmCons trm1 trm2                   -> TmCons (go trm1) (go trm2)
+    TmStable trm                       -> TmStable (go trm)
+    TmDelay trm1 trm2                  -> TmDelay (go trm1) (go trm2)
+    TmPromote trm                      -> TmPromote (go trm)
+    TmLet pat trm1 trm2                -> TmLet pat (go trm1) (go trm2)
+    TmLit l                            -> TmLit l
+    TmBinOp op trm1 trm2               -> TmBinOp op (go trm1) (go trm2)
+    TmITE trm1 trm2 trm3               -> TmITE (go trm1) (go trm2) (go trm3)
+    TmPntr lbl                         -> TmPntr lbl
+    TmPntrDeref lbl                    -> TmPntrDeref lbl
+    TmAlloc                            -> TmAlloc
+
 
 -- helper for more readable substitution syntax
-with :: (Term -> Term -> m Term) -> Term -> (Term -> m Term)
+with :: (Term -> Term -> Term) -> Term -> (Term -> Term)
 with = ($)
 
 -- helper for more readable substitution syntax
-inTerm :: (Term -> m Term) -> Term -> m Term
+inTerm :: (Term -> Term) -> Term -> Term
 inTerm  = ($)
 
 execProgramStep :: Program -> EvalState -> Term

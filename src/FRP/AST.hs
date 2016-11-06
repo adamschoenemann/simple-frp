@@ -1,6 +1,8 @@
 
 module FRP.AST where
 
+import Data.Map.Strict (Map)
+
 import FRP.Pretty
 
 type Name = String
