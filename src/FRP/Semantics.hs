@@ -120,6 +120,25 @@ evalStep e = do
   traceM (show $ _scope s)
   evalStep' e
 
+type Env = Map String Term
+
+evalExpr :: Env -> Term -> Term
+evalExpr env term = case term of
+  TmVar x -> unsafeLookup x env
+  TmLit x -> TmLit x
+  TmLam x e -> TmClosure (TmLam x e) env
+  TmApp e1 e2 ->
+    let TmClosure (TmLam x e1') env' = evalExpr env e1
+        v2 = evalExpr env e2
+    in evalExpr (M.insert x v2 env') e1'
+  TmBinOp op e1 e2 ->
+    let fun = case op of
+                  Add -> (+)
+                  Sub -> (-)
+        TmLit (LInt x) = evalExpr env e1
+        TmLit (LInt y) = evalExpr env e2
+    in TmLit $ LInt $ fun x y
+
 evalStep' e = case e of
   TmFst trm -> do
     TmTup x y <- evalStep trm

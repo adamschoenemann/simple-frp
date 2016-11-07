@@ -43,6 +43,7 @@ data Term
   | TmVar Name
   | TmApp Term Term
   | TmCons Term Term
+  | TmClosure Term (Map String Term)
   | TmStable Term
   | TmDelay Term Term
   | TmPromote Term
