@@ -1,7 +1,10 @@
+{-# LANGUAGE FlexibleInstances #-}
 
 module FRP.AST where
 
+
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 
 import FRP.Pretty
 
@@ -43,7 +46,7 @@ data Term
   | TmVar Name
   | TmApp Term Term
   | TmCons Term Term
-  | TmClosure Term (Map String Term)
+  | TmClosure Name Term (Map String Term)
   | TmStable Term
   | TmDelay Term Term
   | TmPromote Term
@@ -65,6 +68,7 @@ isValue tm = case tm of
   TmInr _             -> True
   TmCase _ _ _        -> False
   TmLam _ _           -> True
+  TmClosure _ _ _     -> True
   TmVar _             -> False
   TmApp _ _           -> False
   TmCons _ _          -> True
@@ -79,6 +83,11 @@ isValue tm = case tm of
   TmPntrDeref _       -> False
   TmAlloc             -> True
 
+instance Pretty (Map String Term) where
+  ppr n env = char '[' <> body <> char ']' where
+    body = hcat $ punctuate (char ',') $
+      map (\(k,v) -> text k <+> text "↦" <+> ppr (n+1) v) $ M.toList env
+
 instance Pretty Term where
   ppr n term = case term of
     TmFst trm            -> text "fst" <+> ppr (n+1) trm
@@ -91,6 +100,7 @@ instance Pretty Term where
         <+> text "inl" <+> text vl <+> text "->" <+> ppr (n+1) trml
         <+> text "inr" <+> text vr <+> text "->" <+> ppr (n+1) trmr)
     TmLam b trm          -> prns (text "\\" <> text b <> char '.' <+> ppr (n+1) trm)
+    TmClosure b trm env  -> parens $ ppr (n+1) (TmLam b trm) <> comma <+> ppr (n+1) env
     TmVar v              -> text v
     TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
     TmCons hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)

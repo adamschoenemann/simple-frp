@@ -20,8 +20,8 @@ spec = do
     describe "function application" $ do
       it "works with a simple function" $ do
         let term = TmApp (TmLam "x" (TmVar "x")) (TmLit (LInt 10))
+        ppputStrLn term
         let r = evalExpr M.empty term
-        -- r `shouldBe`
         ppputStrLn r
       it "works with two arguments" $ do
         let term =
@@ -40,7 +40,11 @@ spec = do
         let term = TmApp app (TmLit (LInt 5))
         putStrLn . ppshow $ term
         let r = evalExpr M.empty term
-        -- let (r, rs) = runEvalInit $ evalStep app
-        -- let (r', rs') = runE
         putStrLn $ "result: " ++ (ppshow r)
-        -- putStrLn $ show rs
+      it "does not capture free variables" $ do
+        let l1 = TmClosure "x" (TmBinOp Add (TmVar "y") (TmVar "x")) (M.singleton "y" (TmLit (LInt 10)))
+        let l2 = TmClosure "y" (TmApp (TmVar "z") (TmVar "y")) (M.singleton "z" l1)
+        let term = (TmApp l2 (TmLit (LInt 42)))
+        ppputStrLn term
+        let r = evalExpr M.empty term
+        putStrLn $ "result: " ++ (ppshow r)

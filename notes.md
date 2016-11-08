@@ -14,3 +14,8 @@ Evaluation of (\x. (\y. x y)) (\z. 10 + z) 5:
     10 + 5 => 
     15
     
+    
+## Command for interactive testing
+stack repl --test [--trace]
+
+Use `:r` to reload and `Main.main` or `main` to run tests.
