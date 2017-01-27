@@ -46,7 +46,7 @@ data Term
   | TmVar Name
   | TmApp Term Term
   | TmCons Term Term
-  | TmClosure Name Term (Map String Term)
+  | TmClosure Name Term (Map String Value)
   | TmStable Term
   | TmDelay Term Term
   | TmPromote Term
@@ -83,7 +83,7 @@ isValue tm = case tm of
   TmPntrDeref _       -> False
   TmAlloc             -> True
 
-instance Pretty (Map String Term) where
+instance Pretty (Map String Value) where
   ppr n env = char '[' <> body <> char ']' where
     body = hcat $ punctuate (char ',') $
       map (\(k,v) -> text k <+> text "↦" <+> ppr (n+1) v) $ M.toList env
@@ -122,6 +122,38 @@ instance Pretty Term where
       prns = if (n > 0)
              then parens
              else id
+
+data Value
+  = VTup Value Value
+  | VInl Value
+  | VInr Value
+  | VLam Name Term
+  | VClosure Name Term (Map String Value)
+  | VPntr Label
+  | VAlloc
+  | VStable Value
+  -- | VInto Value
+  | VCons Value Value
+  | VLit Lit
+  deriving (Show)
+
+valToTerm :: Value -> Term
+valToTerm = \case
+  VTup a b         -> TmTup (valToTerm a) (valToTerm b)
+  VInl v           -> TmInl (valToTerm v)
+  VInr v           -> TmInr (valToTerm v)
+  VLam x e         -> TmLam x e
+  VClosure x e env -> TmClosure x e env
+  VPntr l          -> TmPntr l
+  VAlloc           -> TmAlloc
+  VStable v        -> TmStable (valToTerm v)
+  -- VInto v          -> TmInto (valToTerm v)
+  VCons hd tl      -> TmCons (valToTerm hd) (valToTerm tl)
+  VLit l           -> TmLit l
+
+instance Pretty Value where
+  ppr x = ppr x . valToTerm
+
 
 data Pattern
   = PBind Name

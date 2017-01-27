@@ -17,7 +17,9 @@ data Qualifier
   deriving (Show)
 
 data StoreVal
-  = SVal Term Qualifier
+  = SVNow Value
+  | SVLater Term
+  | SVNull
   deriving (Show)
 
 type Scope = Map Name Term
@@ -64,67 +66,73 @@ genLabel = do
   put $ st { _labelGen = succ gen }
   return gen
 
-type Env = Map String Term
+type Env = Map String Value
 
-evalExpr :: Env -> Term -> Term
+evalExpr :: Env -> Term -> Value
 evalExpr env term = fst $ runReader (runStateT (eval term) initialState) env where
-  eval :: Term -> EvalM Term
+  eval :: Term -> EvalM Value
   eval term = case term of
     TmVar x -> (unsafeLookup x <$> ask)
-    TmLit x -> return $ TmLit x
-    TmLam x e -> TmClosure x e <$> ask
-    TmClosure x t e -> return $ TmClosure x t e
+    TmLit x -> return $ VLit x
+    TmLam x e -> VClosure x e <$> ask
+    TmClosure x t e -> return $ VClosure x t e
     TmApp e1 e2 -> do
-      TmClosure x e1' env' <- eval e1
+      VClosure x e1' env' <- eval e1
       v2 <- eval e2
       -- lbl <- show <$> genLabel
       let env'' = {-M.insert x (TmVar lbl) $ -}M.insert x v2 env'
       local (const env'') $ eval e1'
     TmBinOp op el er -> evalBinOp op el er
     TmFst trm -> do
-      TmTup x y <- eval trm
+      VTup x y <- eval trm
       return x
     TmSnd trm -> do
-      TmTup x y <- eval trm
+      VTup x y <- eval trm
       return y
-    TmTup trm1 trm2 -> TmTup <$> eval trm1 <*> eval trm2
-    TmInl trm -> TmInl <$> eval trm
-    TmInr trm -> TmInr <$> eval trm
-    TmCons hd tl -> TmCons <$> eval hd <*> eval tl
+    TmTup trm1 trm2 -> VTup <$> eval trm1 <*> eval trm2
+    TmInl trm -> VInl <$> eval trm
+    TmInr trm -> VInr <$> eval trm
+    TmCons hd tl -> VCons <$> eval hd <*> eval tl
     TmDelay e' e -> do
-      TmAlloc <- eval e'
-      label <- allocVal (SVal e QLater)
-      return $ TmPntr label
+      VAlloc <- eval e'
+      label <- allocVal (SVLater e)
+      return $ VPntr label
     TmPntrDeref label -> do
-      (SVal v QNow) <- lookupPntr label
+      (SVNow v) <- lookupPntr label
       return v
     TmStable e ->
-      TmStable <$> eval e
+      VStable <$> eval e
     TmPromote e ->
-      TmStable <$> eval e
+      VStable <$> eval e
     TmCase trm (nml, trml) (nmr, trmr) -> do
       res <- eval trm
       case res of
-        TmInl vl -> local (M.insert nml vl) $ eval trml
-        TmInr vr -> local (M.insert nmr vr) $ eval trmr
+        VInl vl -> local (M.insert nml vl) $ eval trml
+        VInr vr -> local (M.insert nmr vr) $ eval trmr
         _        -> error "not well-typed"
     TmLet pat e e' -> case pat of
-      PBind x -> local (M.insert x e) $ eval e'
-      PDelay (PBind x) -> do
-        TmPntr lbl <- eval e
-        local (M.insert x (TmPntrDeref lbl)) $ eval e'
-      PStable (PBind x) -> do
-        TmStable v <- eval e
+      PBind x -> do
+        v <- eval e
         local (M.insert x v) $ eval e'
-      PCons (PBind x) (PDelay (PBind xs)) -> do
-        TmCons v (TmPntr l) <- eval e
-        e'' <- local (M.insert x v) $ eval e'
-        local (M.insert xs (TmPntr l)) $ eval e''
+      PDelay (PBind x) -> do
+        VPntr lbl <- eval e
+        local (M.insert x (VPntr lbl)) $ eval e' -- FIXME: Probly not correct
+      PStable (PBind x) -> do
+        VStable v <- eval e
+        local (M.insert x v) $ eval e'
+      PCons (PBind x) (PBind xs) -> do
+        VCons v (VPntr l) <- eval e
+        v' <- local (M.insert x v . M.insert xs (VPntr l)) $ eval e'
+        return v'
+      -- PCons (PBind x) (PDelay (PBind xs)) -> do
+      --   VCons v (VPntr l) <- eval e
+      --   e'' <- local (M.insert x v) $ eval e'
+      --   local (M.insert xs (VPntr l)) $ eval e''
       _ -> error $ "unexpected pattern " ++ show pat ++ ". This should not typecheck"
-    TmAlloc -> return TmAlloc
-    TmPntr l -> return $ TmPntr l
+    TmAlloc -> return VAlloc
+    TmPntr l -> return $ VPntr l
     TmITE b et ef -> do
-      TmLit (LBool b') <- eval b
+      VLit (LBool b') <- eval b
       case b' of
         True -> eval et
         False -> eval ef
@@ -143,21 +151,21 @@ evalExpr env term = fst $ runReader (runStateT (eval term) initialState) env whe
       Eq -> eqOp
       where
         intOp fn = do
-          TmLit (LInt x) <- eval el
-          TmLit (LInt y) <- eval er
-          return $ TmLit (LInt $ fn x y)
+          VLit (LInt x) <- eval el
+          VLit (LInt y) <- eval er
+          return $ VLit (LInt $ fn x y)
         boolOp fn = do
-          TmLit (LBool x) <- eval el
-          TmLit (LBool y) <- eval er
-          return $ TmLit (LBool $ fn x y)
+          VLit (LBool x) <- eval el
+          VLit (LBool y) <- eval er
+          return $ VLit (LBool $ fn x y)
         intCmpOp fn = do
-          TmLit (LInt x) <- eval el
-          TmLit (LInt y) <- eval er
-          return $ TmLit (LBool $ fn x y)
+          VLit (LInt x) <- eval el
+          VLit (LInt y) <- eval er
+          return $ VLit (LBool $ fn x y)
         eqOp = do
-          TmLit x <- eval el
-          TmLit y <- eval er
-          return $ TmLit (LBool (x == y))
+          VLit x <- eval el
+          VLit y <- eval er
+          return $ VLit (LBool (x == y))
 
 -- eval' e = case e of
 --
@@ -235,7 +243,7 @@ with' = ($)
 inTerm' :: (Term -> Term) -> Term -> Term
 inTerm'  = ($)
 
-execProgram :: Program -> EvalState -> Term
+execProgram :: Program -> EvalState -> Value
 execProgram (Program main decls) state =
   evalExpr M.empty startMain where
     mainBody = _body main

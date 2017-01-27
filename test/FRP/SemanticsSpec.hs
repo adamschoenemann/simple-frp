@@ -42,7 +42,7 @@ spec = do
         let r = evalExpr M.empty term
         putStrLn $ "result: " ++ (ppshow r)
       it "does not capture free variables" $ do
-        let l1 = TmClosure "x" (TmBinOp Add (TmVar "y") (TmVar "x")) (M.singleton "y" (TmLit (LInt 10)))
+        let l1 = VClosure "x" (TmBinOp Add (TmVar "y") (TmVar "x")) (M.singleton "y" (VLit (LInt 10)))
         let l2 = TmClosure "y" (TmApp (TmVar "z") (TmVar "y")) (M.singleton "z" l1)
         let term = (TmApp l2 (TmLit (LInt 42)))
         ppputStrLn term
