@@ -69,7 +69,10 @@ genLabel = do
 type Env = Map String Value
 
 evalExpr :: Env -> Term -> Value
-evalExpr env term = fst $ runReader (runStateT (eval term) initialState) env where
+evalExpr = evalExpr' initialState
+
+evalExpr' :: EvalState -> Env -> Term -> Value
+evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
   eval :: Term -> EvalM Value
   eval term = case term of
     TmVar x -> (unsafeLookup x <$> ask)
@@ -79,8 +82,7 @@ evalExpr env term = fst $ runReader (runStateT (eval term) initialState) env whe
     TmApp e1 e2 -> do
       VClosure x e1' env' <- eval e1
       v2 <- eval e2
-      -- lbl <- show <$> genLabel
-      let env'' = {-M.insert x (TmVar lbl) $ -}M.insert x v2 env'
+      let env'' = M.insert x v2 env'
       local (const env'') $ eval e1'
     TmBinOp op el er -> evalBinOp op el er
     TmFst trm -> do
@@ -112,11 +114,17 @@ evalExpr env term = fst $ runReader (runStateT (eval term) initialState) env whe
         _        -> error "not well-typed"
     TmLet pat e e' -> case pat of
       PBind x -> do
+        -- The language is generally call-by-value (eager), so
+        -- this is fine
         v <- eval e
         local (M.insert x v) $ eval e'
       PDelay (PBind x) -> do
         VPntr lbl <- eval e
-        local (M.insert x (VPntr lbl)) $ eval e' -- FIXME: Probly not correct
+        -- FIXME: The pointer should be dereferenced
+        -- We can do it here, but does it follow lazy evaluation for
+        -- delayed values? Maybe...
+        evaled <- eval (TmPntrDeref lbl)
+        local (M.insert x evaled) $ eval e'
       PStable (PBind x) -> do
         VStable v <- eval e
         local (M.insert x v) $ eval e'
@@ -124,10 +132,6 @@ evalExpr env term = fst $ runReader (runStateT (eval term) initialState) env whe
         VCons v (VPntr l) <- eval e
         v' <- local (M.insert x v . M.insert xs (VPntr l)) $ eval e'
         return v'
-      -- PCons (PBind x) (PDelay (PBind xs)) -> do
-      --   VCons v (VPntr l) <- eval e
-      --   e'' <- local (M.insert x v) $ eval e'
-      --   local (M.insert xs (VPntr l)) $ eval e''
       _ -> error $ "unexpected pattern " ++ show pat ++ ". This should not typecheck"
     TmAlloc -> return VAlloc
     TmPntr l -> return $ VPntr l
@@ -167,37 +171,17 @@ evalExpr env term = fst $ runReader (runStateT (eval term) initialState) env whe
           VLit y <- eval er
           return $ VLit (LBool (x == y))
 
--- eval' e = case e of
---
---   TmBinOp op el er -> case op of
---     Add -> intOp (+)
---     Sub -> intOp (-)
---     Mult -> intOp (*)
---     Div -> intOp div
---     And -> boolOp (&&)
---     Or -> boolOp (||)
---     Leq -> intCmpOp (<=)
---     Lt -> intCmpOp (<)
---     Geq -> intCmpOp (>=)
---     Gt -> intCmpOp (>)
---     Eq -> eqOp
---     where
---       intOp fn = do
---         TmLit (LInt x) <- eval el
---         TmLit (LInt y) <- eval er
---         return $ TmLit (LInt $ fn x y)
---       boolOp fn = do
---         TmLit (LBool x) <- eval el
---         TmLit (LBool y) <- eval er
---         return $ TmLit (LBool $ fn x y)
---       intCmpOp fn = do
---         TmLit (LInt x) <- eval el
---         TmLit (LInt y) <- eval er
---         return $ TmLit (LBool $ fn x y)
---       eqOp = do
---         TmLit x <- eval el
---         TmLit y <- eval er
---         return $ TmLit (LBool (x == y))
+
+tick :: EvalState -> EvalState
+tick st@(EvalState {_store = s})
+  | M.null s = st
+  | otherwise = st {_store = M.map tock s'} where
+      s'  = M.filter isNow s
+      st' = st {_store = s'}
+      tock (SVLater e) = SVNow (evalExpr' st' M.empty e)
+      tock _           = error "Only later vals should be in store"
+      isNow (SVNow _) = True
+      isNow _         = False
 
 tmConstInt :: Int -> Term
 tmConstInt x = TmLam "x" (TmLit (LInt x))

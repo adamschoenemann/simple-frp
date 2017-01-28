@@ -48,3 +48,15 @@ spec = do
         ppputStrLn term
         let r = evalExpr M.empty term
         putStrLn $ "result: " ++ (ppshow r)
+    describe "streams" $ do
+      it "works just a little bit" $ do
+        let constprog =
+              TmLam "us" (TmLam "n" (
+                TmLet (PCons (PBind "u") (PDelay (PBind "us'"))) (TmVar "us") (
+                TmLet (PStable (PBind "x")) (TmPromote (TmVar "n")) (
+                TmCons (TmVar "x") (TmDelay (TmVar "u")
+                  ((TmVar "const") `TmApp` (TmVar "us'") `TmApp` (TmVar "x")))
+                ))
+              ))
+        ppputStrLn constprog
+        -- putStrLn $ "result:" ++ (ppshow $ evalExpr M.empty constprog)
