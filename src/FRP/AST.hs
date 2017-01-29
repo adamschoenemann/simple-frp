@@ -35,6 +35,8 @@ instance Pretty Type where
     TyAlloc       -> text "alloc"
     TyNat         -> text "Nat"
 
+infixl 9 `TmApp`
+
 data Term
   = TmFst Term
   | TmSnd Term
@@ -57,31 +59,33 @@ data Term
   | TmPntr Label
   | TmPntrDeref Label
   | TmAlloc
+  | TmFix Name Term
   deriving (Show)
 
-isValue :: Term -> Bool
-isValue tm = case tm of
-  TmFst _             -> True
-  TmSnd _             -> True
-  TmTup _ _           -> True
-  TmInl _             -> True
-  TmInr _             -> True
-  TmCase _ _ _        -> False
-  TmLam _ _           -> True
-  TmClosure _ _ _     -> True
-  TmVar _             -> False
-  TmApp _ _           -> False
-  TmCons _ _          -> True
-  TmStable _          -> True
-  TmDelay _ _         -> False
-  TmPromote _         -> False
-  TmLet _ _ _         -> False
-  TmLit _             -> False
-  TmBinOp _ _ _       -> False
-  TmITE _ _ _         -> False
-  TmPntr _            -> True
-  TmPntrDeref _       -> False
-  TmAlloc             -> True
+-- isValue :: Term -> Bool
+-- isValue tm = case tm of
+--   TmFst _             -> True
+--   TmSnd _             -> True
+--   TmTup _ _           -> True
+--   TmInl _             -> True
+--   TmInr _             -> True
+--   TmCase _ _ _        -> False
+--   TmLam _ _           -> True
+--   TmClosure _ _ _     -> True
+--   TmVar _             -> False
+--   TmApp _ _           -> False
+--   TmCons _ _          -> True
+--   TmStable _          -> True
+--   TmDelay _ _         -> False
+--   TmPromote _         -> False
+--   TmLet _ _ _         -> False
+--   TmLit _             -> False
+--   TmBinOp _ _ _       -> False
+--   TmITE _ _ _         -> False
+--   TmPntr _            -> True
+--   TmPntrDeref _       -> False
+--   TmAlloc             -> True
+--   TmFix _ _           -> False
 
 instance Pretty (Map String Value) where
   ppr n env = char '[' <> body <> char ']' where
@@ -100,6 +104,7 @@ instance Pretty Term where
         <+> text "inl" <+> text vl <+> text "->" <+> ppr (n+1) trml
         <+> text "inr" <+> text vr <+> text "->" <+> ppr (n+1) trmr)
     TmLam b trm          -> prns (text "\\" <> text b <> char '.' <+> ppr (n+1) trm)
+    TmFix b trm          -> prns (text "fix" <+> text b <> char '.' <+> ppr (n+1) trm)
     TmClosure b trm env  -> parens $ ppr (n+1) (TmLam b trm) <> comma <+> ppr (n+1) env
     TmVar v              -> text v
     TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'

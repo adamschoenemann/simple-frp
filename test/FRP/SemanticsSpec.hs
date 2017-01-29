@@ -50,7 +50,7 @@ spec = do
         putStrLn $ "result: " ++ (ppshow r)
     describe "streams" $ do
       it "works just a little bit" $ do
-        let constprog =
+        let constfn =
               TmLam "us" (TmLam "n" (
                 TmLet (PCons (PBind "u") (PDelay (PBind "us'"))) (TmVar "us") (
                 TmLet (PStable (PBind "x")) (TmPromote (TmVar "n")) (
@@ -58,5 +58,11 @@ spec = do
                   ((TmVar "const") `TmApp` (TmVar "us'") `TmApp` (TmVar "x")))
                 ))
               ))
-        ppputStrLn constprog
-        -- putStrLn $ "result:" ++ (ppshow $ evalExpr M.empty constprog)
+        let mainbd =
+              TmLam "us"
+              ((TmVar "const") `TmApp` (TmVar "us") `TmApp` (TmLit (LInt 10)))
+        let mainfn = Decl undefined "main" mainbd
+        let prog = Program mainfn [Decl undefined "const" constfn]
+        ppputStrLn constfn
+        let v = evalProgram prog
+        putStrLn $ "result:\n" ++ (ppshow v)

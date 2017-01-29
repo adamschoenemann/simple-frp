@@ -2,7 +2,7 @@
 module FRP.Semantics where
 
 import Data.Map.Strict (Map)
-import Data.Map.Strict as M
+import qualified Data.Map.Strict as M
 import Control.Monad.State
 import Control.Monad.Reader
 import Debug.Trace
@@ -75,15 +75,18 @@ evalExpr' :: EvalState -> Env -> Term -> Value
 evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
   eval :: Term -> EvalM Value
   eval term = case term of
-    TmVar x -> (unsafeLookup x <$> ask)
+    TmVar x -> unsafeLookup x <$> ask
     TmLit x -> return $ VLit x
     TmLam x e -> VClosure x e <$> ask
     TmClosure x t e -> return $ VClosure x t e
     TmApp e1 e2 -> do
-      VClosure x e1' env' <- eval e1
-      v2 <- eval e2
-      let env'' = M.insert x v2 env'
-      local (const env'') $ eval e1'
+      e3 <- eval e1
+      case e3 of
+        VClosure x e1' env' -> do
+          v2 <- eval e2
+          let env'' = M.insert x v2 env'
+          local (const env'') $ eval e1'
+        _ -> error $ "expected closure, got " ++ (ppshow e3)
     TmBinOp op el er -> evalBinOp op el er
     TmFst trm -> do
       VTup x y <- eval trm
@@ -95,13 +98,18 @@ evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
     TmInl trm -> VInl <$> eval trm
     TmInr trm -> VInr <$> eval trm
     TmCons hd tl -> VCons <$> eval hd <*> eval tl
+    TmFix x e -> eval (TmApp e (TmFix x e))
+      -- local (M.insert x (TmFix x e)) $ eval e
     TmDelay e' e -> do
       VAlloc <- eval e'
       label <- allocVal (SVLater e)
       return $ VPntr label
-    TmPntrDeref label -> do
-      (SVNow v) <- lookupPntr label
-      return v
+    TmPntrDeref label -> do -- really, is this that is meant?
+      v <- lookupPntr label
+      case v of
+        SVNow v' -> return v'
+        _        -> return $ VPntr label
+        -- er       -> error $ "expected SVNow but got " ++ (show er)
     TmStable e ->
       VStable <$> eval e
     TmPromote e ->
@@ -112,27 +120,7 @@ evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
         VInl vl -> local (M.insert nml vl) $ eval trml
         VInr vr -> local (M.insert nmr vr) $ eval trmr
         _        -> error "not well-typed"
-    TmLet pat e e' -> case pat of
-      PBind x -> do
-        -- The language is generally call-by-value (eager), so
-        -- this is fine
-        v <- eval e
-        local (M.insert x v) $ eval e'
-      PDelay (PBind x) -> do
-        VPntr lbl <- eval e
-        -- FIXME: The pointer should be dereferenced
-        -- We can do it here, but does it follow lazy evaluation for
-        -- delayed values? Maybe...
-        evaled <- eval (TmPntrDeref lbl)
-        local (M.insert x evaled) $ eval e'
-      PStable (PBind x) -> do
-        VStable v <- eval e
-        local (M.insert x v) $ eval e'
-      PCons (PBind x) (PBind xs) -> do
-        VCons v (VPntr l) <- eval e
-        v' <- local (M.insert x v . M.insert xs (VPntr l)) $ eval e'
-        return v'
-      _ -> error $ "unexpected pattern " ++ show pat ++ ". This should not typecheck"
+    TmLet pat e e' -> evalPat pat e e'
     TmAlloc -> return VAlloc
     TmPntr l -> return $ VPntr l
     TmITE b et ef -> do
@@ -140,6 +128,27 @@ evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
       case b' of
         True -> eval et
         False -> eval ef
+
+  evalPat :: Pattern -> Term -> Term -> EvalM Value
+  evalPat (PBind x) e e' = do
+    v <- eval e
+    local (M.insert x v) $ eval e'
+  evalPat (PDelay pat) e e' = do
+    v <- eval e
+    case v of
+      VPntr l -> evalPat pat (TmPntrDeref l) e'
+      er      -> error $ "expected pntr but got " ++ ppshow er
+  evalPat (PStable pat) e e' = do
+    VStable v <- eval e
+    evalPat pat (valToTerm v) e'
+  -- evalPat (PCons (PBind x) (PDelay (PBind xs))) e e' = do
+  --   VCons hd tl <- eval e
+  --   local (M.insert x hd . M.insert xs tl) $ eval e'
+  evalPat (PCons hdp tlp) e e' = do
+    VCons hd tl <- eval e
+    evalPat hdp (valToTerm hd) (TmLet tlp (valToTerm tl) e')
+  -- evalPat pat _ _ =
+  --   error $ "unexpected pattern " ++ show pat ++ ". This should not typecheck"
 
   evalBinOp op el er = case op of
       Add -> intOp (+)
@@ -217,6 +226,7 @@ subst' name nterm term' = go term' where
     TmPntr lbl                         -> TmPntr lbl
     TmPntrDeref lbl                    -> TmPntrDeref lbl
     TmAlloc                            -> TmAlloc
+    TmFix x e                          -> TmFix x (go e)
 
 
 -- helper for more readable substitution syntax
@@ -227,8 +237,11 @@ with' = ($)
 inTerm' :: (Term -> Term) -> Term -> Term
 inTerm'  = ($)
 
-execProgram :: Program -> EvalState -> Value
-execProgram (Program main decls) state =
-  evalExpr M.empty startMain where
+evalProgram :: Program -> Value
+evalProgram (Program main decls) =
+  evalExpr state startMain where
+    state    =
+      foldl (\env (Decl t n b) -> M.insert n (evalExpr env b) env) M.empty decls
     mainBody = _body main
-    startMain = TmApp mainBody (TmCons TmAlloc TmAlloc)
+    -- allocs   = TmFix "ds" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "ds")))
+    startMain = TmApp mainBody (TmCons TmAlloc $ TmDelay TmAlloc TmAlloc)
