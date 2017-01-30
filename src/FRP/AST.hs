@@ -10,6 +10,7 @@ import FRP.Pretty
 
 type Name = String
 type Label = Int
+type Env = Map String (Either Term Value)
 
 data Type
   = TyParam Name
@@ -48,7 +49,7 @@ data Term
   | TmVar Name
   | TmApp Term Term
   | TmCons Term Term
-  | TmClosure Name Term (Map String Value)
+  | TmClosure Name Term Env
   | TmStable Term
   | TmDelay Term Term
   | TmPromote Term
@@ -87,7 +88,11 @@ data Term
 --   TmAlloc             -> True
 --   TmFix _ _           -> False
 
-instance Pretty (Map String Value) where
+instance Pretty (Either Term Value) where
+  ppr n (Left t) = ppr n t
+  ppr n (Right v) = ppr n v
+
+instance Pretty (Map String (Either Term Value)) where
   ppr n env = char '[' <> body <> char ']' where
     body = hcat $ punctuate (char ',') $
       map (\(k,v) -> text k <+> text "↦" <+> ppr (n+1) v) $ M.toList env
@@ -105,7 +110,7 @@ instance Pretty Term where
         <+> text "inr" <+> text vr <+> text "->" <+> ppr (n+1) trmr)
     TmLam b trm          -> prns (text "\\" <> text b <> char '.' <+> ppr (n+1) trm)
     TmFix b trm          -> prns (text "fix" <+> text b <> char '.' <+> ppr (n+1) trm)
-    TmClosure b trm env  -> parens $ ppr (n+1) (TmLam b trm) <> comma <+> ppr (n+1) env
+    TmClosure b trm env  -> parens $ ppr (n+1) (TmLam b trm) -- <> comma <+> ppr (n+1) env
     TmVar v              -> text v
     TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
     TmCons hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
@@ -133,7 +138,7 @@ data Value
   | VInl Value
   | VInr Value
   | VLam Name Term
-  | VClosure Name Term (Map String Value)
+  | VClosure Name Term Env
   | VPntr Label
   | VAlloc
   | VStable Value

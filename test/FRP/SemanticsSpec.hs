@@ -42,8 +42,8 @@ spec = do
         let r = evalExpr M.empty term
         putStrLn $ "result: " ++ (ppshow r)
       it "does not capture free variables" $ do
-        let l1 = VClosure "x" (TmBinOp Add (TmVar "y") (TmVar "x")) (M.singleton "y" (VLit (LInt 10)))
-        let l2 = TmClosure "y" (TmApp (TmVar "z") (TmVar "y")) (M.singleton "z" l1)
+        let l1 = VClosure "x" (TmBinOp Add (TmVar "y") (TmVar "x")) (M.singleton "y" (Right $ VLit (LInt 10)))
+        let l2 = TmClosure "y" (TmApp (TmVar "z") (TmVar "y")) (M.singleton "z" (Right l1))
         let term = (TmApp l2 (TmLit (LInt 42)))
         ppputStrLn term
         let r = evalExpr M.empty term
@@ -74,7 +74,7 @@ spec = do
         ppputStrLn v
 
     describe "streams" $ do
-      it "works just a little bit" $ do
+      it "works with const" $ do
         let constfn =
               TmLam "us" (TmLam "n" (
                 TmLet (PCons (PBind "u") (PDelay (PBind "us'"))) (TmVar "us") (
@@ -93,3 +93,14 @@ spec = do
         putStrLn $ "result 1:\n" ++ (show rs)
         -- let VCons x (VPntr l) = v
         -- evalExpr ()
+
+    describe "tick" $ do
+      let mkStore s = EvalState s 0
+      it "sats tick [] = []" $ do
+        tick initialState `shouldBe` initialState
+      it "sats tick [l : v now] = []" $ do
+        tick (mkStore M.empty) `shouldBe` initialState
+      it "sats tick [l : e later] = [l : v now]" $ do
+        let s  = M.singleton 0 $ SVLater (TmLit $ LInt 10) M.empty
+        let s' = M.singleton 0 $ SVNow   (VLit  $ LInt 10) M.empty
+        tick (mkStore $ s) `shouldBe` mkStore s'

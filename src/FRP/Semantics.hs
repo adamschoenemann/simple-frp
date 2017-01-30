@@ -17,10 +17,10 @@ data Qualifier
   deriving (Show)
 
 data StoreVal
-  = SVNow Value
-  | SVLater Term
+  = SVNow Value Env
+  | SVLater Term Env
   | SVNull
-  deriving (Show)
+  deriving (Show, Eq)
 
 type Scope = Map Name Term
 type Store = Map Label StoreVal
@@ -28,7 +28,7 @@ type Store = Map Label StoreVal
 data EvalState = EvalState
   { _store    :: Store
   , _labelGen :: Int
-  } deriving (Show)
+  } deriving (Show, Eq)
 
 
 type EvalM a = StateT EvalState (Reader Env) a
@@ -49,15 +49,23 @@ allocVal v = do
   put $ st { _store = store' }
   return label
 
-unsafeLookup :: (Ord k, Show k) => k -> Map k v -> v
+unsafeLookup :: (Ord k, Show k, Show v) => k -> Map k v -> v
 unsafeLookup k m = case M.lookup k m of
   Just x  -> x
-  Nothing -> error $ show k ++ " not found in map"
+  Nothing -> error $ show k ++ " not found in map " ++ show m
 
 lookupPntr :: Label -> EvalM StoreVal
 lookupPntr lbl = do
   store <- getStore
   return $ unsafeLookup lbl store
+
+useVar :: String -> EvalM Value
+useVar x = do
+  env <- ask
+  case unsafeLookup x env of
+    Left  t -> return $ evalExpr env t
+    Right v -> return v
+
 
 genLabel :: EvalM Label
 genLabel = do
@@ -66,7 +74,6 @@ genLabel = do
   put $ st { _labelGen = succ gen }
   return gen
 
-type Env = Map String Value
 
 evalExpr :: Env -> Term -> Value
 evalExpr = evalExpr' initialState
@@ -78,7 +85,7 @@ runExpr :: EvalState -> Env -> Term -> (Value, EvalState)
 runExpr s env term = runReader (runStateT (eval term) s) env where
   eval :: Term -> EvalM Value
   eval term = case term of
-    TmVar x -> unsafeLookup x <$> ask
+    TmVar x -> useVar x
     TmLit x -> return $ VLit x
     TmLam x e -> VClosure x e <$> ask
     TmClosure x t e -> return $ VClosure x t e
@@ -87,8 +94,8 @@ runExpr s env term = runReader (runStateT (eval term) s) env where
       case e3 of
         VClosure x e1' env' -> do
           v2 <- eval e2
-          let env'' = M.insert x v2 env'
-          local (const env'') $ eval e1'
+          let env'' = M.insert x (Right v2) env'
+          local (M.union env'') $ eval e1'
         _ -> error $ "expected closure, got " ++ (ppshow e3)
     TmBinOp op el er -> evalBinOp op el er
     TmFst trm -> do
@@ -112,14 +119,15 @@ runExpr s env term = runReader (runStateT (eval term) s) env where
       -- Z = λf. (λx. f (λy. x x y))(λx. f (λy. x x y))
     TmDelay e' e -> do
       VAlloc <- eval e'
-      label <- allocVal (SVLater e)
+      env' <- ask
+      label <- allocVal (SVLater e env')
       return $ VPntr label
     TmPntrDeref label -> do -- really, is this that is meant?
       v <- lookupPntr label
       case v of
-        SVNow v' -> return v'
-        _        -> return $ VPntr label -- this is debatable if correct
-        -- er       -> error $ "expected SVNow but got " ++ (show er)
+        SVNow v' env' -> return v'
+        -- _             -> return $ VPntr label -- this is debatable if correct
+        er       -> error $ "expected SVNow but got " ++ (show er)
     TmStable e ->
       VStable <$> eval e
     TmPromote e ->
@@ -127,13 +135,13 @@ runExpr s env term = runReader (runStateT (eval term) s) env where
     TmCase trm (nml, trml) (nmr, trmr) -> do
       res <- eval trm
       case res of
-        VInl vl -> local (M.insert nml vl) $ eval trml
-        VInr vr -> local (M.insert nmr vr) $ eval trmr
+        VInl vl -> local (M.insert nml (Right vl)) $ eval trml
+        VInr vr -> local (M.insert nmr (Right vr)) $ eval trmr
         _       -> error "not well-typed"
     TmLet pat e e' -> do
       v <- eval e
-      env <- matchPat pat v
-      local (M.union env) $ eval e'
+      env' <- matchPat pat v
+      local (M.union env') $ eval e'
     TmAlloc -> return VAlloc
     TmPntr l -> return $ VPntr l
     TmITE b et ef -> do
@@ -143,36 +151,18 @@ runExpr s env term = runReader (runStateT (eval term) s) env where
         False -> eval ef
 
   matchPat :: Pattern -> Value -> EvalM Env
-  matchPat (PBind x) v   = return $ M.singleton x v
+  matchPat (PBind x) v   = return $ M.singleton x (Right v)
   matchPat (PDelay pat) (VPntr l) = do
-    v <- eval (TmPntrDeref l)
+    v <- eval (TmPntrDeref l) -- HERE, insert a lazy pointer deref
     matchPat pat v
   matchPat (PStable pat) (VStable v) =
     matchPat pat v
+  -- matchPat (PCons (PBind x) (PDelay (PBind y))) (VCons v (VPntr l)) = do
+  --   tl <- eval (TmPntrDeref l)
+  --   return $ M.fromList [(x,v), (y, tl)]
   matchPat (PCons hdp tlp) (VCons hd tl) =
     M.union <$> matchPat hdp hd <*> matchPat tlp tl
   matchPat pat v = error $ ppshow pat ++ " cannot match " ++ ppshow v
-
-  evalPat :: Pattern -> Term -> Term -> EvalM Value
-  evalPat (PBind x) e e' = do
-    v <- eval e
-    local (M.insert x v) $ eval e'
-  evalPat (PDelay pat) e e' = do
-    v <- eval e
-    case v of
-      VPntr l -> evalPat pat (TmPntrDeref l) e'
-      er      -> error $ "expected pntr but got " ++ ppshow er
-  evalPat (PStable pat) e e' = do
-    VStable v <- eval e
-    evalPat pat (valToTerm v) e'
-  -- evalPat (PCons (PBind x) (PDelay (PBind xs))) e e' = do
-  --   VCons hd tl <- eval e
-  --   local (M.insert x hd . M.insert xs tl) $ eval e'
-  evalPat (PCons hdp tlp) e e' = do
-    VCons hd tl <- eval e
-    evalPat hdp (valToTerm hd) (TmLet tlp (valToTerm tl) e')
-  -- evalPat pat _ _ =
-  --   error $ "unexpected pattern " ++ show pat ++ ". This should not typecheck"
 
   evalBinOp op el er = case op of
       Add  -> intOp (+)
@@ -208,13 +198,13 @@ runExpr s env term = runReader (runStateT (eval term) s) env where
 tick :: EvalState -> EvalState
 tick st@(EvalState {_store = s})
   | M.null s = st
-  | otherwise = st {_store = M.map tock s'} where
-      s'  = M.filter isNow s
-      st' = st {_store = s'}
-      tock (SVLater e) = SVNow (evalExpr' st' M.empty e)
-      tock _           = error "Only later vals should be in store"
-      isNow (SVNow _) = True
-      isNow _         = False
+  | otherwise = st {_store = M.foldlWithKey' tock M.empty s} where
+      tock acc k (SVLater e env) =
+          trace (show $ "env: " ++ show env)
+          $ M.insert k (SVNow (evalExpr' (st {_store = acc}) env e) env) acc
+      tock acc k (SVNow _ _)   = acc
+      tock acc k SVNull      = error "We don't use SVNull really (TODO: remove)"
+
 
 tmConstInt :: Int -> Term
 tmConstInt x = TmLam "x" (TmLit (LInt x))
@@ -265,7 +255,7 @@ evalProgram :: Program -> (Value, EvalState)
 evalProgram (Program main decls) =
   runExpr initialState env startMain where
     env    =
-      foldl (\env (Decl t n b) -> M.insert n (evalExpr env b) env) M.empty decls
+      foldl (\env (Decl t n b) -> M.insert n (Right $ evalExpr env b) env) M.empty decls
     mainBody = _body main
     -- allocs   = TmFix "ds" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "ds")))
     startMain = TmApp mainBody (TmCons TmAlloc $ TmDelay TmAlloc TmAlloc)
@@ -275,11 +265,13 @@ runProgram (Program main decls) = keepRunning startMain initialState
   where
     keepRunning e s =
       let (p, s') = runExpr s globals e
+          s'' = tick s'
       in case p of
-        VCons v (VPntr l) -> v : keepRunning (TmPntrDeref l) (tick s)
+        VCons v (VPntr l) -> {-traceShow (unsafeLookup l (_store s')) $-} v : keepRunning (TmPntrDeref l) s''
         _                 -> error $ ppshow p ++ " not expected"
     globals    =
-      foldl (\env (Decl t n b) -> M.insert n (evalExpr env b) env) M.empty decls
+      foldl (\env (Decl t n b) -> M.insert n (Right $ evalExpr env b) env) M.empty decls
     mainBody = _body main
     -- allocs   = TmFix "ds" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "ds")))
-    startMain = TmApp mainBody (TmCons TmAlloc $ TmDelay TmAlloc TmAlloc)
+    startMain = TmApp mainBody (TmCons TmAlloc $ TmDelay TmAlloc (TmCons TmAlloc TmAlloc))
+    -- (TmFix "xs" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "xs"))))
