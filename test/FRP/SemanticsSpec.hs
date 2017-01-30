@@ -16,7 +16,7 @@ main = hspec spec
 
 spec :: Spec
 spec = do
-  describe "operationional semantics" $ do
+  describe "operational semantics" $ do
     describe "function application" $ do
       it "works with a simple function" $ do
         let term = TmApp (TmLam "x" (TmVar "x")) (TmLit (LInt 10))
@@ -48,6 +48,31 @@ spec = do
         ppputStrLn term
         let r = evalExpr M.empty term
         putStrLn $ "result: " ++ (ppshow r)
+    describe "fixpoint" $ do
+      it "works for const" $ do
+        let fp = TmApp (TmFix "x" (TmLam "y" (TmVar "y"))) (TmLit $ LInt 10)
+        let v = evalExpr M.empty fp
+        v `shouldBe` (VLit (LInt 10))
+        ppputStrLn v
+      it "works for factorial" $ do
+        let predn = TmBinOp Sub (TmVar "n") (TmLit $ LInt 1)
+        let g    = TmBinOp Eq (TmVar "n") (TmLit $ LInt 1)
+        let body = (TmLam "n" (TmITE g (TmLit (LInt 1)) (TmBinOp Mult (TmVar "n") $ TmVar "f" `TmApp` predn)))
+        let fact = TmFix "f" body
+        ppputStrLn fact
+        let v = evalExpr M.empty (fact `TmApp` TmLit (LInt 4))
+        -- v `shouldBe` (VLit (LInt 24))
+        ppputStrLn v
+      it "works for fibonacci" $ do
+        let predn x = TmBinOp Sub (TmVar "n") (TmLit $ LInt x)
+        let g       = TmBinOp Leq (TmVar "n") (TmLit $ LInt 1)
+        let body = (TmLam "n" (TmITE g (TmVar "n") (TmBinOp Add (TmVar "f" `TmApp` predn 1) $ TmVar "f" `TmApp` predn 2)))
+        let fib = TmFix "f" body
+        ppputStrLn fib
+        let v = evalExpr M.empty (fib `TmApp` TmLit (LInt 7))
+        v `shouldBe` (VLit (LInt 13))
+        ppputStrLn v
+
     describe "streams" $ do
       it "works just a little bit" $ do
         let constfn =
@@ -64,5 +89,7 @@ spec = do
         let mainfn = Decl undefined "main" mainbd
         let prog = Program mainfn [Decl undefined "const" constfn]
         ppputStrLn constfn
-        let v = evalProgram prog
-        putStrLn $ "result:\n" ++ (ppshow v)
+        let rs = runProgram prog
+        putStrLn $ "result 1:\n" ++ (show rs)
+        -- let VCons x (VPntr l) = v
+        -- evalExpr ()

@@ -1,14 +1,14 @@
 
 module FRP.Semantics where
 
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
-import Control.Monad.State
-import Control.Monad.Reader
-import Debug.Trace
+import           Control.Monad.Reader
+import           Control.Monad.State
+import           Data.Map.Strict      (Map)
+import qualified Data.Map.Strict      as M
+import           Debug.Trace
 
-import FRP.AST
-import FRP.Pretty
+import           FRP.AST
+import           FRP.Pretty
 
 data Qualifier
   = QNow
@@ -26,7 +26,7 @@ type Scope = Map Name Term
 type Store = Map Label StoreVal
 
 data EvalState = EvalState
-  { _store :: Store
+  { _store    :: Store
   , _labelGen :: Int
   } deriving (Show)
 
@@ -51,7 +51,7 @@ allocVal v = do
 
 unsafeLookup :: (Ord k, Show k) => k -> Map k v -> v
 unsafeLookup k m = case M.lookup k m of
-  Just x -> x
+  Just x  -> x
   Nothing -> error $ show k ++ " not found in map"
 
 lookupPntr :: Label -> EvalM StoreVal
@@ -72,7 +72,10 @@ evalExpr :: Env -> Term -> Value
 evalExpr = evalExpr' initialState
 
 evalExpr' :: EvalState -> Env -> Term -> Value
-evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
+evalExpr' s env term = fst $ runExpr s env term
+
+runExpr :: EvalState -> Env -> Term -> (Value, EvalState)
+runExpr s env term = runReader (runStateT (eval term) s) env where
   eval :: Term -> EvalM Value
   eval term = case term of
     TmVar x -> unsafeLookup x <$> ask
@@ -98,8 +101,15 @@ evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
     TmInl trm -> VInl <$> eval trm
     TmInr trm -> VInr <$> eval trm
     TmCons hd tl -> VCons <$> eval hd <*> eval tl
-    TmFix x e -> eval (TmApp e (TmFix x e))
-      -- local (M.insert x (TmFix x e)) $ eval e
+    TmFix x e -> eval (z `TmApp` (TmLam x e)) -- use Z combinator for strict fixedpoint
+      where
+        zinner =
+            (TmLam "x"
+              (TmVar "f" `TmApp`
+                (TmLam "y" (TmVar "x" `TmApp` TmVar "x" `TmApp` TmVar "y"))
+              ))
+        z = TmLam "f" (zinner `TmApp` zinner)
+      -- Z = λf. (λx. f (λy. x x y))(λx. f (λy. x x y))
     TmDelay e' e -> do
       VAlloc <- eval e'
       label <- allocVal (SVLater e)
@@ -108,7 +118,7 @@ evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
       v <- lookupPntr label
       case v of
         SVNow v' -> return v'
-        _        -> return $ VPntr label
+        _        -> return $ VPntr label -- this is debatable if correct
         -- er       -> error $ "expected SVNow but got " ++ (show er)
     TmStable e ->
       VStable <$> eval e
@@ -119,15 +129,29 @@ evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
       case res of
         VInl vl -> local (M.insert nml vl) $ eval trml
         VInr vr -> local (M.insert nmr vr) $ eval trmr
-        _        -> error "not well-typed"
-    TmLet pat e e' -> evalPat pat e e'
+        _       -> error "not well-typed"
+    TmLet pat e e' -> do
+      v <- eval e
+      env <- matchPat pat v
+      local (M.union env) $ eval e'
     TmAlloc -> return VAlloc
     TmPntr l -> return $ VPntr l
     TmITE b et ef -> do
       VLit (LBool b') <- eval b
       case b' of
-        True -> eval et
+        True  -> eval et
         False -> eval ef
+
+  matchPat :: Pattern -> Value -> EvalM Env
+  matchPat (PBind x) v   = return $ M.singleton x v
+  matchPat (PDelay pat) (VPntr l) = do
+    v <- eval (TmPntrDeref l)
+    matchPat pat v
+  matchPat (PStable pat) (VStable v) =
+    matchPat pat v
+  matchPat (PCons hdp tlp) (VCons hd tl) =
+    M.union <$> matchPat hdp hd <*> matchPat tlp tl
+  matchPat pat v = error $ ppshow pat ++ " cannot match " ++ ppshow v
 
   evalPat :: Pattern -> Term -> Term -> EvalM Value
   evalPat (PBind x) e e' = do
@@ -151,17 +175,17 @@ evalExpr' s env term = fst $ runReader (runStateT (eval term) s) env where
   --   error $ "unexpected pattern " ++ show pat ++ ". This should not typecheck"
 
   evalBinOp op el er = case op of
-      Add -> intOp (+)
-      Sub -> intOp (-)
+      Add  -> intOp (+)
+      Sub  -> intOp (-)
       Mult -> intOp (*)
-      Div -> intOp div
-      And -> boolOp (&&)
-      Or -> boolOp (||)
-      Leq -> intCmpOp (<=)
-      Lt -> intCmpOp (<)
-      Geq -> intCmpOp (>=)
-      Gt -> intCmpOp (>)
-      Eq -> eqOp
+      Div  -> intOp div
+      And  -> boolOp (&&)
+      Or   -> boolOp (||)
+      Leq  -> intCmpOp (<=)
+      Lt   -> intCmpOp (<)
+      Geq  -> intCmpOp (>=)
+      Gt   -> intCmpOp (>)
+      Eq   -> eqOp
       where
         intOp fn = do
           VLit (LInt x) <- eval el
@@ -204,8 +228,8 @@ tmConstInt x = TmLam "x" (TmLit (LInt x))
 subst' :: Name -> Term -> Term -> Term
 subst' name nterm term' = go term' where
   go term'' = case term'' of
-    TmVar x | x == name -> nterm
-    TmVar x -> term''
+    TmVar x                            | x == name -> nterm
+    TmVar x                            -> term''
     TmFst trm                          -> TmFst $ go trm
     TmSnd trm                          -> TmFst $ go trm
     TmTup trm1 trm2                    -> TmTup (go trm1) (go trm2)
@@ -237,10 +261,24 @@ with' = ($)
 inTerm' :: (Term -> Term) -> Term -> Term
 inTerm'  = ($)
 
-evalProgram :: Program -> Value
+evalProgram :: Program -> (Value, EvalState)
 evalProgram (Program main decls) =
-  evalExpr state startMain where
-    state    =
+  runExpr initialState env startMain where
+    env    =
+      foldl (\env (Decl t n b) -> M.insert n (evalExpr env b) env) M.empty decls
+    mainBody = _body main
+    -- allocs   = TmFix "ds" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "ds")))
+    startMain = TmApp mainBody (TmCons TmAlloc $ TmDelay TmAlloc TmAlloc)
+
+runProgram :: Program -> [Value]
+runProgram (Program main decls) = keepRunning startMain initialState
+  where
+    keepRunning e s =
+      let (p, s') = runExpr s globals e
+      in case p of
+        VCons v (VPntr l) -> v : keepRunning (TmPntrDeref l) (tick s)
+        _                 -> error $ ppshow p ++ " not expected"
+    globals    =
       foldl (\env (Decl t n b) -> M.insert n (evalExpr env b) env) M.empty decls
     mainBody = _body main
     -- allocs   = TmFix "ds" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "ds")))

@@ -60,7 +60,7 @@ data Term
   | TmPntrDeref Label
   | TmAlloc
   | TmFix Name Term
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- isValue :: Term -> Bool
 -- isValue tm = case tm of
@@ -140,7 +140,7 @@ data Value
   -- | VInto Value
   | VCons Value Value
   | VLit Lit
-  deriving (Show)
+  deriving (Show, Eq)
 
 valToTerm :: Value -> Term
 valToTerm = \case
@@ -165,7 +165,7 @@ data Pattern
   | PCons Pattern Pattern
   | PDelay Pattern
   | PStable Pattern
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance Pretty Pattern where
   ppr n pat = case pat of
@@ -187,7 +187,7 @@ data BinOp
   | Geq
   | Gt
   | Eq
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance Pretty BinOp where
   ppr _ op = text $ case op of
