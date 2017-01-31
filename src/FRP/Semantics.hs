@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 
 module FRP.Semantics where
 
@@ -17,19 +18,34 @@ data Qualifier
   deriving (Show)
 
 data StoreVal
-  = SVNow Value Env
+  = SVNow Value
   | SVLater Term Env
-  | SVNull
   deriving (Show, Eq)
 
 type Scope = Map Name Term
 type Store = Map Label StoreVal
+
+
+instance Pretty StoreVal where
+ ppr n = \case
+    SVNow v       -> text "->now"   <+> ppr n v
+    SVLater e env -> text "->later" <+> ppr n e
+                   $$ text ", env" <> parens (ppr n env)
+
+instance Pretty (Map Label StoreVal) where
+  ppr n m = vcat . M.elems $ M.mapWithKey mapper m where
+    mapper k v = char '{' <> int k <+> ppr n v <> char '}'
+
 
 data EvalState = EvalState
   { _store    :: Store
   , _labelGen :: Int
   } deriving (Show, Eq)
 
+instance Pretty EvalState where
+  ppr n (EvalState {_store = s, _labelGen = lg}) =
+    text "labelGen =" <+> int lg
+    $$ ppr n s
 
 type EvalM a = StateT EvalState (Reader Env) a
 
@@ -39,14 +55,14 @@ initialState = EvalState M.empty 0
 getStore :: EvalM Store
 getStore = _store <$> get
 
-
 allocVal :: StoreVal -> EvalM Label
 allocVal v = do
-  store <- getStore
   label <- genLabel
-  let store' = M.insert label v store
-  st <- get
-  put $ st { _store = store' }
+  --traceM ("allocate " ++ show label ++ " as " ++ ppshow v)
+  let change st@(EvalState {_store = s}) =
+        let s' = M.insert label v s
+        in st {_store = s'}
+  modify change
   return label
 
 unsafeLookup :: (Ord k, Show k, Show v) => k -> Map k v -> v
@@ -57,14 +73,17 @@ unsafeLookup k m = case M.lookup k m of
 lookupPntr :: Label -> EvalM StoreVal
 lookupPntr lbl = do
   store <- getStore
-  return $ unsafeLookup lbl store
+  case M.lookup lbl store of
+    Nothing -> error $ "pntr " ++ show lbl ++ " not in store " ++ show store
+    Just x -> return x
 
 useVar :: String -> EvalM Value
 useVar x = do
   env <- ask
-  case unsafeLookup x env of
-    Left  t -> return $ evalExpr env t
-    Right v -> return v
+  case M.lookup x env of
+    Nothing        -> error $ "var " ++ x ++ " not in env " ++ show env
+    Just (Left  t) -> eval t
+    Just (Right v) -> return v
 
 
 genLabel :: EvalM Label
@@ -82,79 +101,84 @@ evalExpr' :: EvalState -> Env -> Term -> Value
 evalExpr' s env term = fst $ runExpr s env term
 
 runExpr :: EvalState -> Env -> Term -> (Value, EvalState)
-runExpr s env term = runReader (runStateT (eval term) s) env where
-  eval :: Term -> EvalM Value
-  eval term = case term of
-    TmVar x -> useVar x
-    TmLit x -> return $ VLit x
-    TmLam x e -> VClosure x e <$> ask
-    TmClosure x t e -> return $ VClosure x t e
-    TmApp e1 e2 -> do
-      e3 <- eval e1
-      case e3 of
-        VClosure x e1' env' -> do
-          v2 <- eval e2
-          let env'' = M.insert x (Right v2) env'
-          local (M.union env'') $ eval e1'
-        _ -> error $ "expected closure, got " ++ (ppshow e3)
-    TmBinOp op el er -> evalBinOp op el er
-    TmFst trm -> do
-      VTup x y <- eval trm
-      return x
-    TmSnd trm -> do
-      VTup x y <- eval trm
-      return y
-    TmTup trm1 trm2 -> VTup <$> eval trm1 <*> eval trm2
-    TmInl trm -> VInl <$> eval trm
-    TmInr trm -> VInr <$> eval trm
-    TmCons hd tl -> VCons <$> eval hd <*> eval tl
-    TmFix x e -> eval (z `TmApp` (TmLam x e)) -- use Z combinator for strict fixedpoint
-      where
-        zinner =
-            (TmLam "x"
-              (TmVar "f" `TmApp`
-                (TmLam "y" (TmVar "x" `TmApp` TmVar "x" `TmApp` TmVar "y"))
-              ))
-        z = TmLam "f" (zinner `TmApp` zinner)
-      -- Z = λf. (λx. f (λy. x x y))(λx. f (λy. x x y))
-    TmDelay e' e -> do
-      VAlloc <- eval e'
-      env' <- ask
-      label <- allocVal (SVLater e env')
-      return $ VPntr label
-    TmPntrDeref label -> do -- really, is this that is meant?
-      v <- lookupPntr label
-      case v of
-        SVNow v' env' -> return v'
-        -- _             -> return $ VPntr label -- this is debatable if correct
-        er       -> error $ "expected SVNow but got " ++ (show er)
-    TmStable e ->
-      VStable <$> eval e
-    TmPromote e ->
-      VStable <$> eval e
-    TmCase trm (nml, trml) (nmr, trmr) -> do
-      res <- eval trm
-      case res of
-        VInl vl -> local (M.insert nml (Right vl)) $ eval trml
-        VInr vr -> local (M.insert nmr (Right vr)) $ eval trmr
-        _       -> error "not well-typed"
-    TmLet pat e e' -> do
-      v <- eval e
-      env' <- matchPat pat v
-      local (M.union env') $ eval e'
-    TmAlloc -> return VAlloc
-    TmPntr l -> return $ VPntr l
-    TmITE b et ef -> do
-      VLit (LBool b') <- eval b
-      case b' of
-        True  -> eval et
-        False -> eval ef
+runExpr initState initEnv term =
+  let (v, s) = runReader (runStateT (eval term) initState) initEnv
+  in  -- trace ("runExpr " ++ ppshow term ++ " with lg " ++ show (_labelGen initState) ++ " = " ++ ppshow v) $
+      (v,s)
 
+eval :: Term -> EvalM Value
+eval term = case term of
+  TmVar x -> useVar x
+  TmLit x -> return $ VLit x
+  TmLam x e -> VClosure x e <$> ask
+  TmClosure x t e -> return $ VClosure x t e
+  TmApp e1 e2 -> do
+    e3 <- eval e1
+    case e3 of
+      VClosure x e1' env' -> do
+        v2 <- eval e2
+        let env'' = M.insert x (Right v2) env'
+        local (M.union env'') $ eval e1'
+      _ -> error $ "expected closure, got " ++ (ppshow e3)
+  TmBinOp op el er -> evalBinOp op el er
+  TmFst trm -> do
+    VTup x y <- eval trm
+    return x
+  TmSnd trm -> do
+    VTup x y <- eval trm
+    return y
+  TmTup trm1 trm2 -> VTup <$> eval trm1 <*> eval trm2
+  TmInl trm -> VInl <$> eval trm
+  TmInr trm -> VInr <$> eval trm
+  TmCons hd tl -> VCons <$> eval hd <*> eval tl
+  TmFix x e ->
+    local (M.insert x (Left $ TmFix x e)) $ eval e
+    -- eval (z `TmApp` (TmLam x e)) -- use Z combinator for strict fixedpoint
+    -- where
+    --   zinner =
+    --       (TmLam "x"
+    --         (TmVar "f" `TmApp`
+    --           (TmLam "y" (TmVar "x" `TmApp` TmVar "x" `TmApp` TmVar "y"))
+    --         ))
+    --   z = TmLam "f" (zinner `TmApp` zinner)
+    -- Z = λf. (λx. f (λy. x x y))(λx. f (λy. x x y))
+  TmDelay e' e -> do
+    VAlloc <- eval e'
+    env' <- ask
+    label <- allocVal (SVLater e env')
+    return $ VPntr label
+  TmPntrDeref label -> do
+    v <- lookupPntr label
+    case v of
+      SVNow v' -> return v'
+      -- _             -> return $ VPntr label -- this is debatable if correct
+      er       -> error $ "expected SVNow but got " ++ (show er)
+  TmStable e ->
+    VStable <$> eval e
+  TmPromote e ->
+    VStable <$> eval e
+  TmCase trm (nml, trml) (nmr, trmr) -> do
+    res <- eval trm
+    case res of
+      VInl vl -> local (M.insert nml (Right vl)) $ eval trml
+      VInr vr -> local (M.insert nmr (Right vr)) $ eval trmr
+      _       -> error "not well-typed"
+  TmLet pat e e' -> do
+    v <- eval e
+    env' <- matchPat pat v
+    local (M.union env') $ eval e'
+  TmAlloc -> return VAlloc
+  TmPntr l -> return $ VPntr l
+  TmITE b et ef -> do
+    VLit (LBool b') <- eval b
+    case b' of
+      True  -> eval et
+      False -> eval ef
+  where
   matchPat :: Pattern -> Value -> EvalM Env
   matchPat (PBind x) v   = return $ M.singleton x (Right v)
-  matchPat (PDelay pat) (VPntr l) = do
-    v <- eval (TmPntrDeref l) -- HERE, insert a lazy pointer deref
-    matchPat pat v
+  matchPat (PDelay x) (VPntr l) =
+    return $ M.singleton x (Left $ TmPntrDeref l)
   matchPat (PStable pat) (VStable v) =
     matchPat pat v
   -- matchPat (PCons (PBind x) (PDelay (PBind y))) (VCons v (VPntr l)) = do
@@ -196,14 +220,16 @@ runExpr s env term = runReader (runStateT (eval term) s) env where
 
 
 tick :: EvalState -> EvalState
-tick st@(EvalState {_store = s})
-  | M.null s = st
-  | otherwise = st {_store = M.foldlWithKey' tock M.empty s} where
+tick st
+  | M.null (_store st) = st
+  | otherwise = M.foldlWithKey' tock st (_store st) where
       tock acc k (SVLater e env) =
-          trace (show $ "env: " ++ show env)
-          $ M.insert k (SVNow (evalExpr' (st {_store = acc}) env e) env) acc
-      tock acc k (SVNow _ _)   = acc
-      tock acc k SVNull      = error "We don't use SVNull really (TODO: remove)"
+          let (v, st') =
+                  -- trace ("eval " ++ show k ++ "," ++ ppshow e ++ ", env: " ++ ppshow env ++ " in " ++ show acc ++ "\n") $
+                  runExpr acc env e
+              s = _store st'
+          in  st' { _store  = M.insert k (SVNow v) s }
+      tock acc k (SVNow _)  = acc { _store = M.delete k (_store acc) }
 
 
 tmConstInt :: Int -> Term
@@ -253,12 +279,9 @@ inTerm'  = ($)
 
 evalProgram :: Program -> (Value, EvalState)
 evalProgram (Program main decls) =
-  runExpr initialState env startMain where
-    env    =
-      foldl (\env (Decl t n b) -> M.insert n (Right $ evalExpr env b) env) M.empty decls
-    mainBody = _body main
-    -- allocs   = TmFix "ds" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "ds")))
-    startMain = TmApp mainBody (TmCons TmAlloc $ TmDelay TmAlloc TmAlloc)
+  runExpr initialState globals startMain where
+    globals    = globalEnv decls
+    startMain = mainTerm (_body main)
 
 runProgram :: Program -> [Value]
 runProgram (Program main decls) = keepRunning startMain initialState
@@ -269,9 +292,10 @@ runProgram (Program main decls) = keepRunning startMain initialState
       in case p of
         VCons v (VPntr l) -> {-traceShow (unsafeLookup l (_store s')) $-} v : keepRunning (TmPntrDeref l) s''
         _                 -> error $ ppshow p ++ " not expected"
-    globals    =
-      foldl (\env (Decl t n b) -> M.insert n (Right $ evalExpr env b) env) M.empty decls
-    mainBody = _body main
-    -- allocs   = TmFix "ds" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "ds")))
-    startMain = TmApp mainBody (TmCons TmAlloc $ TmDelay TmAlloc (TmCons TmAlloc TmAlloc))
-    -- (TmFix "xs" (TmCons TmAlloc (TmDelay TmAlloc (TmVar "xs"))))
+    globals    = globalEnv decls
+    startMain = mainTerm (_body main)
+
+mainTerm body = TmApp body (TmFix "xs" $ TmCons TmAlloc (TmDelay TmAlloc (TmVar "xs")))
+                           --(TmCons TmAlloc $ TmDelay TmAlloc (TmCons TmAlloc $ TmDelay TmAlloc (TmCons TmAlloc TmAlloc)))
+globalEnv decls = foldl go M.empty decls where
+  go env (Decl t n b) = M.insert n (Right $ evalExpr env b) env

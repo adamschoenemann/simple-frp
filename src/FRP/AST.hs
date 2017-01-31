@@ -167,8 +167,8 @@ instance Pretty Value where
 
 data Pattern
   = PBind Name
+  | PDelay Name
   | PCons Pattern Pattern
-  | PDelay Pattern
   | PStable Pattern
   deriving (Show, Eq)
 
@@ -176,7 +176,7 @@ instance Pretty Pattern where
   ppr n pat = case pat of
     PBind nm      -> text nm
     PCons p1 p2 -> text "cons" <> parens (ppr (n+1) p1 <> comma <+> ppr (n+1) p2)
-    PDelay p1   -> text "δ" <> parens (ppr (n+1) p1)
+    PDelay p1   -> text "δ" <> parens (text p1)
     PStable p1    -> text "stable" <> parens (ppr (n+1) p1)
 
 
