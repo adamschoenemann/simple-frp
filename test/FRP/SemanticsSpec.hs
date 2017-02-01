@@ -65,6 +65,13 @@ frp_main :: Term -> Type -> Decl
 frp_main bd retTy = Decl ty "main" bd where
   ty = TyStream TyAlloc `TyArr` retTy
 
+prog_tails :: Program
+prog_tails =
+  let mainbd = TmLam "us" $
+              (TmVar "tails" `TmApp` TmVar "us") `TmApp` (TmVar "nats" `TmApp` TmVar "us" `TmApp` TmLit (LInt 0))
+      mainfn = frp_main mainbd (TyStream (TyStream TyNat))
+  in  Program mainfn [frp_nats, frp_tails]
+
 main :: IO ()
 main = hspec spec
 
@@ -192,12 +199,10 @@ spec = do
         -- ppputStrLn s''
         -- putStrLn . show $ take 500 (interpProgram prog)
       it "works with tails" $ do
-        let mainbd = TmLam "us" $
-                    (TmVar "tails" `TmApp` TmVar "us") `TmApp` (TmVar "nats" `TmApp` TmVar "us" `TmApp` TmLit (LInt 0))
-        let mainfn = frp_main mainbd (TyStream (TyStream TyNat))
-        let prog = Program mainfn [frp_nats, frp_tails]
+
         -- ppputStrLn frp_tails
         -- putStrLn ""
+        let prog = prog_tails
         let k = 10
         let got = take k $ map (take k . toHaskList) (interpProgram prog)
         let expect = map (\n -> map (VLit . LInt) [n..(n+k-1)]) [1..k]

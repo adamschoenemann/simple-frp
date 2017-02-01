@@ -223,3 +223,6 @@ instance Pretty Decl where
 
 data Program = Program { _main :: Decl, _decls :: [Decl]}
   deriving (Show)
+
+instance Pretty Program where
+  ppr n (Program main decls) = vcat (map (\d -> ppr n d <> char '\n') (decls ++ [main]))
