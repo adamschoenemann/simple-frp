@@ -7,6 +7,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 
 import FRP.Pretty
+import Data.String (IsString(..))
 
 type Name = String
 type Label = Int
@@ -17,7 +18,7 @@ data Type
   | TyProd Type Type
   | TySum Type Type
   | TyArr Type Type
-  | TyNext Type
+  | TyLater Type
   | TyStable Type
   | TyStream Type
   | TyAlloc
@@ -30,13 +31,18 @@ instance Pretty Type where
     TyProd ty ty' -> parens (ppr (n+1) ty <+> text "×" <+> ppr (n+1) ty')
     TySum ty ty'  -> parens (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
     TyArr ty ty'  -> ppr n ty <+> text "->" <+> ppr n ty'
-    TyNext ty     -> text "∙" <+> ppr n ty
-    TyStable ty   -> text "☐" <+> ppr n ty
-    TyStream ty   -> text "S" <+> ppr n ty
+    TyLater ty    -> prns $ text "∙" <+> ppr (n+1) ty
+    TyStable ty   -> prns $ text "☐" <+> ppr (n+1) ty
+    TyStream ty   -> prns $ text "S" <+> ppr (n+1) ty
     TyAlloc       -> text "alloc"
     TyNat         -> text "Nat"
+    where
+      prns = if (n > 0)
+             then parens
+             else id
 
 infixl 9 `TmApp`
+infixr 9 `TyArr`
 
 data Term
   = TmFst Term
@@ -63,39 +69,23 @@ data Term
   | TmFix Name Term
   deriving (Show, Eq)
 
--- isValue :: Term -> Bool
--- isValue tm = case tm of
---   TmFst _             -> True
---   TmSnd _             -> True
---   TmTup _ _           -> True
---   TmInl _             -> True
---   TmInr _             -> True
---   TmCase _ _ _        -> False
---   TmLam _ _           -> True
---   TmClosure _ _ _     -> True
---   TmVar _             -> False
---   TmApp _ _           -> False
---   TmCons _ _          -> True
---   TmStable _          -> True
---   TmDelay _ _         -> False
---   TmPromote _         -> False
---   TmLet _ _ _         -> False
---   TmLit _             -> False
---   TmBinOp _ _ _       -> False
---   TmITE _ _ _         -> False
---   TmPntr _            -> True
---   TmPntrDeref _       -> False
---   TmAlloc             -> True
---   TmFix _ _           -> False
-
 instance Pretty (Either Term Value) where
   ppr n (Left t) = ppr n t
   ppr n (Right v) = ppr n v
 
 instance Pretty (Map String (Either Term Value)) where
-  ppr n env = char '[' <> body <> char ']' where
-    body = hcat $ punctuate (char ',') $
+  ppr n env = char '[' $+$ nest 2 body $+$ char ']' where
+    body = vcat $ punctuate (char ',') $
       map (\(k,v) -> text k <+> text "↦" <+> ppr (n+1) v) $ M.toList env
+
+instance IsString Term where
+  fromString x = TmVar x
+
+instance IsString Type where
+  fromString x = TyParam x
+
+instance IsString Pattern where
+  fromString x = PBind x
 
 instance Pretty Term where
   ppr n term = case term of
@@ -120,7 +110,7 @@ instance Pretty Term where
     TmLet ptn trm trm'   -> text "let" <+> ppr (n+1) ptn <+> text "="
                               <+> ppr (n+1) trm <+> text "in" $$ ppr (n+1) trm'
     TmLit l              -> ppr n l
-    TmBinOp op l r       -> ppr (n+1) l <+> ppr n op <+> ppr (n+1) r
+    TmBinOp op l r       -> prns (ppr (n+1) l <+> ppr n op <+> ppr (n+1) r)
     TmITE b trmt trmf    ->
       text "if" <+> ppr n b
         <+> text "then" <+> ppr (n+1) trmt

@@ -81,10 +81,16 @@ useVar :: String -> EvalM Value
 useVar x = do
   env <- ask
   case M.lookup x env of
-    Nothing        -> error $ "var " ++ x ++ " not in env " ++ show env
+    Nothing        -> crash $ "var " ++ x ++ " not in env."
     Just (Left  t) -> eval t
     Just (Right v) -> return v
 
+
+crash :: String -> EvalM a
+crash s = do
+  env <- ask
+  store <- get
+  error $ s ++ "\nenv: " ++ ppshow env ++ "\nstore" ++ ppshow store
 
 genLabel :: EvalM Label
 genLabel = do
@@ -119,7 +125,7 @@ eval term = case term of
         v2 <- eval e2
         let env'' = M.insert x (Right v2) env'
         local (M.union env'') $ eval e1'
-      _ -> error $ "expected closure, got " ++ (ppshow e3)
+      _ -> crash $ "expected closure, got " ++ (ppshow e3)
   TmBinOp op el er -> evalBinOp op el er
   TmFst trm -> do
     VTup x y <- eval trm
@@ -133,15 +139,6 @@ eval term = case term of
   TmCons hd tl -> VCons <$> eval hd <*> eval tl
   TmFix x e ->
     local (M.insert x (Left $ TmFix x e)) $ eval e
-    -- eval (z `TmApp` (TmLam x e)) -- use Z combinator for strict fixedpoint
-    -- where
-    --   zinner =
-    --       (TmLam "x"
-    --         (TmVar "f" `TmApp`
-    --           (TmLam "y" (TmVar "x" `TmApp` TmVar "x" `TmApp` TmVar "y"))
-    --         ))
-    --   z = TmLam "f" (zinner `TmApp` zinner)
-    -- Z = λf. (λx. f (λy. x x y))(λx. f (λy. x x y))
   TmDelay e' e -> do
     VAlloc <- eval e'
     env' <- ask
@@ -152,7 +149,7 @@ eval term = case term of
     case v of
       SVNow v' -> return v'
       -- _             -> return $ VPntr label -- this is debatable if correct
-      er       -> error $ "expected SVNow but got " ++ (show er)
+      er       -> crash $ "illegal pntr deref " ++ ppshow (TmPntrDeref label) ++ ".\n" ++ (ppshow er)
   TmStable e ->
     VStable <$> eval e
   TmPromote e ->
@@ -186,7 +183,11 @@ eval term = case term of
   --   return $ M.fromList [(x,v), (y, tl)]
   matchPat (PCons hdp tlp) (VCons hd tl) =
     M.union <$> matchPat hdp hd <*> matchPat tlp tl
-  matchPat pat v = error $ ppshow pat ++ " cannot match " ++ ppshow v
+  matchPat pat v = do
+    env <- ask
+    store <- get
+    error $ ppshow pat ++ " cannot match " ++ ppshow v
+          ++ "\nenv: " ++ (ppshow env) ++ "\nstore: " ++ ppshow store
 
   evalBinOp op el er = case op of
       Add  -> intOp (+)
@@ -279,21 +280,32 @@ inTerm'  = ($)
 
 evalProgram :: Program -> (Value, EvalState)
 evalProgram (Program main decls) =
-  runExpr initialState globals startMain where
+  {-trace (ppshow globals) $-} runExpr initialState globals startMain where
     globals    = globalEnv decls
     startMain = mainTerm (_body main)
 
-runProgram :: Program -> [Value]
-runProgram (Program main decls) = keepRunning startMain initialState
+runProgram :: Program -> Value
+runProgram (Program main decls) = keepRunning initialState startMain
   where
-    keepRunning e s =
+    keepRunning s e  =
       let (p, s') = runExpr s globals e
           s'' = tick s'
       in case p of
-        VCons v (VPntr l) -> {-traceShow (unsafeLookup l (_store s')) $-} v : keepRunning (TmPntrDeref l) s''
+        VCons v (VPntr l) -> VCons (deepRunning s'' v) (keepRunning s'' (TmPntrDeref l))
         _                 -> error $ ppshow p ++ " not expected"
+    deepRunning s = \case
+      VCons x (VPntr l) -> keepRunning s (TmPntrDeref l)
+      v                 -> v
     globals    = globalEnv decls
     startMain = mainTerm (_body main)
+
+interpProgram :: Program -> [Value]
+interpProgram = toHaskList . runProgram
+
+toHaskList = \case
+  VCons h t -> h : toHaskList t
+  v         -> error $ "expected cons but got " ++ ppshow v
+
 
 mainTerm body = TmApp body (TmFix "xs" $ TmCons TmAlloc (TmDelay TmAlloc (TmVar "xs")))
                            --(TmCons TmAlloc $ TmDelay TmAlloc (TmCons TmAlloc $ TmDelay TmAlloc (TmCons TmAlloc TmAlloc)))
