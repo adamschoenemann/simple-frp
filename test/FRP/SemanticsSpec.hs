@@ -58,7 +58,7 @@ frp_tails = Decl ty name body where
   body = TmLam "us" $ TmLam "xs" $
          TmLet (consp "u" "us'") "us" $
          TmLet (consp "x" "xs'") "xs" $
-         TmCons "xs" (TmDelay TmAlloc ("tails" `TmApp` "us'" `TmApp` "xs'"))
+         TmCons "xs" (TmDelay "u" ("tails" `TmApp` "us'" `TmApp` "xs'"))
   consp h t = PCons h (PDelay t)
 
 frp_main :: Term -> Type -> Decl
