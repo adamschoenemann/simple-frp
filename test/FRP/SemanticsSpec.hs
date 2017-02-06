@@ -148,6 +148,13 @@ frp_swap = Decl ty name body where
   recCall = "swap" `TmApp` "us'" `TmApp` (TmBinOp Sub "m" (TmLit $ LInt 1)) `TmApp`
             "xs'" `TmApp` "ys'"
 
+prog_swap_fib_nats = Program mainfn [frp_unfold, frp_fib, frp_nats, frp_swap]
+  where
+    mainfn = frp_main mainbd (TyStream TyNat)
+    mainbd =
+      TmLam "us" $
+      "swap" `TmApp` "us" `TmApp` (TmLit $ LInt 10) `TmApp`
+      ("nats" `TmApp` "us" `TmApp` (TmLit $ LInt 0)) `TmApp` ("fib" `TmApp` "us")
 
 main :: IO ()
 main = hspec spec
@@ -301,6 +308,14 @@ spec = do
         let expect = map (VLit . LInt) $ take k $ unfoldr (\(a,b) -> Just (a+b, (b,a+b))) (0,1)
         got `shouldBe` expect
 
+      it "works with swap 10 nats (fib)" $ do
+        let prog = prog_swap_fib_nats
+        let k = 50
+        let got = take k $ (interpProgram prog)
+        -- mapM_ (putStrLn . show) got
+        let fibs = unfoldr (\(a,b) -> Just (a+b, (b,a+b))) (0,1)
+        let expect = map (VLit . LInt) $ [0..9] ++ take (k-10) (drop 10 fibs)
+        got `shouldBe` expect
 
 
     -- describe "tick" $ do
