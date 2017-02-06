@@ -30,9 +30,9 @@ instance Pretty Type where
     TyParam name  -> text name
     TyProd ty ty' -> parens (ppr (n+1) ty <+> text "×" <+> ppr (n+1) ty')
     TySum ty ty'  -> parens (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
-    TyArr ty ty'  -> ppr n ty <+> text "->" <+> ppr n ty'
-    TyLater ty    -> prns $ text "∙" <+> ppr (n+1) ty
-    TyStable ty   -> prns $ text "☐" <+> ppr (n+1) ty
+    TyArr ty ty'  -> prns $ ppr n ty <+> text "->" <+> ppr n ty'
+    TyLater ty    -> prns $ text "∙" <> ppr (n+1) ty
+    TyStable ty   -> prns $ text "☐" <> ppr (n+1) ty
     TyStream ty   -> prns $ text "S" <+> ppr (n+1) ty
     TyAlloc       -> text "alloc"
     TyNat         -> text "Nat"
@@ -100,21 +100,21 @@ instance Pretty Term where
         <+> text "inr" <+> text vr <+> text "->" <+> ppr (n+1) trmr)
     TmLam b trm          -> prns (text "\\" <> text b <> char '.' <+> ppr (n+1) trm)
     TmFix b trm          -> prns (text "fix" <+> text b <> char '.' <+> ppr (n+1) trm)
-    TmClosure b trm env  -> parens $ ppr (n+1) (TmLam b trm) -- <> comma <+> ppr (n+1) env
+    TmClosure b trm env  -> ppr n (TmLam b trm)-- prns $ ppr (n+1) (TmLam b trm) -- <> comma <+> ppr (n+1) env
     TmVar v              -> text v
     TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
     TmCons hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
-    TmDelay alloc trm    -> text "δ_" <> ppr (n+1) alloc <> parens (ppr (n+1) trm)
-    TmStable trm         -> text "stable" <> parens (ppr (n+1) trm)
-    TmPromote trm        -> text "promote" <> parens (ppr (n+1) trm)
+    TmDelay alloc trm    -> text "δ_" <> ppr (n+1) alloc <> parens (ppr 0 trm)
+    TmStable trm         -> text "stable" <> parens (ppr 0 trm)
+    TmPromote trm        -> text "promote" <> parens (ppr 0 trm)
     TmLet ptn trm trm'   -> text "let" <+> ppr (n+1) ptn <+> text "="
                               <+> ppr (n+1) trm <+> text "in" $$ ppr (n+1) trm'
     TmLit l              -> ppr n l
     TmBinOp op l r       -> prns (ppr (n+1) l <+> ppr n op <+> ppr (n+1) r)
     TmITE b trmt trmf    ->
       text "if" <+> ppr n b
-        <+> text "then" <+> ppr (n+1) trmt
-        <+> text "else" <+> ppr (n+1) trmf
+        $$ nest 2 (text "then" <+> ppr (n+1) trmt)
+        $$ nest 2 (text "else" <+> ppr (n+1) trmf)
     TmPntr pntr          -> text "&[" <> int pntr <> text "]"
     TmPntrDeref pntr     -> text "*[" <> int pntr <> text "]"
     TmAlloc              -> text "♢"
@@ -160,14 +160,16 @@ data Pattern
   | PDelay Name
   | PCons Pattern Pattern
   | PStable Pattern
+  | PTup Pattern Pattern
   deriving (Show, Eq)
 
 instance Pretty Pattern where
   ppr n pat = case pat of
     PBind nm      -> text nm
-    PCons p1 p2 -> text "cons" <> parens (ppr (n+1) p1 <> comma <+> ppr (n+1) p2)
-    PDelay p1   -> text "δ" <> parens (text p1)
+    PCons p1 p2   -> text "cons" <> parens (ppr (n+1) p1 <> comma <+> ppr (n+1) p2)
+    PDelay p1     -> text "δ" <> parens (text p1)
     PStable p1    -> text "stable" <> parens (ppr (n+1) p1)
+    PTup p1 p2    -> char '(' <> ppr 0 p1 <> char ',' <+> ppr 0 p2 <> char ')'
 
 
 data BinOp
@@ -218,8 +220,17 @@ data Decl =
 
 instance Pretty Decl where
   ppr n (Decl ty nm bd) =
-    text nm <+> char ':' <+> ppr n ty
-      $$ text nm <+> char '=' <+> ppr n bd
+    let (bs, bd') = bindings bd
+    in  text nm <+> char ':' <+> ppr n ty
+        $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd')
+    where
+      bindings (TmLam x b) =
+        let (y, b') = bindings b
+        in  (x:y, b')
+      bindings (TmClosure x b _) =
+        let (y, b') = bindings b
+        in  (x:y, b')
+      bindings b           = ([], b)
 
 data Program = Program { _main :: Decl, _decls :: [Decl]}
   deriving (Show)

@@ -140,10 +140,13 @@ eval term = case term of
   TmFix x e ->
     local (M.insert x (Left $ TmFix x e)) $ eval e
   TmDelay e' e -> do
-    VAlloc <- eval e'
-    env' <- ask
-    label <- allocVal (SVLater e env')
-    return $ VPntr label
+    v <- eval e'
+    case v of
+      VAlloc -> do
+        env' <- ask
+        label <- allocVal (SVLater e env')
+        return $ VPntr label
+      _ -> crash $ "expected VAlloc, got" ++ (ppshow v)
   TmPntrDeref label -> do
     v <- lookupPntr label
     case v of
@@ -183,6 +186,8 @@ eval term = case term of
   --   return $ M.fromList [(x,v), (y, tl)]
   matchPat (PCons hdp tlp) (VCons hd tl) =
     M.union <$> matchPat hdp hd <*> matchPat tlp tl
+  matchPat (PTup p1 p2) (VTup v1 v2) =
+    M.union <$> matchPat p1 v1 <*> matchPat p2 v2
   matchPat pat v = do
     env <- ask
     store <- get

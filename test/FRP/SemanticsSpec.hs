@@ -9,6 +9,7 @@ import FRP.Pretty
 import Control.Monad.State
 import Debug.Trace
 import qualified Data.Map.Strict as M
+import Data.List (unfoldr)
 
 frp_nats :: Decl
 frp_nats = Decl ty name body where
@@ -71,6 +72,82 @@ prog_tails =
               (TmVar "tails" `TmApp` TmVar "us") `TmApp` (TmVar "nats" `TmApp` TmVar "us" `TmApp` TmLit (LInt 0))
       mainfn = frp_main mainbd (TyStream (TyStream TyNat))
   in  Program mainfn [frp_nats, frp_tails]
+
+frp_map :: Decl
+frp_map = Decl ty name body where
+  ty = TyStream TyAlloc `TyArr` (TyStable ("A" `TyArr` "B")) `TyArr`
+       TyStream "A" `TyArr` TyStream "B"
+  name = "map"
+  body =
+    TmLam "us" $ TmLam "h" $ TmLam "xs" $
+      TmLet (PCons "u" $ PDelay "us'") "us" $
+      TmLet (PCons "x" $ PDelay "xs'") "xs" $
+      TmLet (PStable "f") "h" $
+      TmCons ("f" `TmApp` "x") (TmDelay "u" $ "map" `TmApp` "us'" `TmApp` TmStable "f" `TmApp` "xs'")
+
+prog_map :: Program
+prog_map =
+  let mainfn = frp_main mainbd (TyStream TyNat)
+      mainbd =
+          TmLam "us" $
+          ("map" `TmApp` "us" `TmApp` TmStable (TmLam "y" $ TmBinOp Mult (TmLit (LInt 2)) "y")) `TmApp`
+          ("nats" `TmApp` "us" `TmApp` TmLit (LInt 0))
+
+  in Program mainfn [frp_map, frp_nats]
+
+frp_unfold :: Decl
+frp_unfold = Decl ty name body where
+  ty = TyStream TyAlloc `TyArr`
+       TyStable ("X" `TyArr` ("A" `TyProd` TyLater "X")) `TyArr`
+       "X" `TyArr`
+       TyStream "A"
+  name = "unfold"
+  body =
+    TmLam "us" $ TmLam "h" $ TmLam "x" $
+    TmLet (PCons "u" $ PDelay "us'") "us" $
+    TmLet (PStable "f") "h" $
+    TmLet (PTup "a" $ PDelay "x'") ("f" `TmApp` "x") $
+    TmCons "a" (TmDelay "u" $ "unfold" `TmApp` "us'" `TmApp` (TmStable "f") `TmApp` "x'")
+
+frp_fib :: Decl
+frp_fib = Decl ty name body where
+ ty = TyStream TyAlloc `TyArr` TyStream TyNat
+ name = "fib"
+ body =
+    TmLam "us" $
+    TmLet (PCons "u" $ PDelay "us'") "us" $
+    TmLet "fib" fiblam $
+    "unfold" `TmApp` "us" `TmApp` TmStable ("fib" `TmApp` "u") `TmApp`
+    TmTup (TmLit $ LInt 0) (TmLit $ LInt 1)
+ fiblam = TmLam "u" $ TmLam "x" $
+          TmLet (PTup "a" "b") "x" $
+          TmLet "f" (TmBinOp Add "a" "b") $
+          TmTup "f" (TmDelay "u" $ TmTup "b" "f")
+
+prog_unfold :: Program
+prog_unfold =
+  let mainfn = frp_main (_body frp_fib) (TyStream TyNat)
+  in Program mainfn [frp_unfold, frp_nats, frp_fib]
+
+frp_swap :: Decl
+frp_swap = Decl ty name body where
+  ty = TyStream TyAlloc `TyArr`
+       TyNat `TyArr`
+       TyStream "A" `TyArr`
+       TyStream "A" `TyArr`
+       TyStream "A"
+  name = "swap"
+  body = TmLam "us" $ TmLam "n" $ TmLam "xs" $ TmLam "ys" $
+         TmITE (TmBinOp Eq "n" $ TmLit $ LInt 0)
+            "ys" $
+            TmLet (PCons "u" $ PDelay "us'") "us" $
+            TmLet (PCons "x" $ PDelay "xs'") "xs" $
+            TmLet (PCons "y" $ PDelay "ys'") "ys" $
+            TmLet (PStable "m") (TmPromote "n")   $
+            TmCons "x" (TmDelay "u" $ recCall)
+  recCall = "swap" `TmApp` "us'" `TmApp` (TmBinOp Sub "m" (TmLit $ LInt 1)) `TmApp`
+            "xs'" `TmApp` "ys'"
+
 
 main :: IO ()
 main = hspec spec
@@ -151,35 +228,35 @@ spec = do
     --     r `shouldBe` ()
 
     describe "streams" $ do
-      it "works with const" $ do
-        let constfn =
-              TmLam "us" (TmLam "n" (
-                TmLet (PCons (PBind "u") (PDelay "us'")) (TmVar "us") (
-                TmLet (PStable (PBind "x")) (TmPromote (TmVar "n")) (
-                TmCons (TmVar "x") (TmDelay (TmVar "u")
-                  ((TmVar "const") `TmApp` (TmVar "us'") `TmApp` (TmVar "x")))
-                ))
-              ))
-        let mainbd =
-              TmLam "us"
-              ((TmVar "const") `TmApp` (TmVar "us") `TmApp` (TmLit (LInt 10)))
-        let mainfn = Decl undefined "main" mainbd
-        let prog = Program mainfn [Decl undefined "const" constfn]
-        take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) (replicate 100 10)
-        -- putStrLn $ show $ interpProgram prog
-      it "works with nats" $ do
-        let mainbd =
-              TmLam "us"
-              ((TmVar "nats") `TmApp` (TmVar "us") `TmApp` (TmLit (LInt 0)))
-        let mainfn = frp_main mainbd (TyStream TyNat)
-        let prog = Program mainfn [frp_nats]
-        take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) [0..99]
-      it "works with sum" $ do
-        let mainbd = TmLam "us" $
-                    (TmVar "sum" `TmApp` TmVar "us") `TmApp` (TmVar "nats" `TmApp` TmVar "us" `TmApp` TmLit (LInt 0))
-        let mainfn = frp_main mainbd (TyStream TyNat)
-        let prog = Program mainfn [frp_nats, frp_sum_acc, frp_sum]
-        take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) (scanl (+) 0 [1..99])
+      -- it "works with const" $ do
+      --   let constfn =
+      --         TmLam "us" (TmLam "n" (
+      --           TmLet (PCons (PBind "u") (PDelay "us'")) (TmVar "us") (
+      --           TmLet (PStable (PBind "x")) (TmPromote (TmVar "n")) (
+      --           TmCons (TmVar "x") (TmDelay (TmVar "u")
+      --             ((TmVar "const") `TmApp` (TmVar "us'") `TmApp` (TmVar "x")))
+      --           ))
+      --         ))
+      --   let mainbd =
+      --         TmLam "us"
+      --         ((TmVar "const") `TmApp` (TmVar "us") `TmApp` (TmLit (LInt 10)))
+      --   let mainfn = Decl undefined "main" mainbd
+      --   let prog = Program mainfn [Decl undefined "const" constfn]
+      --   take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) (replicate 100 10)
+      --   -- putStrLn $ show $ interpProgram prog
+      -- it "works with nats" $ do
+      --   let mainbd =
+      --         TmLam "us"
+      --         ((TmVar "nats") `TmApp` (TmVar "us") `TmApp` (TmLit (LInt 0)))
+      --   let mainfn = frp_main mainbd (TyStream TyNat)
+      --   let prog = Program mainfn [frp_nats]
+      --   take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) [0..99]
+      -- it "works with sum" $ do
+      --   let mainbd = TmLam "us" $
+      --               (TmVar "sum" `TmApp` TmVar "us") `TmApp` (TmVar "nats" `TmApp` TmVar "us" `TmApp` TmLit (LInt 0))
+      --   let mainfn = frp_main mainbd (TyStream TyNat)
+      --   let prog = Program mainfn [frp_nats, frp_sum_acc, frp_sum]
+      --   take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) (scanl (+) 0 [1..99])
 
         -- ppputStrLn frp_sum_acc
         -- putStrLn ""
@@ -198,21 +275,31 @@ spec = do
         -- ppputStrLn v''
         -- ppputStrLn s''
         -- putStrLn . show $ take 500 (interpProgram prog)
-      it "works with tails" $ do
+      -- it "works with tails" $ do
 
-        -- ppputStrLn frp_tails
-        -- putStrLn ""
-        let prog = prog_tails
-        let k = 10
-        let got = take k $ map (take k . toHaskList) (interpProgram prog)
-        let expect = map (\n -> map (VLit . LInt) [n..(n+k-1)]) [1..k]
+      --   -- ppputStrLn frp_tails
+      --   -- putStrLn ""
+      --   let prog = prog_tails
+      --   let k = 10
+      --   let got = take k $ map (take k . toHaskList) (interpProgram prog)
+      --   let expect = map (\n -> map (VLit . LInt) [n..(n+k-1)]) [1..k]
+      --   got `shouldBe` expect
+
+      it "works with map" $ do
+        let prog = prog_map
+        let k = 100
+        let got = take k $ (interpProgram prog)
+        -- mapM_ (putStrLn . show) got
+        let expect = map (VLit . LInt . (* 2)) [0..k-1]
         got `shouldBe` expect
 
-        -- let (v, s) = evalProgram prog
-        -- putStrLn "===== run 1 ======="
-        -- ppputStrLn v
-        -- ppputStrLn s
-        -- let VCons _ (VPntr l) = v
+      it "works with unfold (fib)" $ do
+        let prog = prog_unfold
+        let k = 50
+        let got = take k $ (interpProgram prog)
+        -- mapM_ (putStrLn . show) got
+        let expect = map (VLit . LInt) $ take k $ unfoldr (\(a,b) -> Just (a+b, (b,a+b))) (0,1)
+        got `shouldBe` expect
 
 
 
