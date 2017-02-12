@@ -1,50 +1,87 @@
 module FRP.Parser where
 
-import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
-import Text.ParserCombinators.Parsec.Language
-import qualified Text.ParserCombinators.Parsec.Token as Token
+import Text.Parsec
+import Text.Parsec.Expr
+import Text.Parsec.Language
+import Text.Parsec.String
+import qualified Text.Parsec.Token as Tok
 import Utils
 
 import FRP.AST
 
+opNames    = ["+", "-", "*", "/", ":="
+             , "<", ">", "<=", ">=", "\\", "->"
+             ]
 
-languageDef =
-  emptyDef { Token.commentStart    = "{-"
-           , Token.commentEnd      = "-}"
-           , Token.commentLine     = "--"
-           , Token.identStart      = letter
-           , Token.identLetter     = alphaNum
-           , Token.reservedNames   = [ "if"
-                                     , "then"
-                                     , "else"
-                                     , "True"
-                                     , "False"
-                                     ]
-           , Token.reservedOpNames = ["+", "-", "*", "/", "="
-                                     , "<", ">", "&&", "||", "not"
-                                     , "<=", ">="
-                                     ]
-           }
+languageDef :: Tok.LanguageDef ()
+languageDef = Tok.LanguageDef
+  { Tok.commentStart    = "{-"
+  , Tok.commentEnd      = "-}"
+  , Tok.commentLine     = "--"
+  , Tok.nestedComments  = True
+  , Tok.identStart      = letter
+  , Tok.identLetter     = alphaNum <|> oneOf "_'"
+  , Tok.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~"
+  , Tok.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
+  , Tok.reservedNames   = [ "if"
+                          , "then"
+                          , "else"
+                          , "True"
+                          , "False"
+                          , "cons"
+                          , "let"
+                          ]
+  , Tok.reservedOpNames = opNames
+  , Tok.caseSensitive   = True
+  }
+
+expr    = buildExpressionParser table term
+         <?> "expression"
+
+term     =  parens expr
+        <|> tmlet
+        <|> tmcons
+        -- <|> tmlam
+        <|> TmLit . LInt . fromInteger <$> integer
+        <|> TmVar <$> identifier
+        <?> "simple expression"
+
+table   = [ [Infix spacef AssocLeft]
+          , [binary "*" (bo Mult) AssocLeft, binary "/" (bo Div) AssocLeft ]
+          , [binary "+" (bo Add)  AssocLeft, binary "-" (bo Sub) AssocLeft ]
+          , [Prefix (reservedOp "\\" >> ws >> TmLam <$> identifier <* ws <* reservedOp "->" <* ws)]
+          ]
+          where
+
+            bo = TmBinOp
 
 
-lexer = Token.makeTokenParser languageDef
-identifier = Token.identifier lexer -- parses an identifier
-reserved   = Token.reserved   lexer -- parses a reserved name
-reservedOp = Token.reservedOp lexer -- parses an operator
-parens     = Token.parens     lexer -- parses surrounding parenthesis:
+spacef = ws
+         *> notFollowedBy (choice . map reservedOp $ opNames)
+         >> return TmApp
+         <?> "space application"
+
+binary  name fun assoc = Infix   (reservedOp name >> return fun) assoc
+prefix  name fun       = Prefix  (reservedOp name >> return fun)
+postfix name fun       = Postfix (reservedOp name >> return fun)
+
+lexer      = Tok.makeTokenParser languageDef
+identifier = Tok.identifier lexer -- parses an identifier
+reserved   = Tok.reserved   lexer -- parses a reserved name
+reservedOp = Tok.reservedOp lexer -- parses an operator
+parens     = Tok.parens     lexer -- parses surrounding parenthesis:
                                     --   parens p
                                     -- takes care of the parenthesis and
                                     -- uses p to parse what's inside them
-integer    = Token.integer    lexer -- parses an integer
-semi       = Token.semi       lexer -- parses a semicolon
-ws = Token.whiteSpace lexer -- parses whitespace
+integer    = Tok.integer    lexer -- parses an integer
+natural    = Tok.natural    lexer
+ws         = Tok.whiteSpace lexer -- parses whitespace
 
 tmlam :: Parser Term
 tmlam =
-  TmLam <$> (ws *> char '\\' *> ws *> identifier)
-        <*> (ws *> string "->" *> term)
+  TmLam <$> (char '\\' *> ws *> identifier)
+        <*> (ws *> string "->" *> ws *> term)
+  <?> "lambda"
 
 tmpattern :: Parser Pattern
 tmpattern = PBind  <$> (identifier) <* ws
@@ -62,15 +99,15 @@ tmcons :: Parser Term
 tmcons = string "cons" *> ws *> parens (TmCons <$> (ws *> term) <*> (char ',' *> ws *> term)) <* ws
 
 tmapp :: Parser Term
-tmapp = var `chainl1` (const TmApp <$> many1 space)
+tmapp = var `chainl1` (const TmApp <$> many1 space) <* ws
 
-term :: Parser Term
-term = ws *> prs where
-  prs = tmlet
-    <|> tmlam
-    <|> tmcons
-    <|> tmexpr
-    <|> parens term
+-- term :: Parser Term
+-- term = ws *> prs where
+--   prs = tmlet
+--     <|> tmlam
+--     <|> tmcons
+--     <|> tmexpr
+--     <|> parens term
 
 tmexpr :: Parser Term
 tmexpr = equality
@@ -79,9 +116,8 @@ tmexpr = equality
     comparison = intexpr    `chainl1` intop
     intexpr    = term       `chainl1` termop
     term       = factor     `chainl1` factop
-    factor     = prim       `chainl1` appop
-    prim       = ((parens term) <|> int <|> bool <|> var) <* ws
-    appop  =  const  TmApp         <$> many1 space
+    factor     = prim       --`chainl1` appop
+    prim       = ((parens term) <|> try tmapp <|> int <|> bool <|> var) <* ws
     cmpop  =  const (TmBinOp Eq)   <$> string "==" <* ws
     intop  =  const (TmBinOp Gt)   <$> char   '>'  <* ws
           <|> const (TmBinOp Lt)   <$> char   '<'  <* ws
@@ -105,4 +141,4 @@ ident  = (\l a c -> l : a ++ c) <$> letter <*> many alphaNum <*> many (char '\''
 -- unsafeParse p = either (error . show) id $ parse program "unsafe" p
 
 parseTerm :: String -> Either ParseError Term
-parseTerm p = parse term "FRP" p
+parseTerm p = parse expr "FRP" p
