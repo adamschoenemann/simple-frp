@@ -15,8 +15,8 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     FRP, FRP.AST, FRP.Pretty, FRP.Semantics
-  build-depends:       base >= 4.7 && < 5, pretty, containers, mtl
+  exposed-modules:     FRP, FRP.AST, FRP.Pretty, FRP.Semantics, FRP.Parser, Utils
+  build-depends:       base >= 4.7 && < 5, pretty, containers, mtl, parsec
   ghc-options:         -Wincomplete-patterns
   default-language:    Haskell2010
   default-extensions:  LambdaCase, OverloadedStrings
