@@ -43,9 +43,8 @@ ws = Token.whiteSpace lexer -- parses whitespace
 
 tmlam :: Parser Term
 tmlam =
-  TmLam <$> (ws >> string "fun" >> ws >> identifier)
-        <*> (ws >> string "->" >> term)
-
+  TmLam <$> (ws *> char '\\' *> ws *> identifier)
+        <*> (ws *> string "->" *> term)
 
 tmpattern :: Parser Pattern
 tmpattern = PBind  <$> (identifier) <* ws
@@ -62,35 +61,16 @@ tmlet = TmLet <$> (string "let" >> ws >> tmpattern)
 tmcons :: Parser Term
 tmcons = string "cons" *> ws *> parens (TmCons <$> (ws *> term) <*> (char ',' *> ws *> term)) <* ws
 
+tmapp :: Parser Term
+tmapp = var `chainl1` (const TmApp <$> many1 space)
+
 term :: Parser Term
 term = ws *> prs where
   prs = tmlet
     <|> tmlam
     <|> tmcons
     <|> tmexpr
-
--- program :: Parser Program
--- program = spaces *> many (stmt <* spaces)
-
--- stmt :: Parser SubProg
--- stmt =  (const $ Single Skip) <$> trystring "skip" <* spaces <* char ';' <* spaces
---     <|> ITE <$> (trystring "if" *> spaces1 *> expr) <*>
---                 (trystring "then" *> spaces1 *> stmt <* spaces) <*>
---                 (trystring "else" *> spaces1 *> stmt <* spaces)
---     <|> While <$> (trystring "while" *> spaces1 *> expr) <*>
---                   (trystring "do" *> spaces1 *> stmt) <* spaces
---     <|> (Single . Output) <$> (trystring "output" *> spaces1 *> expr <* char ';') <* spaces
---     <|> (\v e -> Single $ Ass v e) <$> (ident <* spaces)
---                                    <*> (string ":=" *> spaces *> expr <* char ';') <* spaces
---     <|> Block <$> (brackets block) <* spaces
---       where
---         block = sepBy stmt spaces
-
--- trystring :: String -> Parser String
--- trystring = try . string
-
--- spaces1 :: Parser String
--- spaces1 = many1 space
+    <|> parens term
 
 tmexpr :: Parser Term
 tmexpr = equality
@@ -99,16 +79,18 @@ tmexpr = equality
     comparison = intexpr    `chainl1` intop
     intexpr    = term       `chainl1` termop
     term       = factor     `chainl1` factop
-    factor     = (parens tmexpr) <* spaces <|> int <|> bool <|> var
-    cmpop  =  const (TmBinOp Eq)   <$> string "==" <* spaces
-    intop  =  const (TmBinOp Gt)   <$> char   '>'  <* spaces
-          <|> const (TmBinOp Lt)   <$> char   '<'  <* spaces
-    termop =  const (TmBinOp Add)  <$> char   '+'  <* spaces
-          <|> const (TmBinOp Sub)  <$> char   '-'  <* spaces
-    factop =  const (TmBinOp Mult) <$> char   '*'  <* spaces
+    factor     = prim       `chainl1` appop
+    prim       = ((parens term) <|> int <|> bool <|> var) <* ws
+    appop  =  const  TmApp         <$> many1 space
+    cmpop  =  const (TmBinOp Eq)   <$> string "==" <* ws
+    intop  =  const (TmBinOp Gt)   <$> char   '>'  <* ws
+          <|> const (TmBinOp Lt)   <$> char   '<'  <* ws
+    termop =  const (TmBinOp Add)  <$> char   '+'  <* ws
+          <|> const (TmBinOp Sub)  <$> char   '-'  <* ws
+    factop =  const (TmBinOp Mult) <$> char   '*'  <* ws
 
--- var, int, bool :: Parser Expr
-var  = TmVar <$> identifier <* ws
+var, int, bool :: Parser Term
+var  = TmVar <$> ident
 int  = TmLit . LInt  . read <$> many1 digit <* ws
 bool = TmLit . LBool . read . capitalize <$> (string "true" <|> string "false") <* ws
 
@@ -116,11 +98,11 @@ bool = TmLit . LBool . read . capitalize <$> (string "true" <|> string "false") 
 -- parens x = between (char '(' <* spaces) (char ')') (x <* spaces)
 -- brackets x = between (char '{' <* spaces) (char '}') (x <* spaces)
 
--- ident :: Parser String
--- ident  = (:) <$> letter <*> many alphaNum
+ident :: Parser String
+ident  = (\l a c -> l : a ++ c) <$> letter <*> many alphaNum <*> many (char '\'')
 
 -- unsafeParse :: String -> Program
 -- unsafeParse p = either (error . show) id $ parse program "unsafe" p
 
 parseTerm :: String -> Either ParseError Term
-parseTerm p = parse tmexpr "FRP" p
+parseTerm p = parse term "FRP" p
