@@ -61,11 +61,21 @@ frp_switch =
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
     case out e of
-      inl ys -> ys
-      inr t  -> let delay(e') = t in
-                cons(x, delay (u, switch us' xs' e')))
+      | inl ys -> ys
+      | inr t  -> let delay(e') = t in
+                  cons(x, delay (u, switch us' xs' e')))
   |]
 
+frp_bind =
+  [text|
+  \us -> \h -> \e ->
+    let cons(u, delay(us')) = us in
+    let stable(f)           = h  in
+    case out e of
+      | inl a -> f a
+      | inr t -> let delay(e') = t in
+                 into (inr (delay (u, bind us' stable(f) e')))
+  |]
 
 tmbool = TmLit . LBool
 
@@ -144,23 +154,23 @@ spec = do
               )
 
     it "parses case exprs" $ do
-      parse tmcase "case" "case x of inl y -> 10 inr z -> 20" `shouldBe`
+      parse tmcase "case 1" "case x of | inl y -> 10 | inr z -> 20" `shouldBe`
         Right (TmCase "x" ("y", 10) ("z", 20))
 
-      parse term "case" "10 + case x of inl y -> 10 inr z -> 4 + 1" `shouldBe`
+      parse term "case 2" "10 + case x of | inl y -> 10 | inr z -> 4 + 1" `shouldBe`
         Right (10 + TmCase "x" ("y", 10) ("z", 4 + 1))
 
       let nested_case =
             [text|
             case x of
-              inl y -> case y of
-                inl yy -> yy * 10
-                inr yz -> yz - 10
-              inr z -> case z of
-                inl zy -> zy * 10
-                inr zz -> zz + 10
+              | inl y -> case y of
+                | inl yy -> yy * 10
+                | inr yz -> yz - 10
+              | inr z -> case z of
+                | inl zy -> zy * 10
+                | inr zz -> zz + 10
             |]
-      parse term "case" (unpack nested_case) `shouldBe`
+      parse term "nested case" (unpack nested_case) `shouldBe`
         Right (TmCase "x"
                 ("y", TmCase "y" ("yy", "yy" * 10) ("yz", "yz" - 10))
                 ("z", TmCase "z" ("zy", "zy" * 10) ("zz", "zz" + 10))
@@ -213,3 +223,32 @@ spec = do
                        )
 
       parse term "frp_swap" (unpack frp_swap) `shouldBe` Right (frp_swap_ast)
+
+      let frp_switch_ast =
+            TmLam "us" $ TmLam "xs" $ TmLam "e" $
+              TmLet (PCons "u" (PDelay "us'")) "us" $
+              TmLet (PCons "x" (PDelay "xs'")) "xs" $
+              TmCase (TmOut "e")
+                ("ys", "ys")
+                ("t", TmLet (PDelay "e'") "t" $
+                 TmCons "x"
+                        (TmDelay "u" $
+                           "switch" `TmApp` "us'" `TmApp` "xs'" `TmApp` "e'"
+                        )
+                )
+
+      parse term "frp_switch" (unpack frp_switch) `shouldBe` Right (frp_switch_ast)
+
+      let frp_bind_ast =
+            TmLam "us" $ TmLam "h" $ TmLam "e" $
+              TmLet (PCons "u" (PDelay "us'")) "us" $
+              TmLet (PStable "f") "h" $
+              TmCase (TmOut "e")
+                ("a", "f" `TmApp` "a")
+                ("t", TmLet (PDelay "e'") "t" $
+                      TmInto (TmInr $ TmDelay "u" $
+                             "bind" `TmApp` "us'" `TmApp` TmStable "f" `TmApp` "e'"
+                             )
+                )
+
+      parse term "frp_bind" (unpack frp_bind) `shouldBe` Right (frp_bind_ast)

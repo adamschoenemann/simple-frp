@@ -41,6 +41,8 @@ languageDef = Tok.LanguageDef
                           , "inr"
                           , "case"
                           , "of"
+                          , "out"
+                          , "into"
                           ]
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True
@@ -77,6 +79,9 @@ expr     =  parens term
         <|> tmcase
         <|> tmite
         <|> tmlet
+        <|> tmout
+        <|> tminto
+        <|> try (tminl <|> tminr)
         <|> int
         <|> bool
         <|> var
@@ -96,11 +101,25 @@ table   = [ [Infix spacef AssocLeft]
                      <?> "space application"
             bo = TmBinOp
 
+tminl :: Parser Term
+tminl = TmInl <$> (reserved "inl" *> term)
+
+tminr :: Parser Term
+tminr = TmInr <$> (reserved "inr" *> term)
+
+tmout :: Parser Term
+tmout = TmOut <$> (reserved "out" *> term)
+
+tminto :: Parser Term
+tminto = TmInto <$> (reserved "into" *> term)
+
 tmcase :: Parser Term
 tmcase =
   TmCase <$> (reserved "case" *> term <* reserved "of")
-         <*> ((,) <$> (reserved "inl" *> identifier) <*> (reservedOp "->" *> term))
-         <*> ((,) <$> (reserved "inr" *> identifier) <*> (reservedOp "->" *> term))
+         <*> ((,) <$> (reservedOp "|" *> reserved "inl" *> identifier)
+                  <*> (reservedOp "->" *> term))
+         <*> ((,) <$> (reservedOp "|" *> reserved "inr" *> identifier)
+                  <*> (reservedOp "->" *> term))
 
 
 tmstable :: Parser Term

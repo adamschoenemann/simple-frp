@@ -174,6 +174,12 @@ eval term = case term of
     case b' of
       True  -> eval et
       False -> eval ef
+  TmOut e -> do
+    VInto v <- eval e
+    return v
+  TmInto e -> do
+    v <- eval e
+    return $ VInto v
   where
   matchPat :: Pattern -> Value -> EvalM Env
   matchPat (PBind x) v   = return $ M.singleton x (Right v)
@@ -273,6 +279,8 @@ subst' name nterm term' = go term' where
     TmPntrDeref lbl                    -> TmPntrDeref lbl
     TmAlloc                            -> TmAlloc
     TmFix x e                          -> TmFix x (go e)
+    TmInto e                           -> TmInto (go e)
+    TmOut e                            -> TmOut (go e)
 
 
 -- helper for more readable substitution syntax

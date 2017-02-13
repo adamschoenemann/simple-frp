@@ -55,6 +55,8 @@ data Term
   | TmVar Name
   | TmApp Term Term
   | TmCons Term Term
+  | TmOut Term
+  | TmInto Term
   | TmClosure Name Term Env
   | TmStable Term
   | TmDelay Term Term
@@ -118,6 +120,8 @@ instance Pretty Term where
     TmPntr pntr          -> text "&[" <> int pntr <> text "]"
     TmPntrDeref pntr     -> text "*[" <> int pntr <> text "]"
     TmAlloc              -> text "♢"
+    TmOut trm            -> text "out"  <+> prns (ppr (n+1) trm)
+    TmInto trm           -> text "into" <+> prns (ppr (n+1) trm)
     where
       prns = if (n > 0)
              then parens
@@ -140,7 +144,7 @@ data Value
   | VPntr Label
   | VAlloc
   | VStable Value
-  -- | VInto Value
+  | VInto Value
   | VCons Value Value
   | VLit Lit
   deriving (Show, Eq)
@@ -155,7 +159,7 @@ valToTerm = \case
   VPntr l          -> TmPntr l
   VAlloc           -> TmAlloc
   VStable v        -> TmStable (valToTerm v)
-  -- VInto v          -> TmInto (valToTerm v)
+  VInto v          -> TmInto (valToTerm v)
   VCons hd tl      -> TmCons (valToTerm hd) (valToTerm tl)
   VLit l           -> TmLit l
 
