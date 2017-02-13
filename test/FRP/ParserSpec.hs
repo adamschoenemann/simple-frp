@@ -252,3 +252,6 @@ spec = do
                 )
 
       parse term "frp_bind" (unpack frp_bind) `shouldBe` Right (frp_bind_ast)
+
+      -- let Right r = parse term "frp_bind" (unpack frp_bind)
+      -- ppputStrLn r

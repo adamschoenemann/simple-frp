@@ -94,13 +94,13 @@ instance Pretty Term where
     TmFst trm            -> text "fst" <+> ppr (n+1) trm
     TmSnd trm            -> text "snd" <+> ppr (n+1) trm
     TmTup trm trm'       -> parens $ ppr (n+1) trm <+> comma <+> ppr (n+1) trm'
-    TmInl trm            -> text "inl" <+> ppr (n+1) trm
-    TmInr trm            -> text "inr" <+> ppr (n+1) trm
+    TmInl trm            -> text "inl" <+> prns (ppr (n+1) trm)
+    TmInr trm            -> text "inr" <+> prns (ppr (n+1) trm)
     TmCase trm (vl, trml) (vr, trmr) ->
-      text "case" <+> parens (ppr (n+1) trm <+> comma
-        <+> text "inl" <+> text vl <+> text "->" <+> ppr (n+1) trml
-        <+> text "inr" <+> text vr <+> text "->" <+> ppr (n+1) trmr)
-    TmLam b trm          -> prns (text "\\" <> text b <> char '.' <+> ppr (n+1) trm)
+      text "case" <+> ppr 0 trm <+> text "of"
+        $$ nest (2) (text "| inl" <+> text vl <+> text "->" <+> ppr (0) trml)
+        $$ nest (2) (text "| inr" <+> text vr <+> text "->" <+> ppr (0) trmr)
+    TmLam b trm          -> prns (text "\\" <> text b <> char '.' <+> ppr (n) trm)
     TmFix b trm          -> prns (text "fix" <+> text b <> char '.' <+> ppr (n+1) trm)
     TmClosure b trm env  -> ppr n (TmLam b trm)-- prns $ ppr (n+1) (TmLam b trm) -- <> comma <+> ppr (n+1) env
     TmVar v              -> text v
@@ -109,8 +109,8 @@ instance Pretty Term where
     TmDelay alloc trm    -> text "δ_" <> ppr (n+1) alloc <> parens (ppr 0 trm)
     TmStable trm         -> text "stable" <> parens (ppr 0 trm)
     TmPromote trm        -> text "promote" <> parens (ppr 0 trm)
-    TmLet ptn trm trm'   -> text "let" <+> ppr (n+1) ptn <+> text "="
-                              <+> ppr (n+1) trm <+> text "in" $$ ppr (n+1) trm'
+    TmLet ptn trm trm'   -> text "let" <+> ppr (0) ptn <+> text "="
+                              <+> ppr (n) trm <+> text "in" $$ ppr (0) trm'
     TmLit l              -> ppr n l
     TmBinOp op l r       -> prns (ppr (n+1) l <+> ppr n op <+> ppr (n+1) r)
     TmITE b trmt trmf    ->
@@ -120,8 +120,8 @@ instance Pretty Term where
     TmPntr pntr          -> text "&[" <> int pntr <> text "]"
     TmPntrDeref pntr     -> text "*[" <> int pntr <> text "]"
     TmAlloc              -> text "♢"
-    TmOut trm            -> text "out"  <+> prns (ppr (n+1) trm)
-    TmInto trm           -> text "into" <+> prns (ppr (n+1) trm)
+    TmOut trm            -> text "out"  <+> prns (ppr (n) trm)
+    TmInto trm           -> text "into" <+> prns (ppr (n) trm)
     where
       prns = if (n > 0)
              then parens
