@@ -10,7 +10,7 @@ import Utils
 import FRP.AST
 
 opNames    = ["+", "-", "*", "/", "=", "=="
-             , "<", ">", "<=", ">=", "\\", "->"
+             , "<", ">", "<=", ">=", "\\", "->", "|"
              ]
 
 languageDef :: Tok.LanguageDef ()
@@ -37,6 +37,10 @@ languageDef = Tok.LanguageDef
                           , "fst"
                           , "snd"
                           , "promote"
+                          , "inl"
+                          , "inr"
+                          , "case"
+                          , "of"
                           ]
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True
@@ -61,14 +65,18 @@ ws         = Tok.whiteSpace lexer -- parses whitespace
 comma      = Tok.comma lexer
 symbol     = Tok.symbol lexer
 
-term    = tmlam <|> tmlet <|> tmite <|> buildExpressionParser table expr
-         <?> "term"
+term = tmlam
+   <|> buildExpressionParser table expr
+   <?> "term"
 
 expr     =  parens term
         <|> tmcons
         <|> tmpromote
         <|> tmdelay
         <|> tmstable
+        <|> tmcase
+        <|> tmite
+        <|> tmlet
         <|> int
         <|> bool
         <|> var
@@ -87,6 +95,13 @@ table   = [ [Infix spacef AssocLeft]
                      >> return TmApp
                      <?> "space application"
             bo = TmBinOp
+
+tmcase :: Parser Term
+tmcase =
+  TmCase <$> (reserved "case" *> term <* reserved "of")
+         <*> ((,) <$> (reserved "inl" *> identifier) <*> (reservedOp "->" *> term))
+         <*> ((,) <$> (reserved "inr" *> identifier) <*> (reservedOp "->" *> term))
+
 
 tmstable :: Parser Term
 tmstable = TmStable <$> (reserved "stable" *> parens term)

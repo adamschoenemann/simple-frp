@@ -55,6 +55,17 @@ frp_swap =
       cons(x, delay(u, swap us' (m - 1) xs' ys'))
   |]
 
+frp_switch =
+  [text|
+  \us -> \xs -> \e ->
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    case out e of
+      inl ys -> ys
+      inr t  -> let delay(e') = t in
+                cons(x, delay (u, switch us' xs' e')))
+  |]
+
 
 tmbool = TmLit . LBool
 
@@ -83,6 +94,9 @@ spec = do
       parse term "let" "let x = 10 in let y = 42 in x * y" `shouldBe`
         Right (TmLet "x" 10 $ TmLet "y" 42 ("x" * "y"))
 
+      parse term "let" "10 + let x = 10 in let y = 42 in x * y" `shouldBe`
+        Right (10 + (TmLet "x" 10 $ TmLet "y" 42 ("x" * "y")))
+
     it "should parse cons expressions" $ do
       parse tmcons "cons" "cons(10, 20)" `shouldBe`
         Right (TmCons 10 20)
@@ -103,6 +117,9 @@ spec = do
       parse term "app" "\\f -> let x = f x in x" `shouldBe`
         Right (TmLam "f" $ TmLet "x" (TmApp "f" "x") "x")
 
+      parse term "app" "10 + (\\x -> x * 2) 4" `shouldBe`
+        Right (10 + TmApp (TmLam "x" $ "x" * 2) 4)
+
     it "parses nested patterns" $ do
       parse term "pats" "let cons(u, delay(us')) = us in u" `shouldBe`
         Right (TmLet (PCons "u" (PDelay "us'")) "us" "u")
@@ -118,6 +135,35 @@ spec = do
         Right (TmITE (TmBinOp Gt "x" 10)
                      ("x" + 10)
                      (TmBinOp Eq "x" 20)
+              )
+
+      parse term "ite" "42 + if x > 10 then x + 10 else x == 20" `shouldBe`
+        Right (42 + TmITE (TmBinOp Gt "x" 10)
+                     ("x" + 10)
+                     (TmBinOp Eq "x" 20)
+              )
+
+    it "parses case exprs" $ do
+      parse tmcase "case" "case x of inl y -> 10 inr z -> 20" `shouldBe`
+        Right (TmCase "x" ("y", 10) ("z", 20))
+
+      parse term "case" "10 + case x of inl y -> 10 inr z -> 4 + 1" `shouldBe`
+        Right (10 + TmCase "x" ("y", 10) ("z", 4 + 1))
+
+      let nested_case =
+            [text|
+            case x of
+              inl y -> case y of
+                inl yy -> yy * 10
+                inr yz -> yz - 10
+              inr z -> case z of
+                inl zy -> zy * 10
+                inr zz -> zz + 10
+            |]
+      parse term "case" (unpack nested_case) `shouldBe`
+        Right (TmCase "x"
+                ("y", TmCase "y" ("yy", "yy" * 10) ("yz", "yz" - 10))
+                ("z", TmCase "z" ("zy", "zy" * 10) ("zz", "zz" + 10))
               )
 
     it "parses compound expressions" $ do
