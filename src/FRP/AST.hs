@@ -127,9 +127,9 @@ instance Num Term where
   fromInteger = TmLit . LInt . fromInteger
   x + y = TmBinOp Add x y
   x * y = TmBinOp Mult x y
+  x - y = TmBinOp Sub x y
   abs x = undefined
   signum = undefined
-  negate x = TmBinOp Add (fromInteger 0) x
 
 data Value
   = VTup Value Value

@@ -9,7 +9,7 @@ import Utils
 
 import FRP.AST
 
-opNames    = ["+", "-", "*", "/", ":="
+opNames    = ["+", "-", "*", "/", "=", "=="
              , "<", ">", "<=", ">=", "\\", "->"
              ]
 
@@ -30,36 +30,18 @@ languageDef = Tok.LanguageDef
                           , "False"
                           , "cons"
                           , "let"
+                          , "in"
+                          , "delay"
+                          , "stable"
+                          , "promote"
+                          , "fst"
+                          , "snd"
+                          , "promote"
                           ]
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True
   }
 
-expr    = buildExpressionParser table term
-         <?> "expression"
-
-term     =  parens expr
-        <|> tmlet
-        <|> tmcons
-        -- <|> tmlam
-        <|> TmLit . LInt . fromInteger <$> integer
-        <|> TmVar <$> identifier
-        <?> "simple expression"
-
-table   = [ [Infix spacef AssocLeft]
-          , [binary "*" (bo Mult) AssocLeft, binary "/" (bo Div) AssocLeft ]
-          , [binary "+" (bo Add)  AssocLeft, binary "-" (bo Sub) AssocLeft ]
-          , [Prefix (reservedOp "\\" >> ws >> TmLam <$> identifier <* ws <* reservedOp "->" <* ws)]
-          ]
-          where
-
-            bo = TmBinOp
-
-
-spacef = ws
-         *> notFollowedBy (choice . map reservedOp $ opNames)
-         >> return TmApp
-         <?> "space application"
 
 binary  name fun assoc = Infix   (reservedOp name >> return fun) assoc
 prefix  name fun       = Prefix  (reservedOp name >> return fun)
@@ -76,69 +58,82 @@ parens     = Tok.parens     lexer -- parses surrounding parenthesis:
 integer    = Tok.integer    lexer -- parses an integer
 natural    = Tok.natural    lexer
 ws         = Tok.whiteSpace lexer -- parses whitespace
+comma      = Tok.comma lexer
+symbol     = Tok.symbol lexer
+
+term    = tmlam <|> tmlet <|> tmite <|> buildExpressionParser table expr
+         <?> "term"
+
+expr     =  parens term
+        <|> tmcons
+        <|> tmpromote
+        <|> tmdelay
+        <|> tmstable
+        <|> int
+        <|> bool
+        <|> var
+        <?> "simple expression"
+
+table   = [ [Infix spacef AssocLeft]
+          , [binary "*" (bo Mult) AssocLeft, binary "/" (bo Div) AssocLeft ]
+          , [binary "+" (bo Add)  AssocLeft, binary "-" (bo Sub) AssocLeft ]
+          , [ binary "<" (bo Lt) AssocNone, binary "<=" (bo Leq) AssocNone
+            , binary ">" (bo Gt) AssocNone, binary ">=" (bo Geq) AssocNone
+            ]
+          , [binary "==" (bo Eq) AssocNone]
+          ]
+          where
+            spacef = ws *> notFollowedBy (choice . map reservedOp $ opNames)
+                     >> return TmApp
+                     <?> "space application"
+            bo = TmBinOp
+
+tmstable :: Parser Term
+tmstable = TmStable <$> (reserved "stable" *> parens term)
+
+tmpromote :: Parser Term
+tmpromote = TmPromote <$> (reserved "promote" *> parens term)
+
+tmdelay :: Parser Term
+tmdelay = reserved "delay" *> parens (TmDelay <$> term <*> (comma *> term))
 
 tmlam :: Parser Term
 tmlam =
-  TmLam <$> (char '\\' *> ws *> identifier)
-        <*> (ws *> string "->" *> ws *> term)
+  TmLam <$> (symbol "\\" *> identifier)
+        <*> (ws *> reservedOp "->" *> term)
   <?> "lambda"
 
+tmite :: Parser Term
+tmite =
+  TmITE <$> (reserved "if" *> term)
+        <*> (reserved "then" *> term)
+        <*> (reserved "else" *> term)
+
 tmpattern :: Parser Pattern
-tmpattern = PBind  <$> (identifier) <* ws
-        <|> PDelay <$> (string "delay" *> parens identifier) <* ws
-        <|> PStable <$> (string "stable" *> parens tmpattern) <* ws
-        <|> string "cons" *> ws *> parens (PCons <$> (ws *> tmpattern) <*> (ws *> char ',' *> tmpattern)) <* ws
-        <|> (parens (PTup <$> (ws *> tmpattern) <*> (ws *> char ',' *> ws *> tmpattern))) <* ws
+tmpattern = PBind  <$> identifier
+        <|> PDelay <$> (reserved "delay" *> parens identifier) <* ws
+        <|> PStable <$> (reserved "stable" *> parens tmpattern) <* ws
+        <|> reserved "cons" *> parens
+              (PCons <$> (ws *> tmpattern) <*> (ws *> comma *> tmpattern)) <* ws
+        <|> (parens (PTup <$> (ws *> tmpattern) <*> (ws *> comma *> tmpattern))) <* ws
 
 tmlet :: Parser Term
-tmlet = TmLet <$> (string "let" >> ws >> tmpattern)
-              <*> (ws >> char '=' >> ws >> term)
-              <*> (ws >> string "in" >> ws >> term)
+tmlet = TmLet <$> (reserved "let" >> ws >> tmpattern)
+              <*> (ws >> reservedOp "=" >> ws >> term)
+              <*> (ws >> reserved "in" >> ws >> term)
 
 tmcons :: Parser Term
-tmcons = string "cons" *> ws *> parens (TmCons <$> (ws *> term) <*> (char ',' *> ws *> term)) <* ws
-
-tmapp :: Parser Term
-tmapp = var `chainl1` (const TmApp <$> many1 space) <* ws
-
--- term :: Parser Term
--- term = ws *> prs where
---   prs = tmlet
---     <|> tmlam
---     <|> tmcons
---     <|> tmexpr
---     <|> parens term
-
-tmexpr :: Parser Term
-tmexpr = equality
-  where
-    equality   = comparison `chainl1` cmpop
-    comparison = intexpr    `chainl1` intop
-    intexpr    = term       `chainl1` termop
-    term       = factor     `chainl1` factop
-    factor     = prim       --`chainl1` appop
-    prim       = ((parens term) <|> try tmapp <|> int <|> bool <|> var) <* ws
-    cmpop  =  const (TmBinOp Eq)   <$> string "==" <* ws
-    intop  =  const (TmBinOp Gt)   <$> char   '>'  <* ws
-          <|> const (TmBinOp Lt)   <$> char   '<'  <* ws
-    termop =  const (TmBinOp Add)  <$> char   '+'  <* ws
-          <|> const (TmBinOp Sub)  <$> char   '-'  <* ws
-    factop =  const (TmBinOp Mult) <$> char   '*'  <* ws
+tmcons = reserved "cons" *> parens
+              (TmCons <$> (ws *> term) <*> (comma *> term)) <* ws
 
 var, int, bool :: Parser Term
-var  = TmVar <$> ident
-int  = TmLit . LInt  . read <$> many1 digit <* ws
-bool = TmLit . LBool . read . capitalize <$> (string "true" <|> string "false") <* ws
-
--- parens, brackets :: Parser a -> Parser a
--- parens x = between (char '(' <* spaces) (char ')') (x <* spaces)
--- brackets x = between (char '{' <* spaces) (char '}') (x <* spaces)
-
-ident :: Parser String
-ident  = (\l a c -> l : a ++ c) <$> letter <*> many alphaNum <*> many (char '\'')
+var  = TmVar <$> identifier
+int  = TmLit . LInt . fromInteger <$> integer
+bool = TmLit . LBool <$>
+  (const True <$> reserved "True" <|> const False <$> reserved "False") <* ws
 
 -- unsafeParse :: String -> Program
--- unsafeParse p = either (error . show) id $ parse program "unsafe" p
+-- unsafeParse p = either (error . show) id $ parse term "unsafe" p
 
 parseTerm :: String -> Either ParseError Term
-parseTerm p = parse expr "FRP" p
+parseTerm p = parse term "FRP" p
