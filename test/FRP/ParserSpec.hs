@@ -7,6 +7,7 @@ import FRP.AST
 import FRP.Parser.Term
 import FRP.Parser.Type
 import FRP.Parser.Decl
+import FRP.Parser.Program
 import FRP.Pretty (ppputStrLn)
 
 import Control.Monad.State
@@ -18,9 +19,19 @@ import Text.ParserCombinators.Parsec (parse)
 import NeatInterpolation
 import Data.Text (Text, pack, unpack)
 
+import Data.Either (isRight)
+
+frp_nats =
+  [text|
+  \n us ->
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay (u, const us' (x + 1)))
+  |]
+
 frp_const =
   [text|
-  \n -> \us ->
+  \n us ->
     let cons(u, delay(us')) = us in
     let stable(x) = promote(n) in
     cons(x, delay (u, const us' x))
@@ -28,7 +39,7 @@ frp_const =
 
 frp_sum_acc =
   [text|
-  \us -> \ns -> \acc ->
+  \us ns acc ->
     let cons(u, delay(us')) = us in
     let cons(n, delay(ns')) = ns in
     let stable(x) = promote(n + acc) in
@@ -37,7 +48,7 @@ frp_sum_acc =
 
 frp_map =
   [text|
-  \us -> \h -> \xs ->
+  \us h xs ->
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
     let stable(f)           = h  in
@@ -46,7 +57,7 @@ frp_map =
 
 frp_swap =
   [text|
-  \us -> \n -> \xs -> \ys ->
+  \us n xs ys ->
     if n == 0 then
       ys
     else
@@ -59,7 +70,7 @@ frp_swap =
 
 frp_switch =
   [text|
-  \us -> \xs -> \e ->
+  \us xs e ->
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
     case out e of
@@ -95,6 +106,9 @@ spec = do
 
       parse term "lam" "\\x -> \\y -> x + y" `shouldBe`
         Right (TmLam "x" $ TmLam "y" ("x" + "y"))
+
+      parse term "lam1" "\\x y z -> y" `shouldBe`
+        Right (TmLam "x" $ TmLam "y" $ TmLam "z" "y")
 
     it "should parse let expressions" $ do
       parse tmlet "let" "let x = 10 in x" `shouldBe`
@@ -354,18 +368,186 @@ spec = do
                TyStream "A"
               )
   describe "parsing declarations" $ do
-    it "should parse simple decls" $ do
+    it "should parse simple decls1" $ do
       let tc1 = [text|
                  foo : Nat
-                 foo = 5
+                 foo = 5.
                 |]
       parse decl "decl1" (unpack tc1) `shouldBe`
         Right (Decl (TyNat) "foo" 5)
 
+    it "should parse simple decls2" $ do
       let tc2 = [text|
-                 foo : Nat
-                 foo = 5
+                 foo : Nat -> Nat
+                 foo = \x -> x.
                 |]
-      parse decl "decl1" (unpack tc2) `shouldBe`
-        Right (Decl (TyNat) "foo" 5)
+      parse decl "decl2" (unpack tc2) `shouldBe`
+        Right (Decl (TyNat `TyArr` TyNat) "foo" (TmLam "x" "x"))
+
+    it "should parse simple decls3" $ do
+      let tc3 = [text|
+                 foo : Nat -> S a -> a
+
+                    foo = \a -> \xs ->
+                            let cons(x, xs') = xs in
+                            x - 1.
+                |]
+      parse decl "decl3" (unpack tc3) `shouldBe`
+        Right (Decl (TyNat `TyArr` TyStream "a" `TyArr` "a") "foo"
+              (TmLam "a" $ TmLam "xs" $ TmLet (PCons "x" "xs'") "xs" $ "x" - 1))
+
+    it "should parse simple decls4" $ do
+      let tc4 = [text|
+                 foo : Nat -> S foo -> foo
+
+                    foo = \a -> \xs ->
+                            let cons(x, xs') = xs in
+                            x - 1.
+                |]
+      parse decl "decl4" (unpack tc4) `shouldBe`
+        Right (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
+              (TmLam "a" $ TmLam "xs" $ TmLet (PCons "x" "xs'") "xs" $ "x" - 1))
+
+    it "should parse with param list" $ do
+      let tc4 = [text|
+                 foo : Nat -> S foo -> foo
+                 foo a xs =
+                    let cons(x, xs') = xs in
+                    x - 1.
+                |]
+      parse decl "decl4" (unpack tc4) `shouldBe`
+        Right (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
+              (TmLam "a" $ TmLam "xs" $ TmLet (PCons "x" "xs'") "xs" $ "x" - 1))
+  describe "program parsing" $ do
+    it "should work with const program" $ do
+      let p = [text|
+              const : S alloc -> Nat -> S Nat
+              const us n =
+                let cons(u, us') = us in
+                let stable(x) = n in
+                cons(x, delay(u, const us' x)).
+
+              main : S alloc -> S Nat
+              main us = const us 10.
+              |]
+      let Right r = parse prog "const" $ unpack p
+      r `shouldBe`
+        Program
+          { _main = Decl
+            { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
+            , _name = "main"
+            , _body = TmLam "us" (TmApp (TmApp (TmVar "const") (TmVar "us")) (TmLit (LInt 10)))
+            }
+          , _decls =
+            [ Decl
+                { _type = TyArr (TyStream TyAlloc) (TyArr TyNat (TyStream TyNat))
+                , _name = "const"
+                , _body =
+                    TmLam "us" (TmLam "n"
+                      (TmLet (PCons (PBind "u") (PBind "us'")) (TmVar "us")
+                      (TmLet (PStable (PBind "x")) (TmVar "n")
+                      (TmCons (TmVar "x")
+                        (TmDelay (TmVar "u") (TmApp (TmApp (TmVar "const") (TmVar "us'")) (TmVar "x")))
+                      ))))
+                }
+            ]
+          }
+    it "should work with sum program" $ do
+      let p = [text|
+              nats : S alloc -> S Nat
+              nats us n =
+                let cons(u, delay(us')) = us in
+                let stable(x) = promote(n) in
+                cons(x, delay(u, nats us' (x + 1))).
+
+              sum_acc : S alloc -> S Nat -> Nat -> S Nat
+              sum_acc us ns acc =
+                let cons(u, delay(us')) = us in
+                let cons(n, delay(ns')) = ns in
+                let stable(x) = promote(n + acc) in
+                cons(x, delay(u, sum_acc us' ns' x)).
+
+              sum : S alloc -> S Nat -> S Nat
+              sum us ns =
+                sum_acc us ns 0.
+
+              main : S alloc -> S Nat
+              main us =
+                sum us nats us 0.
+              |]
+      let Right r = parse prog "sum" $ unpack p
+      let exp = Program
+            { _main = Decl
+              { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
+              , _name = "main"
+              , _body = TmLam "us"
+                          (TmApp
+                             (TmApp
+                                (TmApp (TmApp (TmVar "sum") (TmVar "us")) (TmVar "nats"))
+                                (TmVar "us"))
+                             (TmLit (LInt 0)))
+              }
+            , _decls = [ Decl
+                         { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
+                         , _name = "nats"
+                         , _body = TmLam "us"
+                                     (TmLam "n"
+                                        (TmLet
+                                           (PCons (PBind "u") (PDelay "us'"))
+                                           (TmVar "us")
+                                           (TmLet
+                                              (PStable (PBind "x"))
+                                              (TmPromote (TmVar "n"))
+                                              (TmCons (TmVar "x")
+                                                 (TmDelay (TmVar "u")
+                                                    (TmApp
+                                                       (TmApp (TmVar "nats") (TmVar "us'"))
+                                                       (TmBinOp Add (TmVar "x")
+                                                          (TmLit (LInt 1)))))))))
+                         }
+                       , Decl
+                         { _type = TyArr (TyStream TyAlloc)
+                                     (TyArr (TyStream TyNat)
+                                        (TyArr TyNat (TyStream TyNat)))
+                         , _name = "sum_acc"
+                         , _body = TmLam "us"
+                                     (TmLam "ns"
+                                        (TmLam "acc"
+                                           (TmLet
+                                              (PCons (PBind "u") (PDelay "us'"))
+                                              (TmVar "us")
+                                              (TmLet
+                                                 (PCons (PBind "n") (PDelay "ns'"))
+                                                 (TmVar "ns")
+                                                 (TmLet
+                                                    (PStable (PBind "x"))
+                                                    (TmPromote
+                                                       (TmBinOp Add (TmVar "n")
+                                                          (TmVar "acc")))
+                                                    (TmCons (TmVar "x")
+                                                       (TmDelay (TmVar "u")
+                                                          (TmApp
+                                                             (TmApp
+                                                                (TmApp (TmVar "sum_acc")
+                                                                   (TmVar "us'"))
+                                                                (TmVar "ns'"))
+                                                             (TmVar "x")))))))))
+                         }
+                       , Decl
+                         { _type = TyArr (TyStream TyAlloc)
+                                     (TyArr (TyStream TyNat) (TyStream TyNat))
+                         , _name = "sum"
+                         , _body = TmLam "us"
+                                     (TmLam "ns"
+                                        (TmApp
+                                           (TmApp (TmApp (TmVar "sum_acc") (TmVar "us"))
+                                              (TmVar "ns"))
+                                           (TmLit (LInt 0))))
+                         }
+                       ]
+            }
+      r `shouldBe` exp
+
+
+
 

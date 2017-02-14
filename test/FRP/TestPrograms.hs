@@ -33,3 +33,8 @@ prog_swap_fib_nats = Program mainfn [frp_unfold, frp_fib, frp_nats, frp_swap]
       TmLam "us" $
       "swap" `TmApp` "us" `TmApp` (TmLit $ LInt 10) `TmApp`
       ("nats" `TmApp` "us" `TmApp` (TmLit $ LInt 0)) `TmApp` ("fib" `TmApp` "us")
+
+prog_sum = Program mainfn [frp_nats, frp_sum_acc, frp_sum] where
+  mainbd = TmLam "us" $
+              (TmVar "sum" `TmApp` TmVar "us") `TmApp` (TmVar "nats" `TmApp` TmVar "us" `TmApp` TmLit (LInt 0))
+  mainfn = frp_main mainbd (TyStream TyNat)

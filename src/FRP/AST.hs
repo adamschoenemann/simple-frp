@@ -234,7 +234,7 @@ instance Pretty Decl where
   ppr n (Decl ty nm bd) =
     let (bs, bd') = bindings bd
     in  text nm <+> char ':' <+> ppr n ty
-        $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd')
+        $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd' <> char '.')
     where
       bindings (TmLam x b) =
         let (y, b') = bindings b
@@ -245,7 +245,12 @@ instance Pretty Decl where
       bindings b           = ([], b)
 
 data Program = Program { _main :: Decl, _decls :: [Decl]}
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance Pretty Program where
-  ppr n (Program main decls) = vcat (map (\d -> ppr n d <> char '\n') (decls ++ [main]))
+  ppr n (Program main decls) =
+    vcat (map (\d -> ppr n d <> char '\n') (decls ++ [main]))
+
+
+paramsToLams :: [String] -> Term -> Term
+paramsToLams = foldl (\acc x y -> acc (TmLam x y)) id

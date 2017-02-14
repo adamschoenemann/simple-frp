@@ -78,10 +78,11 @@ tmdelay :: Parser Term
 tmdelay = reserved "delay" *> parens (TmDelay <$> term <*> (comma *> term))
 
 tmlam :: Parser Term
-tmlam =
-  TmLam <$> (symbol "\\" *> identifier)
-        <*> (ws *> reservedOp "->" *> term)
-  <?> "lambda"
+tmlam = do
+  params <- symbol "\\" *> many1 identifier
+  bd <- reservedOp "->" *> term
+  let lams = paramsToLams params
+  return (lams bd)
 
 tmite :: Parser Term
 tmite =

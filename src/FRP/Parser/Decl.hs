@@ -8,12 +8,13 @@ import FRP.Parser.Term
 import FRP.Parser.Type
 import Text.Parsec.Char (endOfLine)
 
--- eol = (try (string "\r\n")) <|> string "\n"
-
 decl :: Parser Decl
 decl = do
   nam <- identifier
   typ <- reservedOp ":" *> ty
-  _   <- string nam <* ws <* reservedOp "="
-  bod <- term
-  return $ Decl typ nam bod
+  _   <- string nam <* ws
+  params <- many identifier <* ws <* reservedOp "="
+  bod <- term <* char '.' <* ws
+  let body = paramsToLams params bod
+  return $ Decl typ nam body
+

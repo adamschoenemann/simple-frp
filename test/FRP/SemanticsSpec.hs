@@ -125,10 +125,7 @@ spec = do
         let prog = Program mainfn [frp_nats]
         take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) [0..99]
       it "works with sum" $ do
-        let mainbd = TmLam "us" $
-                    (TmVar "sum" `TmApp` TmVar "us") `TmApp` (TmVar "nats" `TmApp` TmVar "us" `TmApp` TmLit (LInt 0))
-        let mainfn = frp_main mainbd (TyStream TyNat)
-        let prog = Program mainfn [frp_nats, frp_sum_acc, frp_sum]
+        let prog = prog_sum
         take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) (scanl (+) 0 [1..99])
 
         ppdebug frp_sum_acc
