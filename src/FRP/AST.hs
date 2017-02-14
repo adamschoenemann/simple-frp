@@ -23,7 +23,7 @@ data Type
   | TyStream Type
   | TyAlloc
   | TyNat
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance Pretty Type where
   ppr n type' = case type' of
@@ -100,13 +100,13 @@ instance Pretty Term where
       text "case" <+> ppr 0 trm <+> text "of"
         $$ nest (2) (text "| inl" <+> text vl <+> text "->" <+> ppr (0) trml)
         $$ nest (2) (text "| inr" <+> text vr <+> text "->" <+> ppr (0) trmr)
-    TmLam b trm          -> prns (text "\\" <> text b <> char '.' <+> ppr (n) trm)
-    TmFix b trm          -> prns (text "fix" <+> text b <> char '.' <+> ppr (n+1) trm)
+    TmLam b trm          -> prns (text "\\" <> text b <+> text "->" <+> ppr (n) trm)
+    TmFix b trm          -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
     TmClosure b trm env  -> ppr n (TmLam b trm)-- prns $ ppr (n+1) (TmLam b trm) -- <> comma <+> ppr (n+1) env
     TmVar v              -> text v
     TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
     TmCons hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
-    TmDelay alloc trm    -> text "δ_" <> ppr (n+1) alloc <> parens (ppr 0 trm)
+    TmDelay alloc trm    -> text "delay" <> parens (ppr 0 alloc <> comma <+> ppr 0 trm)
     TmStable trm         -> text "stable" <> parens (ppr 0 trm)
     TmPromote trm        -> text "promote" <> parens (ppr 0 trm)
     TmLet ptn trm trm'   -> text "let" <+> ppr (0) ptn <+> text "="
@@ -119,7 +119,7 @@ instance Pretty Term where
         $$ nest 2 (text "else" <+> ppr (n+1) trmf)
     TmPntr pntr          -> text "&[" <> int pntr <> text "]"
     TmPntrDeref pntr     -> text "*[" <> int pntr <> text "]"
-    TmAlloc              -> text "♢"
+    TmAlloc              -> text "¤"
     TmOut trm            -> text "out"  <+> prns (ppr (n) trm)
     TmInto trm           -> text "into" <+> prns (ppr (n) trm)
     where
@@ -179,7 +179,7 @@ instance Pretty Pattern where
   ppr n pat = case pat of
     PBind nm      -> text nm
     PCons p1 p2   -> text "cons" <> parens (ppr (n+1) p1 <> comma <+> ppr (n+1) p2)
-    PDelay p1     -> text "δ" <> parens (text p1)
+    PDelay p1     -> text "delay" <> parens (text p1)
     PStable p1    -> text "stable" <> parens (ppr (n+1) p1)
     PTup p1 p2    -> char '(' <> ppr 0 p1 <> char ',' <+> ppr 0 p2 <> char ')'
 

@@ -15,7 +15,8 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     FRP, FRP.AST, FRP.Pretty, FRP.Semantics, FRP.Parser, Utils
+  exposed-modules:     FRP, FRP.AST, FRP.Pretty, FRP.Semantics, FRP.Parser.Lang
+                     , FRP.Parser.Term, FRP.Parser.Type, Utils
   build-depends:       base >= 4.7 && < 5, pretty, containers, mtl, parsec
                      , neat-interpolation, template-haskell, text
   ghc-options:         -Wincomplete-patterns
@@ -36,7 +37,8 @@ test-suite simple-frp-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
-  other-modules:       FRP.SemanticsSpec, FRP.ParserSpec
+  other-modules:       FRP.SemanticsSpec, FRP.ParserSpec, FRP.TestFunctions
+                     , FRP.TestPrograms
   build-depends:       base , simple-frp, hspec, mtl, containers, parsec
                      , neat-interpolation, template-haskell, text
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N

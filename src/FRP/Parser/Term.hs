@@ -1,71 +1,8 @@
-module FRP.Parser where
+module FRP.Parser.Term where
 
 import Text.Parsec
-import Text.Parsec.Expr
-import Text.Parsec.Language
-import Text.Parsec.String
-import qualified Text.Parsec.Token as Tok
-import Utils
-
 import FRP.AST
-
-opNames    = ["+", "-", "*", "/", "=", "=="
-             , "<", ">", "<=", ">=", "\\", "->", "|"
-             ]
-
-languageDef :: Tok.LanguageDef ()
-languageDef = Tok.LanguageDef
-  { Tok.commentStart    = "{-"
-  , Tok.commentEnd      = "-}"
-  , Tok.commentLine     = "--"
-  , Tok.nestedComments  = True
-  , Tok.identStart      = letter
-  , Tok.identLetter     = alphaNum <|> oneOf "_'"
-  , Tok.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~"
-  , Tok.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
-  , Tok.reservedNames   = [ "if"
-                          , "then"
-                          , "else"
-                          , "True"
-                          , "False"
-                          , "cons"
-                          , "let"
-                          , "in"
-                          , "delay"
-                          , "stable"
-                          , "promote"
-                          , "fst"
-                          , "snd"
-                          , "promote"
-                          , "inl"
-                          , "inr"
-                          , "case"
-                          , "of"
-                          , "out"
-                          , "into"
-                          ]
-  , Tok.reservedOpNames = opNames
-  , Tok.caseSensitive   = True
-  }
-
-
-binary  name fun assoc = Infix   (reservedOp name >> return fun) assoc
-prefix  name fun       = Prefix  (reservedOp name >> return fun)
-postfix name fun       = Postfix (reservedOp name >> return fun)
-
-lexer      = Tok.makeTokenParser languageDef
-identifier = Tok.identifier lexer -- parses an identifier
-reserved   = Tok.reserved   lexer -- parses a reserved name
-reservedOp = Tok.reservedOp lexer -- parses an operator
-parens     = Tok.parens     lexer -- parses surrounding parenthesis:
-                                    --   parens p
-                                    -- takes care of the parenthesis and
-                                    -- uses p to parse what's inside them
-integer    = Tok.integer    lexer -- parses an integer
-natural    = Tok.natural    lexer
-ws         = Tok.whiteSpace lexer -- parses whitespace
-comma      = Tok.comma lexer
-symbol     = Tok.symbol lexer
+import FRP.Parser.Lang
 
 term = tmlam
    <|> buildExpressionParser table expr
@@ -81,7 +18,10 @@ expr     =  parens term
         <|> tmlet
         <|> tmout
         <|> tminto
-        <|> try (tminl <|> tminr)
+        <|> tminl
+        <|> tminr
+        <|> tmfst
+        <|> tmsnd
         <|> int
         <|> bool
         <|> var
@@ -100,6 +40,12 @@ table   = [ [Infix spacef AssocLeft]
                      >> return TmApp
                      <?> "space application"
             bo = TmBinOp
+
+tmsnd :: Parser Term
+tmsnd = TmSnd <$> (reserved "snd" *> term)
+
+tmfst :: Parser Term
+tmfst = TmFst <$> (reserved "fst" *> term)
 
 tminl :: Parser Term
 tminl = TmInl <$> (reserved "inl" *> term)
@@ -166,8 +112,8 @@ int  = TmLit . LInt . fromInteger <$> integer
 bool = TmLit . LBool <$>
   (const True <$> reserved "True" <|> const False <$> reserved "False") <* ws
 
--- unsafeParse :: String -> Program
--- unsafeParse p = either (error . show) id $ parse term "unsafe" p
+unsafeParse :: Parser Program -> String -> Program
+unsafeParse p s = either (error . show) id $ parse p "unsafe" s
 
 parseTerm :: String -> Either ParseError Term
 parseTerm p = parse term "FRP" p

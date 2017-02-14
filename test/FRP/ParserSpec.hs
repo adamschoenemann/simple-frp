@@ -4,7 +4,8 @@ module FRP.ParserSpec where
 
 import Test.Hspec
 import FRP.AST
-import FRP.Parser
+import FRP.Parser.Term
+import FRP.Parser.Type
 import FRP.Pretty (ppputStrLn)
 
 import Control.Monad.State
@@ -104,6 +105,10 @@ spec = do
       parse term "let" "let x = 10 in let y = 42 in x * y" `shouldBe`
         Right (TmLet "x" 10 $ TmLet "y" 42 ("x" * "y"))
 
+      -- should still work if we change the var names
+      parse term "let" "let outro = 10 in let y = 42 in outro * y" `shouldBe`
+        Right (TmLet "outro" 10 $ TmLet "y" 42 ("outro" * "y"))
+
       parse term "let" "10 + let x = 10 in let y = 42 in x * y" `shouldBe`
         Right (10 + (TmLet "x" 10 $ TmLet "y" 42 ("x" * "y")))
 
@@ -116,6 +121,15 @@ spec = do
         Right (TmCons 10 20)
       parse term "term" "cons ( 10  , 20  )  " `shouldBe`
         Right (TmCons 10 20)
+
+    it "should parse tuple projections" $ do
+      parse term "fst" "\\y -> let x = fst y in x * 10" `shouldBe`
+        Right (TmLam "y" $ TmLet "x" (TmFst "y") $ "x" * 10)
+      parse term "snd" "\\y -> let x = snd y in x * 10" `shouldBe`
+        Right (TmLam "y" $ TmLet "x" (TmSnd "y") $ "x" * 10)
+
+      parse term "snd and fst" "\\z -> let x = fst z in let y = snd z in x * y" `shouldBe`
+        Right (TmLam "z" $ TmLet "x" (TmFst "z") $ TmLet "y" (TmSnd "z") $ "x" * "y")
 
     it "parses application" $ do
       parse term "app" "x x" `shouldBe`
@@ -253,5 +267,89 @@ spec = do
 
       parse term "frp_bind" (unpack frp_bind) `shouldBe` Right (frp_bind_ast)
 
-      -- let Right r = parse term "frp_bind" (unpack frp_bind)
-      -- ppputStrLn r
+  describe "type parsing" $ do
+    it "parses Nat" $ do
+      parse ty "nat" "Nat" `shouldBe` Right TyNat
+    it "parses alloc" $ do
+      parse ty "alloc" "alloc" `shouldBe` Right TyAlloc
+    it "parses streams" $ do
+      parse ty "stream of nats" "S Nat" `shouldBe`
+        Right (TyStream TyNat)
+      parse ty "stream of allocs" "S alloc" `shouldBe`
+        Right (TyStream TyAlloc)
+      parse ty "stream of params" "S a" `shouldBe`
+        Right (TyStream $ TyParam "a")
+      parse ty "stream of params" "S s" `shouldBe`
+        Right (TyStream $ TyParam "s")
+      parse ty "stream of params" "S Sample" `shouldBe`
+        Right (TyStream $ TyParam "Sample")
+    it "parses products" $ do
+      parse ty "pair of nats" "Nat * Nat" `shouldBe`
+        Right (TyProd TyNat TyNat)
+      parse ty "pair of nat x alloc" "Nat * alloc" `shouldBe`
+        Right (TyProd TyNat TyAlloc)
+      parse ty "pair of params" "a * b" `shouldBe`
+        Right (TyProd (TyParam "a") (TyParam "b"))
+      parse ty "pair of streams of nats" "S Nat * S Nat" `shouldBe`
+        Right (TyProd (TyStream TyNat) (TyStream TyNat))
+      parse ty "nested pair" "Nat * Nat * Nat" `shouldBe`
+        Right (TyProd TyNat (TyProd TyNat TyNat))
+    it "parses sums" $ do
+      parse ty "sum of nats" "Nat + Nat" `shouldBe`
+        Right (TySum TyNat TyNat)
+      parse ty "sum of nat x alloc" "Nat + alloc" `shouldBe`
+        Right (TySum TyNat TyAlloc)
+      parse ty "sum of params" "a + b" `shouldBe`
+        Right (TySum (TyParam "a") (TyParam "b"))
+      parse ty "sum of streams of nats" "S Nat + S Nat" `shouldBe`
+        Right (TySum (TyStream TyNat) (TyStream TyNat))
+      parse ty "nested sum" "Nat + Nat + Nat" `shouldBe`
+        Right (TySum TyNat (TySum TyNat TyNat))
+    it "parses arrows" $ do
+      parse ty "arrow of nats" "Nat -> Nat" `shouldBe`
+        Right (TyArr TyNat TyNat)
+      parse ty "arrow of nat x alloc" "Nat -> alloc" `shouldBe`
+        Right (TyArr TyNat TyAlloc)
+      parse ty "arrow of params" "a -> b" `shouldBe`
+        Right (TyArr (TyParam "a") (TyParam "b"))
+      parse ty "arrow of streams of nats" "S Nat -> S Nat" `shouldBe`
+        Right (TyArr (TyStream TyNat) (TyStream TyNat))
+      parse ty "nested arrows" "Nat -> Nat -> Nat" `shouldBe`
+        Right (TyArr TyNat (TyArr TyNat TyNat))
+    it "parses later" $ do
+      parse ty "later Nat" "@Nat" `shouldBe`
+        Right (TyLater TyNat)
+      parse ty "later Alloc" "@alloc" `shouldBe`
+        Right (TyLater TyAlloc)
+      parse ty "later S Alloc" "@(S alloc)" `shouldBe`
+        Right (TyLater $ TyStream TyAlloc)
+      parse ty "later Nat -> Nat" "@(Nat -> Nat)" `shouldBe`
+        Right (TyLater $ TyArr TyNat TyNat)
+      parse ty "later Nat * Nat" "@(Nat * Nat)" `shouldBe`
+        Right (TyLater $ TyProd TyNat TyNat)
+    it "parses stable" $ do
+      parse ty "stable Nat" "#Nat" `shouldBe`
+        Right (TyStable TyNat)
+      parse ty "stable Alloc" "#alloc" `shouldBe`
+        Right (TyStable TyAlloc)
+      parse ty "stable S Alloc" "#(S alloc)" `shouldBe`
+        Right (TyStable $ TyStream TyAlloc)
+      parse ty "stable Nat -> Nat" "#(Nat -> Nat)" `shouldBe`
+        Right (TyStable $ TyArr TyNat TyNat)
+      parse ty "stable Nat * Nat" "#(Nat * Nat)" `shouldBe`
+        Right (TyStable $ TyProd TyNat TyNat)
+    it "parses compund types" $ do
+      parse ty "c1" "S Nat -> #(S A) -> X" `shouldBe`
+        Right (TyStream TyNat `TyArr` TyStable (TyStream "A") `TyArr` "X")
+      parse ty "map" "S alloc -> #(A -> B) -> S A -> S B" `shouldBe`
+        Right (TyStream TyAlloc `TyArr` TyStable ("A" `TyArr` "B") `TyArr`
+               TyStream "A" `TyArr` TyStream "B")
+      parse ty "tails" "S alloc -> S A -> S (S A)" `shouldBe`
+        Right (TyStream TyAlloc `TyArr` TyStream "A" `TyArr` TyStream (TyStream "A"))
+      parse ty "unfold" "S alloc -> #(X -> A * @X) -> X -> S A" `shouldBe`
+        Right (TyStream TyAlloc `TyArr`
+               TyStable ("X" `TyArr` TyProd "A" (TyLater "X")) `TyArr`
+               "X" `TyArr`
+               TyStream "A"
+              )
+
