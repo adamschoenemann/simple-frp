@@ -6,6 +6,7 @@ import Test.Hspec
 import FRP.AST
 import FRP.Parser.Term
 import FRP.Parser.Type
+import FRP.Parser.Decl
 import FRP.Pretty (ppputStrLn)
 
 import Control.Monad.State
@@ -352,4 +353,19 @@ spec = do
                "X" `TyArr`
                TyStream "A"
               )
+  describe "parsing declarations" $ do
+    it "should parse simple decls" $ do
+      let tc1 = [text|
+                 foo : Nat
+                 foo = 5
+                |]
+      parse decl "decl1" (unpack tc1) `shouldBe`
+        Right (Decl (TyNat) "foo" 5)
+
+      let tc2 = [text|
+                 foo : Nat
+                 foo = 5
+                |]
+      parse decl "decl1" (unpack tc2) `shouldBe`
+        Right (Decl (TyNat) "foo" 5)
 

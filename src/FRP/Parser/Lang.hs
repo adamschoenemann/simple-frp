@@ -14,7 +14,7 @@ import qualified Text.Parsec.Token as Tok
 
 opNames :: [String]
 opNames    = ["+", "-", "*", "/", "=", "=="
-             , "<", ">", "<=", ">=", "\\", "->", "|"
+             , "<", ">", "<=", ">=", "\\", "->", "|", ":"
              ]
 
 languageDef :: Tok.LanguageDef ()

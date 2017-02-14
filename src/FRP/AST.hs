@@ -228,7 +228,7 @@ data Decl =
        , _name :: Name
        , _body :: Term
        }
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance Pretty Decl where
   ppr n (Decl ty nm bd) =
