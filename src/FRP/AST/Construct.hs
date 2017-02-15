@@ -3,94 +3,92 @@ module FRP.AST.Construct where
 
 import FRP.AST
 
-tmfst :: Term -> Term
-tmfst = TmFst
+tmfst :: EvalTerm -> EvalTerm
+tmfst = TmFst ()
 
-tmsnd :: Term -> Term
-tmsnd = TmSnd
+tmsnd :: EvalTerm -> EvalTerm
+tmsnd = TmSnd ()
 
-tmtup :: Term -> Term -> Term
-tmtup = TmTup
+tmtup :: EvalTerm -> EvalTerm -> EvalTerm
+tmtup = TmTup ()
 
-tminl :: Term -> Term
-tminl = TmInl
+tminl :: EvalTerm -> EvalTerm
+tminl = TmInl ()
 
-tminr :: Term -> Term
-tminr = TmInr
+tminr :: EvalTerm -> EvalTerm
+tminr = TmInr ()
 
-tmcase :: Term -> (Name, Term) -> (Name, Term) -> Term
-tmcase = TmCase
+tmcase :: EvalTerm -> (Name, EvalTerm) -> (Name, EvalTerm) -> EvalTerm
+tmcase = TmCase ()
 
-tmlam :: Name -> Term -> Term
-tmlam = TmLam
+tmlam :: Name -> EvalTerm -> EvalTerm
+tmlam = TmLam ()
 
-tmvar :: Name -> Term
-tmvar = TmVar
+tmvar :: Name -> EvalTerm
+tmvar = TmVar ()
 
-tmapp :: Term -> Term -> Term
-tmapp = TmApp
+tmapp :: EvalTerm -> EvalTerm -> EvalTerm
+tmapp = TmApp ()
 
-tmcons :: Term -> Term -> Term
-tmcons = TmCons
+tmcons :: EvalTerm -> EvalTerm -> EvalTerm
+tmcons = TmCons ()
 
-tmout :: Term -> Term
-tmout = TmOut
+tmout :: EvalTerm -> EvalTerm
+tmout = TmOut ()
 
-tminto :: Term -> Term
-tminto = TmInto
+tminto :: EvalTerm -> EvalTerm
+tminto = TmInto ()
 
-tmclosure :: Name -> Term -> Env -> Term
-tmclosure = TmClosure
 
-tmstable :: Term -> Term
-tmstable = TmStable
+tmstable :: EvalTerm -> EvalTerm
+tmstable = TmStable ()
 
-tmdelay :: Term -> Term -> Term
-tmdelay = TmDelay
+tmdelay :: EvalTerm -> EvalTerm -> EvalTerm
+tmdelay = TmDelay ()
 
-tmpromote :: Term -> Term
-tmpromote = TmPromote
+tmpromote :: EvalTerm -> EvalTerm
+tmpromote = TmPromote ()
 
-tmlet :: Pattern -> Term -> Term -> Term
-tmlet = TmLet
+tmlet :: Pattern -> EvalTerm -> EvalTerm -> EvalTerm
+tmlet = TmLet ()
 
-tmlit :: Lit -> Term
-tmlit = TmLit
+tmlit :: Lit -> EvalTerm
+tmlit = TmLit ()
 
-tmbinop :: BinOp -> Term -> Term -> Term
-tmbinop = TmBinOp
+tmbinop :: BinOp -> EvalTerm -> EvalTerm -> EvalTerm
+tmbinop = TmBinOp ()
 
-tmite :: Term -> Term -> Term -> Term
-tmite = TmITE
+tmite :: EvalTerm -> EvalTerm -> EvalTerm -> EvalTerm
+tmite = TmITE ()
 
-tmpntr :: Label -> Term
-tmpntr = TmPntr
+tmpntr :: Label -> EvalTerm
+tmpntr = TmPntr ()
 
-tmpntrderef :: Label -> Term
-tmpntrderef = TmPntrDeref
+tmpntrderef :: Label -> EvalTerm
+tmpntrderef = TmPntrDeref ()
 
-tmalloc :: Term
-tmalloc = TmAlloc
+tmalloc :: EvalTerm
+tmalloc = TmAlloc ()
 
-tmfix :: Name -> Term -> Term
-tmfix = TmFix
+tmfix :: Name -> EvalTerm -> EvalTerm
+tmfix = TmFix ()
 
 infixr 0 -->
-(-->) :: Name -> Term -> Term
+(-->) :: Name -> EvalTerm -> EvalTerm
 (-->) = tmlam
 
 infixl 9 <|
-(<|) :: Term -> Term -> Term
+(<|) :: EvalTerm -> EvalTerm -> EvalTerm
 (<|) = tmapp
 
-(===) :: Term -> Term -> Term
+(===) :: EvalTerm -> EvalTerm -> EvalTerm
 (===) = tmbinop Eq
 
-(<==) :: Term -> Term -> Term
+(<==) :: EvalTerm -> EvalTerm -> EvalTerm
 (<==) = tmbinop Leq
 
-(>==) :: Term -> Term -> Term
+(>==) :: EvalTerm -> EvalTerm -> EvalTerm
 (>==) = tmbinop Geq
 
-(>.) :: Term -> Term -> Term
+(>.) :: EvalTerm -> EvalTerm -> EvalTerm
 (>.) = tmbinop Gt

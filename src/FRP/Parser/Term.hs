@@ -2,7 +2,10 @@ module FRP.Parser.Term where
 
 import Text.Parsec
 import FRP.AST
+import qualified FRP.AST.Construct as C
 import FRP.Parser.Lang
+
+type ParsedTerm = Term ()
 
 term = tmlam
    <|> buildExpressionParser tmtable tmexpr
@@ -38,59 +41,59 @@ tmtable   = [ [Infix spacef AssocLeft]
           ]
           where
             spacef = ws *> notFollowedBy (choice . map reservedOp $ opNames)
-                     >> return TmApp
+                     >> return C.tmapp
                      <?> "space application"
-            bo = TmBinOp
+            bo = C.tmbinop
 
-tmtup :: Parser Term
-tmtup = parens (TmTup <$> (term <* comma) <*> term)
+tmtup :: Parser ParsedTerm
+tmtup = parens (C.tmtup <$> (term <* comma) <*> term)
 
-tmsnd :: Parser Term
-tmsnd = TmSnd <$> (reserved "snd" *> tmexpr)
+tmsnd :: Parser ParsedTerm
+tmsnd = C.tmsnd <$> (reserved "snd" *> tmexpr)
 
-tmfst :: Parser Term
-tmfst = TmFst <$> (reserved "fst" *> tmexpr)
+tmfst :: Parser ParsedTerm
+tmfst = C.tmfst <$> (reserved "fst" *> tmexpr)
 
-tminl :: Parser Term
-tminl = TmInl <$> (reserved "inl" *> tmexpr)
+tminl :: Parser ParsedTerm
+tminl = C.tminl <$> (reserved "inl" *> tmexpr)
 
-tminr :: Parser Term
-tminr = TmInr <$> (reserved "inr" *> tmexpr)
+tminr :: Parser ParsedTerm
+tminr = C.tminr <$> (reserved "inr" *> tmexpr)
 
-tmout :: Parser Term
-tmout = TmOut <$> (reserved "out" *> tmexpr)
+tmout :: Parser ParsedTerm
+tmout = C.tmout <$> (reserved "out" *> tmexpr)
 
-tminto :: Parser Term
-tminto = TmInto <$> (reserved "into" *> tmexpr)
+tminto :: Parser ParsedTerm
+tminto = C.tminto <$> (reserved "into" *> tmexpr)
 
-tmcase :: Parser Term
+tmcase :: Parser ParsedTerm
 tmcase =
-  TmCase <$> (reserved "case" *> term <* reserved "of")
+  C.tmcase <$> (reserved "case" *> term <* reserved "of")
          <*> ((,) <$> (reservedOp "|" *> reserved "inl" *> identifier)
                   <*> (reservedOp "->" *> term))
          <*> ((,) <$> (reservedOp "|" *> reserved "inr" *> identifier)
                   <*> (reservedOp "->" *> term))
 
 
-tmstable :: Parser Term
-tmstable = TmStable <$> (reserved "stable" *> parens term)
+tmstable :: Parser ParsedTerm
+tmstable = C.tmstable <$> (reserved "stable" *> parens term)
 
-tmpromote :: Parser Term
-tmpromote = TmPromote <$> (reserved "promote" *> parens term)
+tmpromote :: Parser ParsedTerm
+tmpromote = C.tmpromote <$> (reserved "promote" *> parens term)
 
-tmdelay :: Parser Term
-tmdelay = reserved "delay" *> parens (TmDelay <$> term <*> (comma *> term))
+tmdelay :: Parser ParsedTerm
+tmdelay = reserved "delay" *> parens (C.tmdelay <$> term <*> (comma *> term))
 
-tmlam :: Parser Term
+tmlam :: Parser ParsedTerm
 tmlam = do
   params <- symbol "\\" *> many1 identifier
   bd <- reservedOp "->" *> term
   let lams = paramsToLams params
   return (lams bd)
 
-tmite :: Parser Term
+tmite :: Parser ParsedTerm
 tmite =
-  TmITE <$> (reserved "if" *> term)
+  C.tmite <$> (reserved "if" *> term)
         <*> (reserved "then" *> term)
         <*> (reserved "else" *> term)
 
@@ -102,23 +105,23 @@ tmpattern = PBind  <$> identifier
               (PCons <$> (ws *> tmpattern) <*> (ws *> comma *> tmpattern)) <* ws
         <|> (parens (PTup <$> (ws *> tmpattern) <*> (ws *> comma *> tmpattern))) <* ws
 
-tmlet :: Parser Term
-tmlet = TmLet <$> (reserved "let" >> ws >> tmpattern)
+tmlet :: Parser ParsedTerm
+tmlet = C.tmlet <$> (reserved "let" >> ws >> tmpattern)
               <*> (ws >> reservedOp "=" >> ws >> term)
               <*> (ws >> reserved "in" >> ws >> term)
 
-tmcons :: Parser Term
+tmcons :: Parser ParsedTerm
 tmcons = reserved "cons" *> parens
-              (TmCons <$> (ws *> term) <*> (comma *> term)) <* ws
+              (C.tmcons <$> (ws *> term) <*> (comma *> term)) <* ws
 
-var, int, bool :: Parser Term
-var  = TmVar <$> identifier
-int  = TmLit . LInt . fromInteger <$> integer
-bool = TmLit . LBool <$>
+var, int, bool :: Parser ParsedTerm
+var  = C.tmvar <$> identifier
+int  = C.tmlit . LInt . fromInteger <$> integer
+bool = C.tmlit . LBool <$>
   (const True <$> reserved "True" <|> const False <$> reserved "False") <* ws
 
 unsafeParse :: Parser Program -> String -> Program
 unsafeParse p s = either (error . show) id $ parse p "unsafe" s
 
-parseTerm :: String -> Either ParseError Term
-parseTerm p = parse term "FRP" p
+parseParsedTerm :: String -> Either ParseError ParsedTerm
+parseParsedTerm p = parse term "FRP" p

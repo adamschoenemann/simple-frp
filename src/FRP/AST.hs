@@ -1,4 +1,5 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, ExistentialQuantification, StandaloneDeriving
+           , DeriveFunctor, ScopedTypeVariables #-}
 
 module FRP.AST where
 
@@ -11,7 +12,12 @@ import Data.String (IsString(..))
 
 type Name = String
 type Label = Int
-type Env = Map String (Either Term Value)
+type EvalTerm = Term ()
+
+toEvalTerm :: Term a -> EvalTerm
+toEvalTerm = fmap (const ())
+
+type Env = Map String (Either EvalTerm Value)
 
 data Type
   = TyParam Name
@@ -41,48 +47,44 @@ instance Pretty Type where
              then parens
              else id
 
-infixl 9 `TmApp`
-infixr 9 `TyArr`
-
-data Term
-  = TmFst Term
-  | TmSnd Term
-  | TmTup Term Term
-  | TmInl Term
-  | TmInr Term
-  | TmCase Term (Name, Term) (Name, Term)
-  | TmLam Name Term
-  | TmVar Name
-  | TmApp Term Term
-  | TmCons Term Term
-  | TmOut Term
-  | TmInto Term
-  | TmClosure Name Term Env
-  | TmStable Term
-  | TmDelay Term Term
-  | TmPromote Term
-  | TmLet Pattern Term Term
-  | TmLit Lit
-  | TmBinOp BinOp Term Term
-  | TmITE Term Term Term
-  | TmPntr Label
-  | TmPntrDeref Label
-  | TmAlloc
-  | TmFix Name Term
-  deriving (Show, Eq)
+data Term a
+  = TmFst a (Term a)
+  | TmSnd a (Term a)
+  | TmTup a (Term a) (Term a)
+  | TmInl a (Term a)
+  | TmInr a (Term a)
+  | TmCase a (Term a) (Name, (Term a)) (Name, (Term a))
+  | TmLam a Name (Term a)
+  | TmVar a Name
+  | TmApp a (Term a) (Term a)
+  | TmCons a (Term a) (Term a)
+  | TmOut a (Term a)
+  | TmInto a (Term a)
+  | TmStable a (Term a)
+  | TmDelay a (Term a) (Term a)
+  | TmPromote a (Term a)
+  | TmLet a Pattern (Term a) (Term a)
+  | TmLit a Lit
+  | TmBinOp a BinOp (Term a) (Term a)
+  | TmITE a (Term a) (Term a) (Term a)
+  | TmPntr a Label
+  | TmPntrDeref a Label
+  | TmAlloc a
+  | TmFix a Name (Term a)
+  deriving (Show, Eq, Functor)
 
 
-instance Pretty (Either Term Value) where
+instance Pretty (Either (Term a) Value) where
   ppr n (Left t) = ppr n t
   ppr n (Right v) = ppr n v
 
-instance Pretty (Map String (Either Term Value)) where
+instance Pretty (Map String (Either (Term a) Value)) where
   ppr n env = char '[' $+$ nest 2 body $+$ char ']' where
     body = vcat $ punctuate (char ',') $
       map (\(k,v) -> text k <+> text "↦" <+> ppr (n+1) v) $ M.toList env
 
-instance IsString Term where
-  fromString x = TmVar x
+instance IsString (EvalTerm) where
+  fromString x = TmVar () x
 
 instance IsString Type where
   fromString x = TyParam x
@@ -90,49 +92,48 @@ instance IsString Type where
 instance IsString Pattern where
   fromString x = PBind x
 
-instance Pretty Term where
+instance Pretty (Term a) where
   ppr n term = case term of
-    TmFst trm            -> text "fst" <+> ppr (n+1) trm
-    TmSnd trm            -> text "snd" <+> ppr (n+1) trm
-    TmTup trm trm'       -> parens $ ppr (n+1) trm <> comma <+> ppr (n+1) trm'
-    TmInl trm            -> text "inl" <+> prns (ppr (n+1) trm)
-    TmInr trm            -> text "inr" <+> prns (ppr (n+1) trm)
-    TmCase trm (vl, trml) (vr, trmr) ->
+    TmFst _a trm            -> text "fst" <+> ppr (n+1) trm
+    TmSnd _a trm            -> text "snd" <+> ppr (n+1) trm
+    TmTup _a trm trm'       -> parens $ ppr (n+1) trm <> comma <+> ppr (n+1) trm'
+    TmInl _a trm            -> text "inl" <+> prns (ppr (n+1) trm)
+    TmInr _a trm            -> text "inr" <+> prns (ppr (n+1) trm)
+    TmCase _a trm (vl, trml) (vr, trmr) ->
       text "case" <+> ppr 0 trm <+> text "of"
         $$ nest (2) (text "| inl" <+> text vl <+> text "->" <+> ppr (0) trml)
         $$ nest (2) (text "| inr" <+> text vr <+> text "->" <+> ppr (0) trmr)
-    TmLam b trm          -> prns (text "\\" <> text b <+> text "->" <+> ppr (n) trm)
-    TmFix b trm          -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
-    TmClosure b trm env  -> ppr n (TmLam b trm)-- prns $ ppr (n+1) (TmLam b trm) -- <> comma <+> ppr (n+1) env
-    TmVar v              -> text v
-    TmApp trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
-    TmCons hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
-    TmDelay alloc trm    -> text "delay" <> parens (ppr 0 alloc <> comma <+> ppr 0 trm)
-    TmStable trm         -> text "stable" <> parens (ppr 0 trm)
-    TmPromote trm        -> text "promote" <> parens (ppr 0 trm)
-    TmLet ptn trm trm'   -> text "let" <+> ppr (0) ptn <+> text "="
+    TmLam _a b trm          -> prns (text "\\" <> text b <+> text "->" <+> ppr (n) trm)
+    TmFix _a b trm          -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
+    TmVar _a v              -> text v
+    TmApp _a trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
+    TmCons _a hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
+    TmDelay _a alloc trm    -> text "delay" <> parens (ppr 0 alloc <> comma <+> ppr 0 trm)
+    TmStable _a trm         -> text "stable" <> parens (ppr 0 trm)
+    TmPromote _a trm        -> text "promote" <> parens (ppr 0 trm)
+    TmLet _a ptn trm trm'   -> text "let" <+> ppr (0) ptn <+> text "="
                               <+> ppr (n) trm <+> text "in" $$ ppr (0) trm'
-    TmLit l              -> ppr n l
-    TmBinOp op l r       -> prns (ppr (n+1) l <+> ppr n op <+> ppr (n+1) r)
-    TmITE b trmt trmf    ->
+    TmLit _a l              -> ppr n l
+    TmBinOp _a op l r       -> prns (ppr (n+1) l <+> ppr n op <+> ppr (n+1) r)
+    TmITE _a b trmt trmf    ->
       text "if" <+> ppr n b
         $$ nest 2 (text "then" <+> ppr (n+1) trmt)
         $$ nest 2 (text "else" <+> ppr (n+1) trmf)
-    TmPntr pntr          -> text "&[" <> int pntr <> text "]"
-    TmPntrDeref pntr     -> text "*[" <> int pntr <> text "]"
-    TmAlloc              -> text "¤"
-    TmOut trm            -> text "out"  <+> prns (ppr (n) trm)
-    TmInto trm           -> text "into" <+> prns (ppr (n) trm)
+    TmPntr _a pntr          -> text "&[" <> int pntr <> text "]"
+    TmPntrDeref _a pntr     -> text "*[" <> int pntr <> text "]"
+    TmAlloc _a              -> text "¤"
+    TmOut _a trm            -> text "out"  <+> prns (ppr (n) trm)
+    TmInto _a trm           -> text "into" <+> prns (ppr (n) trm)
     where
       prns = if (n > 0)
              then parens
              else id
 
-instance Num Term where
-  fromInteger = TmLit . LInt . fromInteger
-  x + y = TmBinOp Add x y
-  x * y = TmBinOp Mult x y
-  x - y = TmBinOp Sub x y
+instance Num (EvalTerm) where
+  fromInteger = TmLit () . LInt . fromInteger
+  x + y = TmBinOp () Add x y
+  x * y = TmBinOp () Mult x y
+  x - y = TmBinOp () Sub x y
   abs x = undefined
   signum = undefined
 
@@ -140,29 +141,29 @@ data Value
   = VTup Value Value
   | VInl Value
   | VInr Value
-  | VLam Name Term
-  | VClosure Name Term Env
+  | VClosure Name EvalTerm Env
   | VPntr Label
   | VAlloc
   | VStable Value
   | VInto Value
   | VCons Value Value
   | VLit Lit
-  deriving (Show, Eq)
 
-valToTerm :: Value -> Term
+deriving instance Show Value
+deriving instance Eq Value
+
+valToTerm :: Value -> EvalTerm
 valToTerm = \case
-  VTup a b         -> TmTup (valToTerm a) (valToTerm b)
-  VInl v           -> TmInl (valToTerm v)
-  VInr v           -> TmInr (valToTerm v)
-  VLam x e         -> TmLam x e
-  VClosure x e env -> TmClosure x e env
-  VPntr l          -> TmPntr l
-  VAlloc           -> TmAlloc
-  VStable v        -> TmStable (valToTerm v)
-  VInto v          -> TmInto (valToTerm v)
-  VCons hd tl      -> TmCons (valToTerm hd) (valToTerm tl)
-  VLit l           -> TmLit l
+  VTup a b         -> TmTup () (valToTerm a) (valToTerm b)
+  VInl v           -> TmInl () (valToTerm v)
+  VInr v           -> TmInr () (valToTerm v)
+  VClosure x e env -> TmLam () x (fmap (const ()) e)
+  VPntr l          -> TmPntr () l
+  VAlloc           -> TmAlloc ()
+  VStable v        -> TmStable () (valToTerm v)
+  VInto v          -> TmInto () (valToTerm v)
+  VCons hd tl      -> TmCons () (valToTerm hd) (valToTerm tl)
+  VLit l           -> TmLit () l
 
 instance Pretty Value where
   ppr x = ppr x . valToTerm
@@ -224,12 +225,14 @@ instance Pretty Lit where
     LInt  i -> int i
     LBool b -> text $ show b
 
-data Decl =
+data Decl = forall a.
   Decl { _type :: Type
        , _name :: Name
-       , _body :: Term
+       , _body :: Term a
        }
-  deriving (Show, Eq)
+
+-- deriving instance Show Decl
+-- deriving instance Eq Decl
 
 instance Pretty Decl where
   ppr n (Decl ty nm bd) =
@@ -237,21 +240,20 @@ instance Pretty Decl where
     in  text nm <+> char ':' <+> ppr n ty
         $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd' <> char '.')
     where
-      bindings (TmLam x b) =
-        let (y, b') = bindings b
-        in  (x:y, b')
-      bindings (TmClosure x b _) =
+      bindings (TmLam _a x b) =
         let (y, b') = bindings b
         in  (x:y, b')
       bindings b           = ([], b)
 
 data Program = Program { _main :: Decl, _decls :: [Decl]}
-  deriving (Show, Eq)
+
+-- deriving instance Show Program
+-- deriving instance Eq Program
 
 instance Pretty Program where
   ppr n (Program main decls) =
     vcat (map (\d -> ppr n d <> char '\n') (decls ++ [main]))
 
 
-paramsToLams :: [String] -> Term -> Term
-paramsToLams = foldl (\acc x y -> acc (TmLam x y)) id
+paramsToLams :: [String] -> EvalTerm -> EvalTerm
+paramsToLams = foldl (\acc x y -> acc (TmLam () x y)) id

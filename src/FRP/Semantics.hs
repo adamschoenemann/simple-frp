@@ -9,7 +9,9 @@ import qualified Data.Map.Strict      as M
 import           Debug.Trace
 
 import           FRP.AST
+import           FRP.AST.Construct
 import           FRP.Pretty
+
 
 data Qualifier
   = QNow
@@ -19,10 +21,10 @@ data Qualifier
 
 data StoreVal
   = SVNow Value
-  | SVLater Term Env
+  | SVLater EvalTerm Env
   deriving (Show, Eq)
 
-type Scope = Map Name Term
+type Scope = Map Name EvalTerm
 type Store = Map Label StoreVal
 
 
@@ -100,25 +102,24 @@ genLabel = do
   return gen
 
 
-evalExpr :: Env -> Term -> Value
+evalExpr :: Env -> EvalTerm -> Value
 evalExpr = evalExpr' initialState
 
-evalExpr' :: EvalState -> Env -> Term -> Value
+evalExpr' :: EvalState -> Env -> EvalTerm -> Value
 evalExpr' s env term = fst $ runExpr s env term
 
-runExpr :: EvalState -> Env -> Term -> (Value, EvalState)
+runExpr :: EvalState -> Env -> EvalTerm -> (Value, EvalState)
 runExpr initState initEnv term =
   let (v, s) = runReader (runStateT (eval term) initState) initEnv
   in  -- trace ("runExpr " ++ ppshow term ++ " with lg " ++ show (_labelGen initState) ++ " = " ++ ppshow v) $
       (v,s)
 
-eval :: Term -> EvalM Value
+eval :: EvalTerm -> EvalM Value
 eval term = case term of
-  TmVar x -> useVar x
-  TmLit x -> return $ VLit x
-  TmLam x e -> VClosure x e <$> ask
-  TmClosure x t e -> return $ VClosure x t e
-  TmApp e1 e2 -> do
+  TmVar _a x -> useVar x
+  TmLit _a x -> return $ VLit x
+  TmLam _a x e -> VClosure x e <$> ask
+  TmApp _a e1 e2 -> do
     e3 <- eval e1
     case e3 of
       VClosure x e1' env' -> do
@@ -126,20 +127,20 @@ eval term = case term of
         let env'' = M.insert x (Right v2) env'
         local (M.union env'') $ eval e1'
       _ -> crash $ "expected closure, got " ++ (ppshow e3)
-  TmBinOp op el er -> evalBinOp op el er
-  TmFst trm -> do
+  TmBinOp _a op el er -> evalBinOp op el er
+  TmFst _a trm -> do
     VTup x y <- eval trm
     return x
-  TmSnd trm -> do
+  TmSnd _a trm -> do
     VTup x y <- eval trm
     return y
-  TmTup trm1 trm2 -> VTup <$> eval trm1 <*> eval trm2
-  TmInl trm -> VInl <$> eval trm
-  TmInr trm -> VInr <$> eval trm
-  TmCons hd tl -> VCons <$> eval hd <*> eval tl
-  TmFix x e ->
-    local (M.insert x (Left $ TmFix x e)) $ eval e
-  TmDelay e' e -> do
+  TmTup _a trm1 trm2 -> VTup <$> eval trm1 <*> eval trm2
+  TmInl _a trm -> VInl <$> eval trm
+  TmInr _a trm -> VInr <$> eval trm
+  TmCons _a hd tl -> VCons <$> eval hd <*> eval tl
+  TmFix _a x e ->
+    local (M.insert x (Left $ tmfix x e)) $ eval e
+  TmDelay _a e' e -> do
     v <- eval e'
     case v of
       VAlloc -> do
@@ -147,44 +148,44 @@ eval term = case term of
         label <- allocVal (SVLater e env')
         return $ VPntr label
       _ -> crash $ "expected VAlloc, got" ++ (ppshow v)
-  TmPntrDeref label -> do
+  TmPntrDeref _a label -> do
     v <- lookupPntr label
     case v of
       SVNow v' -> return v'
       -- _             -> return $ VPntr label -- this is debatable if correct
-      er       -> crash $ "illegal pntr deref " ++ ppshow (TmPntrDeref label) ++ ".\n" ++ (ppshow er)
-  TmStable e ->
+      er       -> crash $ "illegal pntr deref " ++ ppshow (tmpntrderef label) ++ ".\n" ++ (ppshow er)
+  TmStable _a e ->
     VStable <$> eval e
-  TmPromote e ->
+  TmPromote _a e ->
     VStable <$> eval e
-  TmCase trm (nml, trml) (nmr, trmr) -> do
+  TmCase _a trm (nml, trml) (nmr, trmr) -> do
     res <- eval trm
     case res of
       VInl vl -> local (M.insert nml (Right vl)) $ eval trml
       VInr vr -> local (M.insert nmr (Right vr)) $ eval trmr
       _       -> error "not well-typed"
-  TmLet pat e e' -> do
+  TmLet _a pat e e' -> do
     v <- eval e
     env' <- matchPat pat v
     local (M.union env') $ eval e'
-  TmAlloc -> return VAlloc
-  TmPntr l -> return $ VPntr l
-  TmITE b et ef -> do
+  TmAlloc _a -> return VAlloc
+  TmPntr _a l -> return $ VPntr l
+  TmITE _a b et ef -> do
     VLit (LBool b') <- eval b
     case b' of
       True  -> eval et
       False -> eval ef
-  TmOut e -> do
+  TmOut _a e -> do
     VInto v <- eval e
     return v
-  TmInto e -> do
+  TmInto _a e -> do
     v <- eval e
     return $ VInto v
   where
   matchPat :: Pattern -> Value -> EvalM Env
   matchPat (PBind x) v   = return $ M.singleton x (Right v)
   matchPat (PDelay x) (VPntr l) =
-    return $ M.singleton x (Left $ TmPntrDeref l)
+    return $ M.singleton x (Left $ tmpntrderef l)
   matchPat (PStable pat) (VStable v) =
     matchPat pat v
   -- matchPat (PCons (PBind x) (PDelay (PBind y))) (VCons v (VPntr l)) = do
@@ -243,59 +244,12 @@ tick st
           in  st' { _store  = M.insert k (SVNow v) s }
       tock acc k (SVNow _)  = acc { _store = M.delete k (_store acc) }
 
-
-tmConstInt :: Int -> Term
-tmConstInt x = TmLam "x" (TmLit (LInt x))
-
--- make name point to term in term
--- subst :: Name -> Term -> Term -> EvalM Term
--- subst = local
-
-
--- actual good old-fashioned substituion
-subst' :: Name -> Term -> Term -> Term
-subst' name nterm term' = go term' where
-  go term'' = case term'' of
-    TmVar x                            | x == name -> nterm
-    TmVar x                            -> term''
-    TmFst trm                          -> TmFst $ go trm
-    TmSnd trm                          -> TmFst $ go trm
-    TmTup trm1 trm2                    -> TmTup (go trm1) (go trm2)
-    TmInl trm                          -> TmInl $ go trm
-    TmInr trm                          -> TmInr $ go trm
-    TmCase trm (nml, trml) (nmr, trmr) -> undefined
-    TmClosure x trm env                -> TmClosure x (go trm) env
-    TmLam nm trm                       -> TmLam nm (go trm)
-    TmApp trm1 trm2                    -> TmApp (go trm1) (go trm2)
-    TmCons trm1 trm2                   -> TmCons (go trm1) (go trm2)
-    TmStable trm                       -> TmStable (go trm)
-    TmDelay trm1 trm2                  -> TmDelay (go trm1) (go trm2)
-    TmPromote trm                      -> TmPromote (go trm)
-    TmLet pat trm1 trm2                -> TmLet pat (go trm1) (go trm2)
-    TmLit l                            -> TmLit l
-    TmBinOp op trm1 trm2               -> TmBinOp op (go trm1) (go trm2)
-    TmITE trm1 trm2 trm3               -> TmITE (go trm1) (go trm2) (go trm3)
-    TmPntr lbl                         -> TmPntr lbl
-    TmPntrDeref lbl                    -> TmPntrDeref lbl
-    TmAlloc                            -> TmAlloc
-    TmFix x e                          -> TmFix x (go e)
-    TmInto e                           -> TmInto (go e)
-    TmOut e                            -> TmOut (go e)
-
-
--- helper for more readable substitution syntax
-with' :: (Term -> Term -> Term) -> Term -> (Term -> Term)
-with' = ($)
-
--- helper for more readable substitution syntax
-inTerm' :: (Term -> Term) -> Term -> Term
-inTerm'  = ($)
-
 evalProgram :: Program -> (Value, EvalState)
 evalProgram (Program main decls) =
-  {-trace (ppshow globals) $-} runExpr initialState globals startMain where
+  case main of
+    Decl _ty _nm body -> runExpr initialState globals (mainEvalTerm $ toEvalTerm body)
+  where
     globals    = globalEnv decls
-    startMain = mainTerm (_body main)
 
 runProgram :: Program -> Value
 runProgram (Program main decls) = keepRunning initialState startMain
@@ -304,13 +258,14 @@ runProgram (Program main decls) = keepRunning initialState startMain
       let (p, s') = runExpr s globals e
           s'' = tick s'
       in case p of
-        VCons v (VPntr l) -> VCons (deepRunning s'' v) (keepRunning s'' (TmPntrDeref l))
+        VCons v (VPntr l) -> VCons (deepRunning s'' v) (keepRunning s'' (tmpntrderef l))
         _                 -> error $ ppshow p ++ " not expected"
     deepRunning s = \case
-      VCons x (VPntr l) -> keepRunning s (TmPntrDeref l)
+      VCons x (VPntr l) -> keepRunning s (tmpntrderef l)
       v                 -> v
     globals    = globalEnv decls
-    startMain = mainTerm (_body main)
+    startMain = case main of
+      Decl _ty _nm body -> mainEvalTerm $ toEvalTerm body
 
 interpProgram :: Program -> [Value]
 interpProgram = toHaskList . runProgram
@@ -320,7 +275,7 @@ toHaskList = \case
   v         -> error $ "expected cons but got " ++ ppshow v
 
 
-mainTerm body = TmApp body (TmFix "xs" $ TmCons TmAlloc (TmDelay TmAlloc (TmVar "xs")))
-                           --(TmCons TmAlloc $ TmDelay TmAlloc (TmCons TmAlloc $ TmDelay TmAlloc (TmCons TmAlloc TmAlloc)))
+mainEvalTerm body = tmapp body (tmfix "xs" $ tmcons tmalloc (tmdelay tmalloc (tmvar "xs")))
+
 globalEnv decls = foldl go M.empty decls where
-  go env (Decl t n b) = M.insert n (Right $ evalExpr env b) env
+  go env (Decl t n b) = M.insert n (Right $ evalExpr env $ toEvalTerm b) env

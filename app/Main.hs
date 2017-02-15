@@ -2,6 +2,7 @@ module Main where
 
 import FRP
 import FRP.AST
+import FRP.AST.Construct
 import FRP.Pretty
 
 main :: IO ()
@@ -18,17 +19,17 @@ frp_const :: Decl
 frp_const = Decl ty name body where
   ty = TyArr (TyStream TyAlloc) (TyArr TyNat (TyStream TyNat))
   name = "const"
-  body = TmLam "us" (TmLam "n" lamBody)
-  lamBody = TmLet pat1 rhs1 (TmLet pat2 rhs2 concl) where
+  body = tmlam "us" (tmlam "n" lamBody)
+  lamBody = tmlet pat1 rhs1 (tmlet pat2 rhs2 concl) where
     pat1 = PCons (PBind "u") (PDelay "us'")
-    rhs1 = TmVar "us"
+    rhs1 = tmvar "us"
     pat2 = PStable (PBind "x")
-    rhs2 = TmPromote (TmVar "n")
-    concl = TmCons (TmVar "x")
-                   (TmDelay (TmVar "u")
-                            (TmApp
-                              (TmApp (TmVar "const") (TmVar "us'"))
-                              (TmVar "x")
+    rhs2 = tmpromote (tmvar "n")
+    concl = tmcons (tmvar "x")
+                   (tmdelay (tmvar "u")
+                            (tmapp
+                              (tmapp (tmvar "const") (tmvar "us'"))
+                              (tmvar "x")
                             )
                    )
 {-
@@ -51,25 +52,26 @@ frp_sum_acc = Decl ty name body where
                     )
              )
   name = "sum_acc"
-  body = TmLam "us" (TmLam "ns" (TmLam "acc" lamBody))
-  lamBody = TmLet pat1 rhs1 (TmLet pat2 rhs2 (TmLet pat3 rhs3 concl))
+  body = tmlam "us" (tmlam "ns" (tmlam "acc" lamBody))
+  lamBody = tmlet pat1 rhs1 (tmlet pat2 rhs2 (tmlet pat3 rhs3 concl))
   pat1 = PCons (PBind "u") (PDelay "us'")
-  rhs1 = TmVar "us"
+  rhs1 = tmvar "us"
   pat2 = PCons (PBind "n") (PDelay "ns'")
-  rhs2 = TmVar "ns"
+  rhs2 = tmvar "ns"
   pat3 = PStable (PBind "x")
-  rhs3 = TmPromote (TmBinOp Add (TmVar "n") (TmVar "acc"))
-  concl = TmCons (TmVar "x") (TmDelay (TmVar "u") delayBody)
+  rhs3 = tmpromote (tmbinop Add (tmvar "n") (tmvar "acc"))
+  concl = tmcons (tmvar "x") (tmdelay (tmvar "u") delayBody)
   delayBody =
-    TmApp (TmApp (TmApp (TmVar "sum_acc") (TmVar "us'"))
-                 (TmVar "ns'"))
-          (TmVar "x")
+    tmapp (tmapp (tmapp (tmvar "sum_acc") (tmvar "us'"))
+                 (tmvar "ns'"))
+          (tmvar "x")
 
 frp_const_10 :: Decl
 frp_const_10 = Decl ty name body where
   ty = TyArr (TyStream TyAlloc) (TyStream TyNat)
   name = "const_10"
-  body = TmApp (_body frp_const) (TmLit (LInt 10))
+  body = case frp_const of
+    Decl _ty _nm body -> tmapp (toEvalTerm body) (tmlit (LInt 10))
 
 frp_constProg :: Program
 frp_constProg = Program { _main = frp_const_10, _decls = []}
