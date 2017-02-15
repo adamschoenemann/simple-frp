@@ -8,24 +8,25 @@ term = tmlam
    <|> buildExpressionParser table expr
    <?> "term"
 
-expr     =  parens term
-        <|> tmcons
-        <|> tmpromote
-        <|> tmdelay
-        <|> tmstable
-        <|> tmcase
-        <|> tmite
-        <|> tmlet
-        <|> tmout
-        <|> tminto
-        <|> tminl
-        <|> tminr
-        <|> tmfst
-        <|> tmsnd
-        <|> int
-        <|> bool
-        <|> var
-        <?> "simple expression"
+expr  =  tmcons
+     <|> tmpromote
+     <|> tmdelay
+     <|> tmstable
+     <|> tmcase
+     <|> tmite
+     <|> tmlet
+     <|> tmout
+     <|> tminto
+     <|> tminl
+     <|> tminr
+     <|> tmfst
+     <|> tmsnd
+     <|> int
+     <|> bool
+     <|> var
+     <|> try tmtup
+     <|> parens term
+     <?> "simple expression"
 
 table   = [ [Infix spacef AssocLeft]
           , [binary "*" (bo Mult) AssocLeft, binary "/" (bo Div) AssocLeft ]
@@ -41,23 +42,26 @@ table   = [ [Infix spacef AssocLeft]
                      <?> "space application"
             bo = TmBinOp
 
+tmtup :: Parser Term
+tmtup = parens (TmTup <$> (term <* comma) <*> term)
+
 tmsnd :: Parser Term
-tmsnd = TmSnd <$> (reserved "snd" *> term)
+tmsnd = TmSnd <$> (reserved "snd" *> expr)
 
 tmfst :: Parser Term
-tmfst = TmFst <$> (reserved "fst" *> term)
+tmfst = TmFst <$> (reserved "fst" *> expr)
 
 tminl :: Parser Term
-tminl = TmInl <$> (reserved "inl" *> term)
+tminl = TmInl <$> (reserved "inl" *> expr)
 
 tminr :: Parser Term
-tminr = TmInr <$> (reserved "inr" *> term)
+tminr = TmInr <$> (reserved "inr" *> expr)
 
 tmout :: Parser Term
-tmout = TmOut <$> (reserved "out" *> term)
+tmout = TmOut <$> (reserved "out" *> expr)
 
 tminto :: Parser Term
-tminto = TmInto <$> (reserved "into" *> term)
+tminto = TmInto <$> (reserved "into" *> expr)
 
 tmcase :: Parser Term
 tmcase =

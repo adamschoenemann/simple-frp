@@ -8,7 +8,7 @@ import FRP.Parser.Term
 import FRP.Parser.Type
 import FRP.Parser.Decl
 import FRP.Parser.Program
-import FRP.Pretty (ppputStrLn)
+import FRP.Pretty (ppputStrLn, ppshow)
 
 import Control.Monad.State
 import Debug.Trace
@@ -20,6 +20,7 @@ import NeatInterpolation
 import Data.Text (Text, pack, unpack)
 
 import Data.Either (isRight)
+import FRP.TestFunctions (frps)
 
 frp_nats =
   [text|
@@ -136,6 +137,12 @@ spec = do
         Right (TmCons 10 20)
       parse term "term" "cons ( 10  , 20  )  " `shouldBe`
         Right (TmCons 10 20)
+
+    it "should parse tuples" $ do
+      parse term "tup1" "(x,y)" `shouldBe` Right (TmTup "x" "y")
+      parse term "tup2" "(x,(y, x+y))" `shouldBe` Right (TmTup "x" (TmTup "y" ("x" + "y")))
+      parse term "tup3" "fst (x,y) * 20" `shouldBe`
+        Right ((TmFst (TmTup "x" "y")) * 20)
 
     it "should parse tuple projections" $ do
       parse term "fst" "\\y -> let x = fst y in x * 10" `shouldBe`
@@ -418,6 +425,14 @@ spec = do
       parse decl "decl4" (unpack tc4) `shouldBe`
         Right (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
               (TmLam "a" $ TmLam "xs" $ TmLet (PCons "x" "xs'") "xs" $ "x" - 1))
+
+    describe "forall f in TestPrograms.frps. parse (ppshow f) = f" $ do
+      mapM_ (\d -> it ("is true for " ++ _name d) $
+        let e = parse decl ("decl_" ++ _name d) (ppshow d)
+        in case e of
+          Right r -> r `shouldBe` d
+          Left e  -> fail (ppshow d ++ "\n" ++ show e)) frps
+
   describe "program parsing" $ do
     it "should work with const program" $ do
       let p = [text|
@@ -547,6 +562,9 @@ spec = do
                        ]
             }
       r `shouldBe` exp
+
+
+
 
 
 

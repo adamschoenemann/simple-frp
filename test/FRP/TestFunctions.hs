@@ -3,6 +3,10 @@ module FRP.TestFunctions where
 
 import FRP.AST
 
+frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
+       , frp_unfold, frp_fib, frp_swap
+       ]
+
 frp_nats :: Decl
 frp_nats = Decl ty name body where
   ty   = TyStream TyAlloc `TyArr` TyStream TyNat

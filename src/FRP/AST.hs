@@ -28,11 +28,11 @@ data Type
 instance Pretty Type where
   ppr n type' = case type' of
     TyParam name  -> text name
-    TyProd ty ty' -> parens (ppr (n+1) ty <+> text "×" <+> ppr (n+1) ty')
+    TyProd ty ty' -> parens (ppr (n+1) ty <+> text "*" <+> ppr (n+1) ty')
     TySum ty ty'  -> parens (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
     TyArr ty ty'  -> prns $ ppr n ty <+> text "->" <+> ppr n ty'
-    TyLater ty    -> prns $ text "∙" <> ppr (n+1) ty
-    TyStable ty   -> prns $ text "☐" <> ppr (n+1) ty
+    TyLater ty    -> prns $ text "@" <> ppr (n+1) ty
+    TyStable ty   -> prns $ text "#" <> ppr (n+1) ty
     TyStream ty   -> prns $ text "S" <+> ppr (n+1) ty
     TyAlloc       -> text "alloc"
     TyNat         -> text "Nat"
@@ -93,7 +93,7 @@ instance Pretty Term where
   ppr n term = case term of
     TmFst trm            -> text "fst" <+> ppr (n+1) trm
     TmSnd trm            -> text "snd" <+> ppr (n+1) trm
-    TmTup trm trm'       -> parens $ ppr (n+1) trm <+> comma <+> ppr (n+1) trm'
+    TmTup trm trm'       -> parens $ ppr (n+1) trm <> comma <+> ppr (n+1) trm'
     TmInl trm            -> text "inl" <+> prns (ppr (n+1) trm)
     TmInr trm            -> text "inr" <+> prns (ppr (n+1) trm)
     TmCase trm (vl, trml) (vr, trmr) ->
