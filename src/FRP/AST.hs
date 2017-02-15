@@ -13,11 +13,9 @@ import Data.String (IsString(..))
 type Name = String
 type Label = Int
 type EvalTerm = Term ()
-
-toEvalTerm :: Term a -> EvalTerm
-toEvalTerm = fmap (const ())
-
 type Env = Map String (Either EvalTerm Value)
+
+infixr 9 `TyArr`
 
 data Type
   = TyParam Name
@@ -225,16 +223,15 @@ instance Pretty Lit where
     LInt  i -> int i
     LBool b -> text $ show b
 
-data Decl = forall a.
+data Decl a =
   Decl { _type :: Type
        , _name :: Name
        , _body :: Term a
        }
+       deriving (Show, Eq, Functor)
 
--- deriving instance Show Decl
--- deriving instance Eq Decl
 
-instance Pretty Decl where
+instance Pretty (Decl a) where
   ppr n (Decl ty nm bd) =
     let (bs, bd') = bindings bd
     in  text nm <+> char ':' <+> ppr n ty
@@ -245,15 +242,15 @@ instance Pretty Decl where
         in  (x:y, b')
       bindings b           = ([], b)
 
-data Program = Program { _main :: Decl, _decls :: [Decl]}
+data Program a = Program { _main :: Decl a, _decls :: [Decl a]}
+  deriving (Show, Eq, Functor)
 
--- deriving instance Show Program
--- deriving instance Eq Program
-
-instance Pretty Program where
+instance Pretty (Program a) where
   ppr n (Program main decls) =
     vcat (map (\d -> ppr n d <> char '\n') (decls ++ [main]))
 
+unitFunc :: Functor f => f a -> f ()
+unitFunc = fmap (const ())
 
 paramsToLams :: [String] -> EvalTerm -> EvalTerm
 paramsToLams = foldl (\acc x y -> acc (TmLam () x y)) id

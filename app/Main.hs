@@ -15,7 +15,7 @@ const us n =
   let stable(x) = promote(n) in
   cons(x,δᵤ(const us' x))
 -}
-frp_const :: Decl
+frp_const :: Decl ()
 frp_const = Decl ty name body where
   ty = TyArr (TyStream TyAlloc) (TyArr TyNat (TyStream TyNat))
   name = "const"
@@ -43,7 +43,7 @@ sum acc us ns acc =
   ((sum_acc us') ns') x
   App (App (App sum_acc us') ns') x
 -}
-frp_sum_acc :: Decl
+frp_sum_acc :: Decl ()
 frp_sum_acc = Decl ty name body where
   ty = TyArr (TyStream TyAlloc)
              (TyArr (TyStream TyNat)
@@ -66,12 +66,12 @@ frp_sum_acc = Decl ty name body where
                  (tmvar "ns'"))
           (tmvar "x")
 
-frp_const_10 :: Decl
+frp_const_10 :: Decl ()
 frp_const_10 = Decl ty name body where
   ty = TyArr (TyStream TyAlloc) (TyStream TyNat)
   name = "const_10"
   body = case frp_const of
-    Decl _ty _nm body -> tmapp (toEvalTerm body) (tmlit (LInt 10))
+    Decl _ty _nm body -> tmapp (unitFunc body) (tmlit (LInt 10))
 
-frp_constProg :: Program
+frp_constProg :: Program ()
 frp_constProg = Program { _main = frp_const_10, _decls = []}

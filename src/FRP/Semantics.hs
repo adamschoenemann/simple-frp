@@ -244,14 +244,14 @@ tick st
           in  st' { _store  = M.insert k (SVNow v) s }
       tock acc k (SVNow _)  = acc { _store = M.delete k (_store acc) }
 
-evalProgram :: Program -> (Value, EvalState)
+evalProgram :: Program a -> (Value, EvalState)
 evalProgram (Program main decls) =
   case main of
-    Decl _ty _nm body -> runExpr initialState globals (mainEvalTerm $ toEvalTerm body)
+    Decl _ty _nm body -> runExpr initialState globals (mainEvalTerm $ unitFunc body)
   where
     globals    = globalEnv decls
 
-runProgram :: Program -> Value
+runProgram :: Program a -> Value
 runProgram (Program main decls) = keepRunning initialState startMain
   where
     keepRunning s e  =
@@ -265,9 +265,9 @@ runProgram (Program main decls) = keepRunning initialState startMain
       v                 -> v
     globals    = globalEnv decls
     startMain = case main of
-      Decl _ty _nm body -> mainEvalTerm $ toEvalTerm body
+      Decl _ty _nm body -> mainEvalTerm $ unitFunc body
 
-interpProgram :: Program -> [Value]
+interpProgram :: Program a -> [Value]
 interpProgram = toHaskList . runProgram
 
 toHaskList = \case
@@ -278,4 +278,4 @@ toHaskList = \case
 mainEvalTerm body = tmapp body (tmfix "xs" $ tmcons tmalloc (tmdelay tmalloc (tmvar "xs")))
 
 globalEnv decls = foldl go M.empty decls where
-  go env (Decl t n b) = M.insert n (Right $ evalExpr env $ toEvalTerm b) env
+  go env (Decl t n b) = M.insert n (Right $ evalExpr env $ unitFunc b) env

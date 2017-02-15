@@ -94,8 +94,8 @@ tmlam = do
 tmite :: Parser ParsedTerm
 tmite =
   C.tmite <$> (reserved "if" *> term)
-        <*> (reserved "then" *> term)
-        <*> (reserved "else" *> term)
+          <*> (reserved "then" *> term)
+          <*> (reserved "else" *> term)
 
 tmpattern :: Parser Pattern
 tmpattern = PBind  <$> identifier
@@ -120,8 +120,6 @@ int  = C.tmlit . LInt . fromInteger <$> integer
 bool = C.tmlit . LBool <$>
   (const True <$> reserved "True" <|> const False <$> reserved "False") <* ws
 
-unsafeParse :: Parser Program -> String -> Program
-unsafeParse p s = either (error . show) id $ parse p "unsafe" s
 
 parseParsedTerm :: String -> Either ParseError ParsedTerm
 parseParsedTerm p = parse term "FRP" p

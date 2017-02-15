@@ -8,7 +8,7 @@ import FRP.Parser.Term
 import FRP.Parser.Type
 import Text.Parsec.Char (endOfLine)
 
-decl :: Parser Decl
+decl :: Parser (Decl ())
 decl = do
   nam <- identifier
   typ <- reservedOp ":" *> ty

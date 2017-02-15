@@ -8,7 +8,7 @@ frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
        , frp_unfold, frp_fib, frp_swap
        ]
 
-frp_nats :: Decl
+frp_nats :: Decl ()
 frp_nats = Decl ty name body where
   ty   = TyStream TyAlloc `TyArr` TyStream TyNat
   name = "nats"
@@ -20,7 +20,7 @@ frp_nats = Decl ty name body where
           ("nats" <| "us'" <| ("x" + 1)))
         ))
 
-frp_sum_acc :: Decl
+frp_sum_acc :: Decl ()
 frp_sum_acc = Decl ty name body where
   ty = TyArr (TyStream TyAlloc)
              (TyArr (TyStream TyNat)
@@ -40,7 +40,7 @@ frp_sum_acc = Decl ty name body where
   concl = tmcons "x" (tmdelay "u" delayBody)
   delayBody = "sum_acc" <| "us'" <| "ns'" <| "x"
 
-frp_sum :: Decl
+frp_sum :: Decl ()
 frp_sum = Decl ty name body where
   name = "sum"
   ty   = TyStream TyAlloc `TyArr` TyStream TyNat `TyArr` TyStream TyNat
@@ -48,7 +48,7 @@ frp_sum = Decl ty name body where
          ("sum_acc" <| "us" <| "ns") <| 0
 
 
-frp_tails :: Decl
+frp_tails :: Decl ()
 frp_tails = Decl ty name body where
   name = "tails"
   ty   = TyStream TyAlloc `TyArr` TyStream "A" `TyArr` TyStream (TyStream "A")
@@ -58,12 +58,12 @@ frp_tails = Decl ty name body where
          tmcons "xs" (tmdelay "u" ("tails" <| "us'" <| "xs'"))
   consp h t = PCons h (PDelay t)
 
-frp_main :: Term -> Type -> Decl
+frp_main :: EvalTerm -> Type -> Decl ()
 frp_main bd retTy = Decl ty "main" bd where
   ty = TyStream TyAlloc `TyArr` retTy
 
 
-frp_map :: Decl
+frp_map :: Decl ()
 frp_map = Decl ty name body where
   ty = TyStream TyAlloc `TyArr` TyStable ("A" `TyArr` "B") `TyArr`
        TyStream "A" `TyArr` TyStream "B"
@@ -76,7 +76,7 @@ frp_map = Decl ty name body where
       tmcons ("f" <| "x") (tmdelay "u" $ "map" <| "us'" <| tmstable "f" <| "xs'")
 
 
-frp_unfold :: Decl
+frp_unfold :: Decl ()
 frp_unfold = Decl ty name body where
   ty = TyStream TyAlloc `TyArr`
        TyStable ("X" `TyArr` ("A" `TyProd` TyLater "X")) `TyArr`
@@ -90,7 +90,7 @@ frp_unfold = Decl ty name body where
     tmlet (PTup "a" $ PDelay "x'") ("f" <| "x") $
     tmcons "a" (tmdelay "u" ("unfold" <| "us'" <| (tmstable "f") <| "x'"))
 
-frp_fib :: Decl
+frp_fib :: Decl ()
 frp_fib = Decl ty name body where
  ty = TyStream TyAlloc `TyArr` TyStream TyNat
  name = "fib"
@@ -104,7 +104,7 @@ frp_fib = Decl ty name body where
           tmlet "f" ("a" + "b") $
           tmtup "f" (tmdelay "u" (tmtup "b" "f"))
 
-frp_swap :: Decl
+frp_swap :: Decl ()
 frp_swap = Decl ty name body where
   ty = TyStream TyAlloc `TyArr`
        TyNat `TyArr`
