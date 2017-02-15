@@ -5,10 +5,10 @@ import FRP.AST
 import FRP.Parser.Lang
 
 term = tmlam
-   <|> buildExpressionParser table expr
+   <|> buildExpressionParser tmtable tmexpr
    <?> "term"
 
-expr  =  tmcons
+tmexpr = tmcons
      <|> tmpromote
      <|> tmdelay
      <|> tmstable
@@ -28,7 +28,7 @@ expr  =  tmcons
      <|> parens term
      <?> "simple expression"
 
-table   = [ [Infix spacef AssocLeft]
+tmtable   = [ [Infix spacef AssocLeft]
           , [binary "*" (bo Mult) AssocLeft, binary "/" (bo Div) AssocLeft ]
           , [binary "+" (bo Add)  AssocLeft, binary "-" (bo Sub) AssocLeft ]
           , [ binary "<" (bo Lt) AssocNone, binary "<=" (bo Leq) AssocNone
@@ -46,22 +46,22 @@ tmtup :: Parser Term
 tmtup = parens (TmTup <$> (term <* comma) <*> term)
 
 tmsnd :: Parser Term
-tmsnd = TmSnd <$> (reserved "snd" *> expr)
+tmsnd = TmSnd <$> (reserved "snd" *> tmexpr)
 
 tmfst :: Parser Term
-tmfst = TmFst <$> (reserved "fst" *> expr)
+tmfst = TmFst <$> (reserved "fst" *> tmexpr)
 
 tminl :: Parser Term
-tminl = TmInl <$> (reserved "inl" *> expr)
+tminl = TmInl <$> (reserved "inl" *> tmexpr)
 
 tminr :: Parser Term
-tminr = TmInr <$> (reserved "inr" *> expr)
+tminr = TmInr <$> (reserved "inr" *> tmexpr)
 
 tmout :: Parser Term
-tmout = TmOut <$> (reserved "out" *> expr)
+tmout = TmOut <$> (reserved "out" *> tmexpr)
 
 tminto :: Parser Term
-tminto = TmInto <$> (reserved "into" *> expr)
+tminto = TmInto <$> (reserved "into" *> tmexpr)
 
 tmcase :: Parser Term
 tmcase =

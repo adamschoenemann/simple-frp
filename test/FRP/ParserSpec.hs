@@ -4,10 +4,11 @@ module FRP.ParserSpec where
 
 import Test.Hspec
 import FRP.AST
-import FRP.Parser.Term
-import FRP.Parser.Type
-import FRP.Parser.Decl
-import FRP.Parser.Program
+import FRP.AST.Construct
+import qualified FRP.Parser.Term as P
+import qualified FRP.Parser.Type as P
+import qualified FRP.Parser.Decl as P
+import qualified FRP.Parser.Program as P
 import FRP.Pretty (ppputStrLn, ppshow)
 
 import Control.Monad.State
@@ -21,6 +22,7 @@ import Data.Text (Text, pack, unpack)
 
 import Data.Either (isRight)
 import FRP.TestFunctions (frps)
+
 
 frp_nats =
   [text|
@@ -91,7 +93,7 @@ frp_bind =
                  into (inr (delay (u, bind us' stable(f) e')))
   |]
 
-tmbool = TmLit . LBool
+tmbool = tmlit . LBool
 
 main :: IO ()
 main = hspec spec
@@ -100,101 +102,101 @@ spec :: Spec
 spec = do
   describe "term parsing" $ do
     it "should parse lambda expressions" $ do
-      parse tmlam "lam" "\\x -> x" `shouldBe` Right (TmLam "x" "x")
-      parse term "lam" "\\x  -> x" `shouldBe` Right (TmLam "x" "x")
-      parse term "lam" "\\x  -> x + x" `shouldBe`
-        Right (TmLam "x" ("x" + "x"))
+      parse P.tmlam "lam" "\\x -> x" `shouldBe` Right ("x" --> "x")
+      parse P.term "lam" "\\x  -> x" `shouldBe` Right ("x" --> "x")
+      parse P.term "lam" "\\x  -> x + x" `shouldBe`
+        Right ("x" --> ("x" + "x"))
 
-      parse term "lam" "\\x -> \\y -> x + y" `shouldBe`
-        Right (TmLam "x" $ TmLam "y" ("x" + "y"))
+      parse P.term "lam" "\\x -> \\y -> x + y" `shouldBe`
+        Right ("x" --> "y" --> ("x" + "y"))
 
-      parse term "lam1" "\\x y z -> y" `shouldBe`
-        Right (TmLam "x" $ TmLam "y" $ TmLam "z" "y")
+      parse P.term "lam1" "\\x y z -> y" `shouldBe`
+        Right ("x" --> "y" --> "z" --> "y")
 
     it "should parse let expressions" $ do
-      parse tmlet "let" "let x = 10 in x" `shouldBe`
-        Right (TmLet "x" 10 "x")
-      parse term "let" "let x = 10 in x" `shouldBe`
-        Right (TmLet "x" 10 "x")
-      parse term "let" "let x = y in\n x * y" `shouldBe`
-        Right (TmLet "x" "y" ("x" * "y"))
-      parse term "let" "let x = 10 in let y = 42 in x * y" `shouldBe`
-        Right (TmLet "x" 10 $ TmLet "y" 42 ("x" * "y"))
+      parse P.tmlet "let" "let x = 10 in x" `shouldBe`
+        Right (tmlet "x" 10 "x")
+      parse P.term "let" "let x = 10 in x" `shouldBe`
+        Right (tmlet "x" 10 "x")
+      parse P.term "let" "let x = y in\n x * y" `shouldBe`
+        Right (tmlet "x" "y" ("x" * "y"))
+      parse P.term "let" "let x = 10 in let y = 42 in x * y" `shouldBe`
+        Right (tmlet "x" 10 $ tmlet "y" 42 ("x" * "y"))
 
       -- should still work if we change the var names
-      parse term "let" "let outro = 10 in let y = 42 in outro * y" `shouldBe`
-        Right (TmLet "outro" 10 $ TmLet "y" 42 ("outro" * "y"))
+      parse P.term "let" "let outro = 10 in let y = 42 in outro * y" `shouldBe`
+        Right (tmlet "outro" 10 $ tmlet "y" 42 ("outro" * "y"))
 
-      parse term "let" "10 + let x = 10 in let y = 42 in x * y" `shouldBe`
-        Right (10 + (TmLet "x" 10 $ TmLet "y" 42 ("x" * "y")))
+      parse P.term "let" "10 + let x = 10 in let y = 42 in x * y" `shouldBe`
+        Right (10 + (tmlet "x" 10 $ tmlet "y" 42 ("x" * "y")))
 
     it "should parse cons expressions" $ do
-      parse tmcons "cons" "cons(10, 20)" `shouldBe`
-        Right (TmCons 10 20)
-      parse tmcons "cons" "cons ( 10  , 20  )  " `shouldBe`
-        Right (TmCons 10 20)
-      parse term "term" "cons(10, 20)" `shouldBe`
-        Right (TmCons 10 20)
-      parse term "term" "cons ( 10  , 20  )  " `shouldBe`
-        Right (TmCons 10 20)
+      parse P.tmcons "cons" "cons(10, 20)" `shouldBe`
+        Right (tmcons 10 20)
+      parse P.tmcons "cons" "cons ( 10  , 20  )  " `shouldBe`
+        Right (tmcons 10 20)
+      parse P.term "term" "cons(10, 20)" `shouldBe`
+        Right (tmcons 10 20)
+      parse P.term "term" "cons ( 10  , 20  )  " `shouldBe`
+        Right (tmcons 10 20)
 
     it "should parse tuples" $ do
-      parse term "tup1" "(x,y)" `shouldBe` Right (TmTup "x" "y")
-      parse term "tup2" "(x,(y, x+y))" `shouldBe` Right (TmTup "x" (TmTup "y" ("x" + "y")))
-      parse term "tup3" "fst (x,y) * 20" `shouldBe`
-        Right ((TmFst (TmTup "x" "y")) * 20)
+      parse P.term "tup1" "(x,y)" `shouldBe` Right (tmtup "x" "y")
+      parse P.term "tup2" "(x,(y, x+y))" `shouldBe` Right (tmtup "x" (tmtup "y" ("x" + "y")))
+      parse P.term "tup3" "fst (x,y) * 20" `shouldBe`
+        Right ((tmfst (tmtup "x" "y")) * 20)
 
     it "should parse tuple projections" $ do
-      parse term "fst" "\\y -> let x = fst y in x * 10" `shouldBe`
-        Right (TmLam "y" $ TmLet "x" (TmFst "y") $ "x" * 10)
-      parse term "snd" "\\y -> let x = snd y in x * 10" `shouldBe`
-        Right (TmLam "y" $ TmLet "x" (TmSnd "y") $ "x" * 10)
+      parse P.term "fst" "\\y -> let x = fst y in x * 10" `shouldBe`
+        Right ("y" --> tmlet "x" (tmfst "y") $ "x" * 10)
+      parse P.term "snd" "\\y -> let x = snd y in x * 10" `shouldBe`
+        Right ("y" --> tmlet "x" (tmsnd "y") $ "x" * 10)
 
-      parse term "snd and fst" "\\z -> let x = fst z in let y = snd z in x * y" `shouldBe`
-        Right (TmLam "z" $ TmLet "x" (TmFst "z") $ TmLet "y" (TmSnd "z") $ "x" * "y")
+      parse P.term "snd and fst" "\\z -> let x = fst z in let y = snd z in x * y" `shouldBe`
+        Right ("z" --> tmlet "x" (tmfst "z") $ tmlet "y" (tmsnd "z") $ "x" * "y")
 
     it "parses application" $ do
-      parse term "app" "x x" `shouldBe`
-        Right (TmApp "x" "x")
+      parse P.term "app" "x x" `shouldBe`
+        Right ("x" <| "x")
 
-      parse term "app" "\\x -> let y = 10 in x (y * 2)" `shouldBe`
-        Right (TmLam "x" $ TmLet "y" 10 $ TmApp "x" ("y" * 2))
+      parse P.term "app" "\\x -> let y = 10 in x (y * 2)" `shouldBe`
+        Right ("x" --> tmlet "y" 10 $ "x" <| ("y" * 2))
 
-      parse term "app" "\\f -> let x = f x in x" `shouldBe`
-        Right (TmLam "f" $ TmLet "x" (TmApp "f" "x") "x")
+      parse P.term "app" "\\f -> let x = f x in x" `shouldBe`
+        Right ("f" --> tmlet "x" ("f" <| "x") "x")
 
-      parse term "app" "10 + (\\x -> x * 2) 4" `shouldBe`
-        Right (10 + TmApp (TmLam "x" $ "x" * 2) 4)
+      parse P.term "app" "10 + (\\x -> x * 2) 4" `shouldBe`
+        Right (10 + ("x" --> "x" * 2) <| 4)
 
     it "parses nested patterns" $ do
-      parse term "pats" "let cons(u, delay(us')) = us in u" `shouldBe`
-        Right (TmLet (PCons "u" (PDelay "us'")) "us" "u")
+      parse P.term "pats" "let cons(u, delay(us')) = us in u" `shouldBe`
+        Right (tmlet (PCons "u" (PDelay "us'")) "us" "u")
 
     it "parses if-then-else" $ do
-      parse tmite "ite" "if x == 10 then True else False" `shouldBe`
-        Right (TmITE (TmBinOp Eq "x" 10) (tmbool True) (tmbool False))
+      parse P.tmite "ite" "if x == 10 then True else False" `shouldBe`
+        Right (tmite ("x" === 10) (tmbool True) (tmbool False))
 
-      parse term "ite" "if x == 10 then True else False" `shouldBe`
-        Right (TmITE (TmBinOp Eq "x" 10) (tmbool True) (tmbool False))
+      parse P.term "ite" "if x == 10 then True else False" `shouldBe`
+        Right (tmite ("x" === 10) (tmbool True) (tmbool False))
 
-      parse term "ite" "if x > 10 then x + 10 else x == 20" `shouldBe`
-        Right (TmITE (TmBinOp Gt "x" 10)
+      parse P.term "ite" "if x > 10 then x + 10 else x == 20" `shouldBe`
+        Right (tmite ("x" >. 10)
                      ("x" + 10)
-                     (TmBinOp Eq "x" 20)
+                     ("x" === 20)
               )
 
-      parse term "ite" "42 + if x > 10 then x + 10 else x == 20" `shouldBe`
-        Right (42 + TmITE (TmBinOp Gt "x" 10)
+      parse P.term "ite" "42 + if x > 10 then x + 10 else x == 20" `shouldBe`
+        Right (42 + tmite ("x" >. 10)
                      ("x" + 10)
-                     (TmBinOp Eq "x" 20)
+                     ("x" === 20)
               )
 
     it "parses case exprs" $ do
-      parse tmcase "case 1" "case x of | inl y -> 10 | inr z -> 20" `shouldBe`
-        Right (TmCase "x" ("y", 10) ("z", 20))
+      parse P.tmcase "case 1" "case x of | inl y -> 10 | inr z -> 20" `shouldBe`
+        Right (tmcase "x" ("y", 10) ("z", 20))
 
-      parse term "case 2" "10 + case x of | inl y -> 10 | inr z -> 4 + 1" `shouldBe`
-        Right (10 + TmCase "x" ("y", 10) ("z", 4 + 1))
+      parse P.term "case 2" "10 + case x of | inl y -> 10 | inr z -> 4 + 1" `shouldBe`
+        Right (10 + tmcase "x" ("y", 10) ("z", 4 + 1))
 
       let nested_case =
             [text|
@@ -206,169 +208,169 @@ spec = do
                 | inl zy -> zy * 10
                 | inr zz -> zz + 10
             |]
-      parse term "nested case" (unpack nested_case) `shouldBe`
-        Right (TmCase "x"
-                ("y", TmCase "y" ("yy", "yy" * 10) ("yz", "yz" - 10))
-                ("z", TmCase "z" ("zy", "zy" * 10) ("zz", "zz" + 10))
+      parse P.term "nested case" (unpack nested_case) `shouldBe`
+        Right (tmcase "x"
+                ("y", tmcase "y" ("yy", "yy" * 10) ("yz", "yz" - 10))
+                ("z", tmcase "z" ("zy", "zy" * 10) ("zz", "zz" + 10))
               )
 
     it "parses compound expressions" $ do
-      parse term "frp" "\\x -> \\y -> let z = x + y in cons(x, z * x + y)" `shouldBe`
-        Right (TmLam "x" $ TmLam "y" $ TmLet "z" ("x" + "y") $ TmCons "x" ("z" * "x" + "y"))
+      parse P.term "frp" "\\x -> \\y -> let z = x + y in cons(x, z * x + y)" `shouldBe`
+        Right ("x" --> "y" --> tmlet "z" ("x" + "y") $ tmcons "x" ("z" * "x" + "y"))
 
-      parse term "frp" "let y = 2 * 10 in (\\x -> 2 * x) (y + 2)" `shouldBe`
-        Right (TmLet "y" (2 * 10) $ TmApp (TmLam "x" (2 * "x")) ("y" + 2))
+      parse P.term "frp" "let y = 2 * 10 in (\\x -> 2 * x) (y + 2)" `shouldBe`
+        Right (tmlet "y" (2 * 10) $ ("x" --> 2 * "x") <| ("y" + 2))
 
       let frp_const_ast =
-            TmLam "n" $ TmLam "us" $
-              TmLet (PCons "u" (PDelay "us'")) "us" $
-              TmLet (PStable "x") (TmPromote "n") $
-              TmCons "x" (TmDelay "u" $ "const" `TmApp` "us'" `TmApp` "x")
+            "n" --> "us" -->
+              tmlet (PCons "u" (PDelay "us'")) "us" $
+              tmlet (PStable "x") (tmpromote "n") $
+              tmcons "x" (tmdelay "u" $ "const" <| "us'" <| "x")
 
-      parse term "frp_const" (unpack frp_const) `shouldBe` Right (frp_const_ast)
+      parse P.term "frp_const" (unpack frp_const) `shouldBe` Right (frp_const_ast)
 
       let frp_sum_acc_ast =
-            TmLam "us" $ TmLam "ns" $ TmLam "acc" $
-              TmLet (PCons "u" (PDelay "us'")) "us" $
-              TmLet (PCons "n" (PDelay "ns'")) "ns" $
-              TmLet (PStable "x") (TmPromote ("n" + "acc")) $
-              TmCons "x" (TmDelay "u" $ "sum_acc" `TmApp` "us'" `TmApp` "ns'" `TmApp` "x")
+            "us" --> "ns" --> "acc" -->
+              tmlet (PCons "u" (PDelay "us'")) "us" $
+              tmlet (PCons "n" (PDelay "ns'")) "ns" $
+              tmlet (PStable "x") (tmpromote ("n" + "acc")) $
+              tmcons "x" (tmdelay "u" ("sum_acc" <| "us'" <| "ns'" <| "x"))
 
-      parse term "frp_sum_acc" (unpack frp_sum_acc) `shouldBe` Right (frp_sum_acc_ast)
+      parse P.term "frp_sum_acc" (unpack frp_sum_acc) `shouldBe` Right (frp_sum_acc_ast)
 
       let frp_map_ast =
-            TmLam "us" $ TmLam "h" $ TmLam "xs" $
-              TmLet (PCons "u" (PDelay "us'")) "us" $
-              TmLet (PCons "x" (PDelay "xs'")) "xs" $
-              TmLet (PStable "f") "h" $
-              TmCons ("f" `TmApp` "x")
-                     (TmDelay "u" $ "map" `TmApp` "us'" `TmApp` TmStable "f" `TmApp` "xs'")
+            "us" --> "h" --> "xs" -->
+              tmlet (PCons "u" (PDelay "us'")) "us" $
+              tmlet (PCons "x" (PDelay "xs'")) "xs" $
+              tmlet (PStable "f") "h" $
+              tmcons ("f" <| "x")
+                     (tmdelay "u" ("map" <| "us'" <| tmstable "f" <| "xs'"))
 
-      parse term "frp_map" (unpack frp_map) `shouldBe` Right (frp_map_ast)
+      parse P.term "frp_map" (unpack frp_map) `shouldBe` Right (frp_map_ast)
 
       let frp_swap_ast =
-            TmLam "us" $ TmLam "n" $ TmLam "xs" $ TmLam "ys" $
-              TmITE (TmBinOp Eq "n" 0) "ys" $
-                TmLet (PCons "u" (PDelay "us'")) "us" $
-                TmLet (PCons "x" (PDelay "xs'")) "xs" $
-                TmLet (PCons "y" (PDelay "ys'")) "ys" $
-                TmLet (PStable "m") (TmPromote "n") $
-                TmCons "x"
-                       (TmDelay "u" $ "swap" `TmApp` "us'" `TmApp`
-                                      ("m" - 1) `TmApp` "xs'" `TmApp` "ys'"
+            "us" --> "n" --> "xs" --> "ys" -->
+              tmite ("n" === 0) "ys" $
+                tmlet (PCons "u" (PDelay "us'")) "us" $
+                tmlet (PCons "x" (PDelay "xs'")) "xs" $
+                tmlet (PCons "y" (PDelay "ys'")) "ys" $
+                tmlet (PStable "m") (tmpromote "n") $
+                tmcons "x"
+                       (tmdelay "u" $ "swap" <| "us'" <|
+                                      ("m" - 1) <| "xs'" <| "ys'"
                        )
 
-      parse term "frp_swap" (unpack frp_swap) `shouldBe` Right (frp_swap_ast)
+      parse P.term "frp_swap" (unpack frp_swap) `shouldBe` Right (frp_swap_ast)
 
       let frp_switch_ast =
-            TmLam "us" $ TmLam "xs" $ TmLam "e" $
-              TmLet (PCons "u" (PDelay "us'")) "us" $
-              TmLet (PCons "x" (PDelay "xs'")) "xs" $
-              TmCase (TmOut "e")
+            "us" --> "xs" --> "e" -->
+              tmlet (PCons "u" (PDelay "us'")) "us" $
+              tmlet (PCons "x" (PDelay "xs'")) "xs" $
+              tmcase (tmout "e")
                 ("ys", "ys")
-                ("t", TmLet (PDelay "e'") "t" $
-                 TmCons "x"
-                        (TmDelay "u" $
-                           "switch" `TmApp` "us'" `TmApp` "xs'" `TmApp` "e'"
+                ("t", tmlet (PDelay "e'") "t" $
+                 tmcons "x"
+                        (tmdelay "u" $
+                           "switch" <| "us'" <| "xs'" <| "e'"
                         )
                 )
 
-      parse term "frp_switch" (unpack frp_switch) `shouldBe` Right (frp_switch_ast)
+      parse P.term "frp_switch" (unpack frp_switch) `shouldBe` Right (frp_switch_ast)
 
       let frp_bind_ast =
-            TmLam "us" $ TmLam "h" $ TmLam "e" $
-              TmLet (PCons "u" (PDelay "us'")) "us" $
-              TmLet (PStable "f") "h" $
-              TmCase (TmOut "e")
-                ("a", "f" `TmApp` "a")
-                ("t", TmLet (PDelay "e'") "t" $
-                      TmInto (TmInr $ TmDelay "u" $
-                             "bind" `TmApp` "us'" `TmApp` TmStable "f" `TmApp` "e'"
+            "us" --> "h" --> "e" -->
+              tmlet (PCons "u" (PDelay "us'")) "us" $
+              tmlet (PStable "f") "h" $
+              tmcase (tmout "e")
+                ("a", "f" <| "a")
+                ("t", tmlet (PDelay "e'") "t" $
+                      tminto (tminr $ tmdelay "u" $
+                             "bind" <| "us'" <| tmstable "f" <| "e'"
                              )
                 )
 
-      parse term "frp_bind" (unpack frp_bind) `shouldBe` Right (frp_bind_ast)
+      parse P.term "frp_bind" (unpack frp_bind) `shouldBe` Right (frp_bind_ast)
 
   describe "type parsing" $ do
     it "parses Nat" $ do
-      parse ty "nat" "Nat" `shouldBe` Right TyNat
+      parse P.ty "nat" "Nat" `shouldBe` Right TyNat
     it "parses alloc" $ do
-      parse ty "alloc" "alloc" `shouldBe` Right TyAlloc
+      parse P.ty "alloc" "alloc" `shouldBe` Right TyAlloc
     it "parses streams" $ do
-      parse ty "stream of nats" "S Nat" `shouldBe`
+      parse P.ty "stream of nats" "S Nat" `shouldBe`
         Right (TyStream TyNat)
-      parse ty "stream of allocs" "S alloc" `shouldBe`
+      parse P.ty "stream of allocs" "S alloc" `shouldBe`
         Right (TyStream TyAlloc)
-      parse ty "stream of params" "S a" `shouldBe`
+      parse P.ty "stream of params" "S a" `shouldBe`
         Right (TyStream $ TyParam "a")
-      parse ty "stream of params" "S s" `shouldBe`
+      parse P.ty "stream of params" "S s" `shouldBe`
         Right (TyStream $ TyParam "s")
-      parse ty "stream of params" "S Sample" `shouldBe`
+      parse P.ty "stream of params" "S Sample" `shouldBe`
         Right (TyStream $ TyParam "Sample")
     it "parses products" $ do
-      parse ty "pair of nats" "Nat * Nat" `shouldBe`
+      parse P.ty "pair of nats" "Nat * Nat" `shouldBe`
         Right (TyProd TyNat TyNat)
-      parse ty "pair of nat x alloc" "Nat * alloc" `shouldBe`
+      parse P.ty "pair of nat x alloc" "Nat * alloc" `shouldBe`
         Right (TyProd TyNat TyAlloc)
-      parse ty "pair of params" "a * b" `shouldBe`
+      parse P.ty "pair of params" "a * b" `shouldBe`
         Right (TyProd (TyParam "a") (TyParam "b"))
-      parse ty "pair of streams of nats" "S Nat * S Nat" `shouldBe`
+      parse P.ty "pair of streams of nats" "S Nat * S Nat" `shouldBe`
         Right (TyProd (TyStream TyNat) (TyStream TyNat))
-      parse ty "nested pair" "Nat * Nat * Nat" `shouldBe`
+      parse P.ty "nested pair" "Nat * Nat * Nat" `shouldBe`
         Right (TyProd TyNat (TyProd TyNat TyNat))
     it "parses sums" $ do
-      parse ty "sum of nats" "Nat + Nat" `shouldBe`
+      parse P.ty "sum of nats" "Nat + Nat" `shouldBe`
         Right (TySum TyNat TyNat)
-      parse ty "sum of nat x alloc" "Nat + alloc" `shouldBe`
+      parse P.ty "sum of nat x alloc" "Nat + alloc" `shouldBe`
         Right (TySum TyNat TyAlloc)
-      parse ty "sum of params" "a + b" `shouldBe`
+      parse P.ty "sum of params" "a + b" `shouldBe`
         Right (TySum (TyParam "a") (TyParam "b"))
-      parse ty "sum of streams of nats" "S Nat + S Nat" `shouldBe`
+      parse P.ty "sum of streams of nats" "S Nat + S Nat" `shouldBe`
         Right (TySum (TyStream TyNat) (TyStream TyNat))
-      parse ty "nested sum" "Nat + Nat + Nat" `shouldBe`
+      parse P.ty "nested sum" "Nat + Nat + Nat" `shouldBe`
         Right (TySum TyNat (TySum TyNat TyNat))
     it "parses arrows" $ do
-      parse ty "arrow of nats" "Nat -> Nat" `shouldBe`
+      parse P.ty "arrow of nats" "Nat -> Nat" `shouldBe`
         Right (TyArr TyNat TyNat)
-      parse ty "arrow of nat x alloc" "Nat -> alloc" `shouldBe`
+      parse P.ty "arrow of nat x alloc" "Nat -> alloc" `shouldBe`
         Right (TyArr TyNat TyAlloc)
-      parse ty "arrow of params" "a -> b" `shouldBe`
+      parse P.ty "arrow of params" "a -> b" `shouldBe`
         Right (TyArr (TyParam "a") (TyParam "b"))
-      parse ty "arrow of streams of nats" "S Nat -> S Nat" `shouldBe`
+      parse P.ty "arrow of streams of nats" "S Nat -> S Nat" `shouldBe`
         Right (TyArr (TyStream TyNat) (TyStream TyNat))
-      parse ty "nested arrows" "Nat -> Nat -> Nat" `shouldBe`
+      parse P.ty "nested arrows" "Nat -> Nat -> Nat" `shouldBe`
         Right (TyArr TyNat (TyArr TyNat TyNat))
     it "parses later" $ do
-      parse ty "later Nat" "@Nat" `shouldBe`
+      parse P.ty "later Nat" "@Nat" `shouldBe`
         Right (TyLater TyNat)
-      parse ty "later Alloc" "@alloc" `shouldBe`
+      parse P.ty "later Alloc" "@alloc" `shouldBe`
         Right (TyLater TyAlloc)
-      parse ty "later S Alloc" "@(S alloc)" `shouldBe`
+      parse P.ty "later S Alloc" "@(S alloc)" `shouldBe`
         Right (TyLater $ TyStream TyAlloc)
-      parse ty "later Nat -> Nat" "@(Nat -> Nat)" `shouldBe`
+      parse P.ty "later Nat -> Nat" "@(Nat -> Nat)" `shouldBe`
         Right (TyLater $ TyArr TyNat TyNat)
-      parse ty "later Nat * Nat" "@(Nat * Nat)" `shouldBe`
+      parse P.ty "later Nat * Nat" "@(Nat * Nat)" `shouldBe`
         Right (TyLater $ TyProd TyNat TyNat)
     it "parses stable" $ do
-      parse ty "stable Nat" "#Nat" `shouldBe`
+      parse P.ty "stable Nat" "#Nat" `shouldBe`
         Right (TyStable TyNat)
-      parse ty "stable Alloc" "#alloc" `shouldBe`
+      parse P.ty "stable Alloc" "#alloc" `shouldBe`
         Right (TyStable TyAlloc)
-      parse ty "stable S Alloc" "#(S alloc)" `shouldBe`
+      parse P.ty "stable S Alloc" "#(S alloc)" `shouldBe`
         Right (TyStable $ TyStream TyAlloc)
-      parse ty "stable Nat -> Nat" "#(Nat -> Nat)" `shouldBe`
+      parse P.ty "stable Nat -> Nat" "#(Nat -> Nat)" `shouldBe`
         Right (TyStable $ TyArr TyNat TyNat)
-      parse ty "stable Nat * Nat" "#(Nat * Nat)" `shouldBe`
+      parse P.ty "stable Nat * Nat" "#(Nat * Nat)" `shouldBe`
         Right (TyStable $ TyProd TyNat TyNat)
     it "parses compund types" $ do
-      parse ty "c1" "S Nat -> #(S A) -> X" `shouldBe`
+      parse P.ty "c1" "S Nat -> #(S A) -> X" `shouldBe`
         Right (TyStream TyNat `TyArr` TyStable (TyStream "A") `TyArr` "X")
-      parse ty "map" "S alloc -> #(A -> B) -> S A -> S B" `shouldBe`
+      parse P.ty "map" "S alloc -> #(A -> B) -> S A -> S B" `shouldBe`
         Right (TyStream TyAlloc `TyArr` TyStable ("A" `TyArr` "B") `TyArr`
                TyStream "A" `TyArr` TyStream "B")
-      parse ty "tails" "S alloc -> S A -> S (S A)" `shouldBe`
+      parse P.ty "tails" "S alloc -> S A -> S (S A)" `shouldBe`
         Right (TyStream TyAlloc `TyArr` TyStream "A" `TyArr` TyStream (TyStream "A"))
-      parse ty "unfold" "S alloc -> #(X -> A * @X) -> X -> S A" `shouldBe`
+      parse P.ty "unfold" "S alloc -> #(X -> A * @X) -> X -> S A" `shouldBe`
         Right (TyStream TyAlloc `TyArr`
                TyStable ("X" `TyArr` TyProd "A" (TyLater "X")) `TyArr`
                "X" `TyArr`
@@ -380,7 +382,7 @@ spec = do
                  foo : Nat
                  foo = 5.
                 |]
-      parse decl "decl1" (unpack tc1) `shouldBe`
+      parse P.decl "decl1" (unpack tc1) `shouldBe`
         Right (Decl (TyNat) "foo" 5)
 
     it "should parse simple decls2" $ do
@@ -388,8 +390,8 @@ spec = do
                  foo : Nat -> Nat
                  foo = \x -> x.
                 |]
-      parse decl "decl2" (unpack tc2) `shouldBe`
-        Right (Decl (TyNat `TyArr` TyNat) "foo" (TmLam "x" "x"))
+      parse P.decl "decl2" (unpack tc2) `shouldBe`
+        Right (Decl (TyNat `TyArr` TyNat) "foo" (tmlam "x" "x"))
 
     it "should parse simple decls3" $ do
       let tc3 = [text|
@@ -399,9 +401,9 @@ spec = do
                             let cons(x, xs') = xs in
                             x - 1.
                 |]
-      parse decl "decl3" (unpack tc3) `shouldBe`
+      parse P.decl "decl3" (unpack tc3) `shouldBe`
         Right (Decl (TyNat `TyArr` TyStream "a" `TyArr` "a") "foo"
-              (TmLam "a" $ TmLam "xs" $ TmLet (PCons "x" "xs'") "xs" $ "x" - 1))
+              ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     it "should parse simple decls4" $ do
       let tc4 = [text|
@@ -411,9 +413,9 @@ spec = do
                             let cons(x, xs') = xs in
                             x - 1.
                 |]
-      parse decl "decl4" (unpack tc4) `shouldBe`
+      parse P.decl "decl4" (unpack tc4) `shouldBe`
         Right (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
-              (TmLam "a" $ TmLam "xs" $ TmLet (PCons "x" "xs'") "xs" $ "x" - 1))
+              ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     it "should parse with param list" $ do
       let tc4 = [text|
@@ -422,13 +424,13 @@ spec = do
                     let cons(x, xs') = xs in
                     x - 1.
                 |]
-      parse decl "decl4" (unpack tc4) `shouldBe`
+      parse P.decl "decl4" (unpack tc4) `shouldBe`
         Right (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
-              (TmLam "a" $ TmLam "xs" $ TmLet (PCons "x" "xs'") "xs" $ "x" - 1))
+              ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     describe "forall f in TestFunctions.frps. parse (ppshow f) = f" $ do
       mapM_ (\d -> it ("is true for " ++ _name d) $
-        let e = parse decl ("decl_" ++ _name d) (ppshow d)
+        let e = parse P.decl ("decl_" ++ _name d) (ppshow d)
         in case e of
           Right r -> r `shouldBe` d
           Left e  -> fail (ppshow d ++ "\n" ++ show e)) frps
@@ -445,24 +447,24 @@ spec = do
               main : S alloc -> S Nat
               main us = const us 10.
               |]
-      let Right r = parse prog "const" $ unpack p
+      let Right r = parse P.prog "const" $ unpack p
       r `shouldBe`
         Program
           { _main = Decl
             { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
             , _name = "main"
-            , _body = TmLam "us" (TmApp (TmApp (TmVar "const") (TmVar "us")) (TmLit (LInt 10)))
+            , _body = tmlam "us" (tmapp (tmapp (tmvar "const") (tmvar "us")) (tmlit (LInt 10)))
             }
           , _decls =
             [ Decl
                 { _type = TyArr (TyStream TyAlloc) (TyArr TyNat (TyStream TyNat))
                 , _name = "const"
                 , _body =
-                    TmLam "us" (TmLam "n"
-                      (TmLet (PCons (PBind "u") (PBind "us'")) (TmVar "us")
-                      (TmLet (PStable (PBind "x")) (TmVar "n")
-                      (TmCons (TmVar "x")
-                        (TmDelay (TmVar "u") (TmApp (TmApp (TmVar "const") (TmVar "us'")) (TmVar "x")))
+                    tmlam "us" (tmlam "n"
+                      (tmlet (PCons (PBind "u") (PBind "us'")) (tmvar "us")
+                      (tmlet (PStable (PBind "x")) (tmvar "n")
+                      (tmcons (tmvar "x")
+                        (tmdelay (tmvar "u") (tmapp (tmapp (tmvar "const") (tmvar "us'")) (tmvar "x")))
                       ))))
                 }
             ]
@@ -490,74 +492,74 @@ spec = do
               main us =
                 sum us nats us 0.
               |]
-      let Right r = parse prog "sum" $ unpack p
+      let Right r = parse P.prog "sum" $ unpack p
       let exp = Program
             { _main = Decl
               { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
               , _name = "main"
-              , _body = TmLam "us"
-                          (TmApp
-                             (TmApp
-                                (TmApp (TmApp (TmVar "sum") (TmVar "us")) (TmVar "nats"))
-                                (TmVar "us"))
-                             (TmLit (LInt 0)))
+              , _body = tmlam "us"
+                          (tmapp
+                             (tmapp
+                                (tmapp (tmapp (tmvar "sum") (tmvar "us")) (tmvar "nats"))
+                                (tmvar "us"))
+                             (tmlit (LInt 0)))
               }
             , _decls = [ Decl
                          { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
                          , _name = "nats"
-                         , _body = TmLam "us"
-                                     (TmLam "n"
-                                        (TmLet
+                         , _body = tmlam "us"
+                                     (tmlam "n"
+                                        (tmlet
                                            (PCons (PBind "u") (PDelay "us'"))
-                                           (TmVar "us")
-                                           (TmLet
+                                           (tmvar "us")
+                                           (tmlet
                                               (PStable (PBind "x"))
-                                              (TmPromote (TmVar "n"))
-                                              (TmCons (TmVar "x")
-                                                 (TmDelay (TmVar "u")
-                                                    (TmApp
-                                                       (TmApp (TmVar "nats") (TmVar "us'"))
-                                                       (TmBinOp Add (TmVar "x")
-                                                          (TmLit (LInt 1)))))))))
+                                              (tmpromote (tmvar "n"))
+                                              (tmcons (tmvar "x")
+                                                 (tmdelay (tmvar "u")
+                                                    (tmapp
+                                                       (tmapp (tmvar "nats") (tmvar "us'"))
+                                                       (tmbinop Add (tmvar "x")
+                                                          (tmlit (LInt 1)))))))))
                          }
                        , Decl
                          { _type = TyArr (TyStream TyAlloc)
                                      (TyArr (TyStream TyNat)
                                         (TyArr TyNat (TyStream TyNat)))
                          , _name = "sum_acc"
-                         , _body = TmLam "us"
-                                     (TmLam "ns"
-                                        (TmLam "acc"
-                                           (TmLet
+                         , _body = tmlam "us"
+                                     (tmlam "ns"
+                                        (tmlam "acc"
+                                           (tmlet
                                               (PCons (PBind "u") (PDelay "us'"))
-                                              (TmVar "us")
-                                              (TmLet
+                                              (tmvar "us")
+                                              (tmlet
                                                  (PCons (PBind "n") (PDelay "ns'"))
-                                                 (TmVar "ns")
-                                                 (TmLet
+                                                 (tmvar "ns")
+                                                 (tmlet
                                                     (PStable (PBind "x"))
-                                                    (TmPromote
-                                                       (TmBinOp Add (TmVar "n")
-                                                          (TmVar "acc")))
-                                                    (TmCons (TmVar "x")
-                                                       (TmDelay (TmVar "u")
-                                                          (TmApp
-                                                             (TmApp
-                                                                (TmApp (TmVar "sum_acc")
-                                                                   (TmVar "us'"))
-                                                                (TmVar "ns'"))
-                                                             (TmVar "x")))))))))
+                                                    (tmpromote
+                                                       (tmbinop Add (tmvar "n")
+                                                          (tmvar "acc")))
+                                                    (tmcons (tmvar "x")
+                                                       (tmdelay (tmvar "u")
+                                                          (tmapp
+                                                             (tmapp
+                                                                (tmapp (tmvar "sum_acc")
+                                                                   (tmvar "us'"))
+                                                                (tmvar "ns'"))
+                                                             (tmvar "x")))))))))
                          }
                        , Decl
                          { _type = TyArr (TyStream TyAlloc)
                                      (TyArr (TyStream TyNat) (TyStream TyNat))
                          , _name = "sum"
-                         , _body = TmLam "us"
-                                     (TmLam "ns"
-                                        (TmApp
-                                           (TmApp (TmApp (TmVar "sum_acc") (TmVar "us"))
-                                              (TmVar "ns"))
-                                           (TmLit (LInt 0))))
+                         , _body = tmlam "us"
+                                     (tmlam "ns"
+                                        (tmapp
+                                           (tmapp (tmapp (tmvar "sum_acc") (tmvar "us"))
+                                              (tmvar "ns"))
+                                           (tmlit (LInt 0))))
                          }
                        ]
             }

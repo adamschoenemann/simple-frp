@@ -91,3 +91,6 @@ infixl 9 <|
 
 (>==) :: Term -> Term -> Term
 (>==) = tmbinop Geq
+
+(>.) :: Term -> Term -> Term
+(>.) = tmbinop Gt
