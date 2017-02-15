@@ -2,6 +2,7 @@
 module FRP.TestFunctions where
 
 import FRP.AST
+import FRP.AST.Construct
 
 frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
        , frp_unfold, frp_fib, frp_swap
@@ -12,13 +13,12 @@ frp_nats = Decl ty name body where
   ty   = TyStream TyAlloc `TyArr` TyStream TyNat
   name = "nats"
   body =
-      TmLam "us" (TmLam "n" (
-        TmLet (PCons (PBind "u") (PDelay "us'")) (TmVar "us") (
-        TmLet (PStable (PBind "x")) (TmPromote (TmVar "n")) (
-        TmCons (TmVar "x") (TmDelay (TmVar "u")
-          ((TmVar "nats") `TmApp` (TmVar "us'") `TmApp` (TmBinOp Add (TmVar "x") (TmLit (LInt 1)))))
+      "us" --> "n" -->
+        tmlet (PCons (PBind "u") (PDelay "us'")) "us" (
+        tmlet (PStable (PBind "x")) (tmpromote "n") (
+        tmcons "x" (tmdelay "u"
+          ("nats" <| "us'" <| ("x" + 1)))
         ))
-      ))
 
 frp_sum_acc :: Decl
 frp_sum_acc = Decl ty name body where
@@ -29,33 +29,33 @@ frp_sum_acc = Decl ty name body where
                     )
              )
   name = "sum_acc"
-  body = TmLam "us" (TmLam "ns" (TmLam "acc" lamBody))
-  lamBody = TmLet pat1 rhs1 (TmLet pat2 rhs2 (TmLet pat3 rhs3 concl))
+  body = "us" --> "ns" --> "acc" --> lamBody
+  lamBody = tmlet pat1 rhs1 (tmlet pat2 rhs2 (tmlet pat3 rhs3 concl))
   pat1 = PCons (PBind "u") (PDelay "us'")
-  rhs1 = TmVar "us"
+  rhs1 = "us"
   pat2 = PCons (PBind "n") (PDelay "ns'")
-  rhs2 = TmVar "ns"
+  rhs2 = "ns"
   pat3 = PStable (PBind "x")
-  rhs3 = TmPromote (TmBinOp Add (TmVar "n") (TmVar "acc"))
-  concl = TmCons (TmVar "x") (TmDelay (TmVar "u") delayBody)
-  delayBody = TmVar "sum_acc" `TmApp` TmVar "us'" `TmApp` TmVar "ns'" `TmApp` TmVar "x"
+  rhs3 = tmpromote (tmbinop Add "n" "acc")
+  concl = tmcons "x" (tmdelay "u" delayBody)
+  delayBody = "sum_acc" <| "us'" <| "ns'" <| "x"
 
 frp_sum :: Decl
 frp_sum = Decl ty name body where
   name = "sum"
   ty   = TyStream TyAlloc `TyArr` TyStream TyNat `TyArr` TyStream TyNat
-  body = TmLam "us" (TmLam "ns" (
-         ((TmVar "sum_acc" `TmApp` TmVar "us") `TmApp` TmVar "ns") `TmApp` TmLit (LInt 0)
-         ))
+  body = "us" --> "ns" -->
+         ("sum_acc" <| "us" <| "ns") <| 0
+
 
 frp_tails :: Decl
 frp_tails = Decl ty name body where
   name = "tails"
   ty   = TyStream TyAlloc `TyArr` TyStream "A" `TyArr` TyStream (TyStream "A")
-  body = TmLam "us" $ TmLam "xs" $
-         TmLet (consp "u" "us'") "us" $
-         TmLet (consp "x" "xs'") "xs" $
-         TmCons "xs" (TmDelay "u" ("tails" `TmApp` "us'" `TmApp` "xs'"))
+  body = "us" --> "xs" -->
+         tmlet (consp "u" "us'") "us" $
+         tmlet (consp "x" "xs'") "xs" $
+         tmcons "xs" (tmdelay "u" ("tails" <| "us'" <| "xs'"))
   consp h t = PCons h (PDelay t)
 
 frp_main :: Term -> Type -> Decl
@@ -65,15 +65,15 @@ frp_main bd retTy = Decl ty "main" bd where
 
 frp_map :: Decl
 frp_map = Decl ty name body where
-  ty = TyStream TyAlloc `TyArr` (TyStable ("A" `TyArr` "B")) `TyArr`
+  ty = TyStream TyAlloc `TyArr` TyStable ("A" `TyArr` "B") `TyArr`
        TyStream "A" `TyArr` TyStream "B"
   name = "map"
   body =
-    TmLam "us" $ TmLam "h" $ TmLam "xs" $
-      TmLet (PCons "u" $ PDelay "us'") "us" $
-      TmLet (PCons "x" $ PDelay "xs'") "xs" $
-      TmLet (PStable "f") "h" $
-      TmCons ("f" `TmApp` "x") (TmDelay "u" $ "map" `TmApp` "us'" `TmApp` TmStable "f" `TmApp` "xs'")
+    "us" --> "h" --> "xs" -->
+      tmlet (PCons "u" $ PDelay "us'") "us" $
+      tmlet (PCons "x" $ PDelay "xs'") "xs" $
+      tmlet (PStable "f") "h" $
+      tmcons ("f" <| "x") (tmdelay "u" $ "map" <| "us'" <| tmstable "f" <| "xs'")
 
 
 frp_unfold :: Decl
@@ -84,26 +84,25 @@ frp_unfold = Decl ty name body where
        TyStream "A"
   name = "unfold"
   body =
-    TmLam "us" $ TmLam "h" $ TmLam "x" $
-    TmLet (PCons "u" $ PDelay "us'") "us" $
-    TmLet (PStable "f") "h" $
-    TmLet (PTup "a" $ PDelay "x'") ("f" `TmApp` "x") $
-    TmCons "a" (TmDelay "u" $ "unfold" `TmApp` "us'" `TmApp` (TmStable "f") `TmApp` "x'")
+    "us" --> "h" --> "x" -->
+    tmlet (PCons "u" $ PDelay "us'") "us" $
+    tmlet (PStable "f") "h" $
+    tmlet (PTup "a" $ PDelay "x'") ("f" <| "x") $
+    tmcons "a" (tmdelay "u" ("unfold" <| "us'" <| (tmstable "f") <| "x'"))
 
 frp_fib :: Decl
 frp_fib = Decl ty name body where
  ty = TyStream TyAlloc `TyArr` TyStream TyNat
  name = "fib"
  body =
-    TmLam "us" $
-    TmLet (PCons "u" $ PDelay "us'") "us" $
-    TmLet "fibfn" fiblam $
-    "unfold" `TmApp` "us" `TmApp` TmStable ("fibfn" `TmApp` "u") `TmApp`
-    TmTup (TmLit $ LInt 0) (TmLit $ LInt 1)
- fiblam = TmLam "u" $ TmLam "x" $
-          TmLet (PTup "a" "b") "x" $
-          TmLet "f" (TmBinOp Add "a" "b") $
-          TmTup "f" (TmDelay "u" $ TmTup "b" "f")
+    "us" -->
+    tmlet (PCons "u" $ PDelay "us'") "us" $
+    tmlet "fibfn" fibfn $
+    "unfold" <| "us" <| tmstable ("fibfn" <| "u") <| tmtup 0 1
+ fibfn = "u" --> "x" -->
+          tmlet (PTup "a" "b") "x" $
+          tmlet "f" ("a" + "b") $
+          tmtup "f" (tmdelay "u" (tmtup "b" "f"))
 
 frp_swap :: Decl
 frp_swap = Decl ty name body where
@@ -113,14 +112,14 @@ frp_swap = Decl ty name body where
        TyStream "A" `TyArr`
        TyStream "A"
   name = "swap"
-  body = TmLam "us" $ TmLam "n" $ TmLam "xs" $ TmLam "ys" $
-         TmITE (TmBinOp Eq "n" $ TmLit $ LInt 0)
+  body = "us" --> "n" --> "xs" --> "ys" -->
+         tmite (tmbinop Eq "n" 0)
             "ys" $
-            TmLet (PCons "u" $ PDelay "us'") "us" $
-            TmLet (PCons "x" $ PDelay "xs'") "xs" $
-            TmLet (PCons "y" $ PDelay "ys'") "ys" $
-            TmLet (PStable "m") (TmPromote "n")   $
-            TmCons "x" (TmDelay "u" $ recCall)
-  recCall = "swap" `TmApp` "us'" `TmApp` (TmBinOp Sub "m" (TmLit $ LInt 1)) `TmApp`
-            "xs'" `TmApp` "ys'"
+            tmlet (PCons "u" $ PDelay "us'") "us" $
+            tmlet (PCons "x" $ PDelay "xs'") "xs" $
+            tmlet (PCons "y" $ PDelay "ys'") "ys" $
+            tmlet (PStable "m") (tmpromote "n")   $
+            tmcons "x" (tmdelay "u" $ recCall)
+  recCall = "swap" <| "us'" <| (tmbinop Sub "m" $ 1) <|
+            "xs'" <| "ys'"
 

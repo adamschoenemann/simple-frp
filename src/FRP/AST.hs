@@ -71,6 +71,7 @@ data Term
   | TmFix Name Term
   deriving (Show, Eq)
 
+
 instance Pretty (Either Term Value) where
   ppr n (Left t) = ppr n t
   ppr n (Right v) = ppr n v

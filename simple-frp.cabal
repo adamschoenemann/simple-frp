@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     FRP, FRP.AST, FRP.Pretty, FRP.Semantics, FRP.Parser.Lang
                      , FRP.Parser.Term, FRP.Parser.Type, FRP.Parser.Decl, Utils
+                     , FRP.AST.Construct
   build-depends:       base >= 4.7 && < 5, pretty, containers, mtl, parsec
                      , neat-interpolation, template-haskell, text
   ghc-options:         -Wincomplete-patterns

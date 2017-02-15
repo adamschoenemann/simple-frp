@@ -426,7 +426,7 @@ spec = do
         Right (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
               (TmLam "a" $ TmLam "xs" $ TmLet (PCons "x" "xs'") "xs" $ "x" - 1))
 
-    describe "forall f in TestPrograms.frps. parse (ppshow f) = f" $ do
+    describe "forall f in TestFunctions.frps. parse (ppshow f) = f" $ do
       mapM_ (\d -> it ("is true for " ++ _name d) $
         let e = parse decl ("decl_" ++ _name d) (ppshow d)
         in case e of
