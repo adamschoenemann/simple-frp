@@ -12,6 +12,10 @@ import Text.Parsec
 import Text.Parsec.Expr
 import qualified Text.Parsec.Token as Tok
 
+-- (<$$>) :: (Functor f, Monad f) => (a -> f b) -> f a -> f b
+-- (<$$>) fn x = x >>= fn
+
+
 opNames :: [String]
 opNames    = ["+", "-", "*", "/", "=", "=="
              , "<", ">", "<=", ">=", "\\", "->", "|", ":"
@@ -55,6 +59,9 @@ languageDef = Tok.LanguageDef
   , Tok.caseSensitive   = True
   }
 
+binary'  name fun assoc = Infix   (reservedOp name >> fun) assoc
+prefix'  name fun       = Prefix  (reservedOp name >> fun)
+postfix' name fun       = Postfix (reservedOp name >> fun)
 
 binary  name fun assoc = Infix   (reservedOp name >> return fun) assoc
 prefix  name fun       = Prefix  (reservedOp name >> return fun)

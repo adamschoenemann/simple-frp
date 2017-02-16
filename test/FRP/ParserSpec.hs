@@ -16,7 +16,7 @@ import Debug.Trace
 import qualified Data.Map.Strict as M
 import Data.List (unfoldr)
 
-import Text.ParserCombinators.Parsec (parse)
+import Text.Parsec (parse, ParseError)
 import NeatInterpolation
 import Data.Text (Text, pack, unpack)
 
@@ -98,105 +98,110 @@ tmbool = tmlit . LBool
 main :: IO ()
 main = hspec spec
 
+shouldParse :: (Eq (f ()), Show (f ()), Functor f) => Either ParseError (f a) -> f () -> Expectation
+shouldParse eith expect = case eith of
+  Left err  -> expectationFailure (show err)
+  Right ast -> unitFunc ast `shouldBe` expect
+
 spec :: Spec
 spec = do
   describe "term parsing" $ do
     it "should parse lambda expressions" $ do
-      parse P.tmlam "lam" "\\x -> x" `shouldBe` Right ("x" --> "x")
-      parse P.term "lam" "\\x  -> x" `shouldBe` Right ("x" --> "x")
-      parse P.term "lam" "\\x  -> x + x" `shouldBe`
-        Right ("x" --> ("x" + "x"))
+      parse P.tmlam "lam" "\\x -> x" `shouldParse` ("x" --> "x")
+      parse P.term "lam" "\\x  -> x" `shouldParse` ("x" --> "x")
+      parse P.term "lam" "\\x  -> x + x" `shouldParse`
+        ("x" --> ("x" + "x"))
 
-      parse P.term "lam" "\\x -> \\y -> x + y" `shouldBe`
-        Right ("x" --> "y" --> ("x" + "y"))
+      parse P.term "lam" "\\x -> \\y -> x + y" `shouldParse`
+        ("x" --> "y" --> ("x" + "y"))
 
-      parse P.term "lam1" "\\x y z -> y" `shouldBe`
-        Right ("x" --> "y" --> "z" --> "y")
+      parse P.term "lam1" "\\x y z -> y" `shouldParse`
+        ("x" --> "y" --> "z" --> "y")
 
     it "should parse let expressions" $ do
-      parse P.tmlet "let" "let x = 10 in x" `shouldBe`
-        Right (tmlet "x" 10 "x")
-      parse P.term "let" "let x = 10 in x" `shouldBe`
-        Right (tmlet "x" 10 "x")
-      parse P.term "let" "let x = y in\n x * y" `shouldBe`
-        Right (tmlet "x" "y" ("x" * "y"))
-      parse P.term "let" "let x = 10 in let y = 42 in x * y" `shouldBe`
-        Right (tmlet "x" 10 $ tmlet "y" 42 ("x" * "y"))
+      parse P.tmlet "let" "let x = 10 in x" `shouldParse`
+        (tmlet "x" 10 "x")
+      parse P.term "let" "let x = 10 in x" `shouldParse`
+        (tmlet "x" 10 "x")
+      parse P.term "let" "let x = y in\n x * y" `shouldParse`
+        (tmlet "x" "y" ("x" * "y"))
+      parse P.term "let" "let x = 10 in let y = 42 in x * y" `shouldParse`
+        (tmlet "x" 10 $ tmlet "y" 42 ("x" * "y"))
 
       -- should still work if we change the var names
-      parse P.term "let" "let outro = 10 in let y = 42 in outro * y" `shouldBe`
-        Right (tmlet "outro" 10 $ tmlet "y" 42 ("outro" * "y"))
+      parse P.term "let" "let outro = 10 in let y = 42 in outro * y" `shouldParse`
+        (tmlet "outro" 10 $ tmlet "y" 42 ("outro" * "y"))
 
-      parse P.term "let" "10 + let x = 10 in let y = 42 in x * y" `shouldBe`
-        Right (10 + (tmlet "x" 10 $ tmlet "y" 42 ("x" * "y")))
+      parse P.term "let" "10 + let x = 10 in let y = 42 in x * y" `shouldParse`
+        (10 + (tmlet "x" 10 $ tmlet "y" 42 ("x" * "y")))
 
     it "should parse cons expressions" $ do
-      parse P.tmcons "cons" "cons(10, 20)" `shouldBe`
-        Right (tmcons 10 20)
-      parse P.tmcons "cons" "cons ( 10  , 20  )  " `shouldBe`
-        Right (tmcons 10 20)
-      parse P.term "term" "cons(10, 20)" `shouldBe`
-        Right (tmcons 10 20)
-      parse P.term "term" "cons ( 10  , 20  )  " `shouldBe`
-        Right (tmcons 10 20)
+      parse P.tmcons "cons" "cons(10, 20)" `shouldParse`
+        (tmcons 10 20)
+      parse P.tmcons "cons" "cons ( 10  , 20  )  " `shouldParse`
+        (tmcons 10 20)
+      parse P.term "term" "cons(10, 20)" `shouldParse`
+        (tmcons 10 20)
+      parse P.term "term" "cons ( 10  , 20  )  " `shouldParse`
+        (tmcons 10 20)
 
     it "should parse tuples" $ do
-      parse P.term "tup1" "(x,y)" `shouldBe` Right (tmtup "x" "y")
-      parse P.term "tup2" "(x,(y, x+y))" `shouldBe` Right (tmtup "x" (tmtup "y" ("x" + "y")))
-      parse P.term "tup3" "fst (x,y) * 20" `shouldBe`
-        Right ((tmfst (tmtup "x" "y")) * 20)
+      parse P.term "tup1" "(x,y)" `shouldParse` (tmtup "x" "y")
+      parse P.term "tup2" "(x,(y, x+y))" `shouldParse` (tmtup "x" (tmtup "y" ("x" + "y")))
+      parse P.term "tup3" "fst (x,y) * 20" `shouldParse`
+        ((tmfst (tmtup "x" "y")) * 20)
 
     it "should parse tuple projections" $ do
-      parse P.term "fst" "\\y -> let x = fst y in x * 10" `shouldBe`
-        Right ("y" --> tmlet "x" (tmfst "y") $ "x" * 10)
-      parse P.term "snd" "\\y -> let x = snd y in x * 10" `shouldBe`
-        Right ("y" --> tmlet "x" (tmsnd "y") $ "x" * 10)
+      parse P.term "fst" "\\y -> let x = fst y in x * 10" `shouldParse`
+        ("y" --> tmlet "x" (tmfst "y") $ "x" * 10)
+      parse P.term "snd" "\\y -> let x = snd y in x * 10" `shouldParse`
+        ("y" --> tmlet "x" (tmsnd "y") $ "x" * 10)
 
-      parse P.term "snd and fst" "\\z -> let x = fst z in let y = snd z in x * y" `shouldBe`
-        Right ("z" --> tmlet "x" (tmfst "z") $ tmlet "y" (tmsnd "z") $ "x" * "y")
+      parse P.term "snd and fst" "\\z -> let x = fst z in let y = snd z in x * y" `shouldParse`
+        ("z" --> tmlet "x" (tmfst "z") $ tmlet "y" (tmsnd "z") $ "x" * "y")
 
     it "parses application" $ do
-      parse P.term "app" "x x" `shouldBe`
-        Right ("x" <| "x")
+      parse P.term "app" "x x" `shouldParse`
+        ("x" <| "x")
 
-      parse P.term "app" "\\x -> let y = 10 in x (y * 2)" `shouldBe`
-        Right ("x" --> tmlet "y" 10 $ "x" <| ("y" * 2))
+      parse P.term "app" "\\x -> let y = 10 in x (y * 2)" `shouldParse`
+        ("x" --> tmlet "y" 10 $ "x" <| ("y" * 2))
 
-      parse P.term "app" "\\f -> let x = f x in x" `shouldBe`
-        Right ("f" --> tmlet "x" ("f" <| "x") "x")
+      parse P.term "app" "\\f -> let x = f x in x" `shouldParse`
+        ("f" --> tmlet "x" ("f" <| "x") "x")
 
-      parse P.term "app" "10 + (\\x -> x * 2) 4" `shouldBe`
-        Right (10 + ("x" --> "x" * 2) <| 4)
+      parse P.term "app" "10 + (\\x -> x * 2) 4" `shouldParse`
+        (10 + ("x" --> "x" * 2) <| 4)
 
     it "parses nested patterns" $ do
-      parse P.term "pats" "let cons(u, delay(us')) = us in u" `shouldBe`
-        Right (tmlet (PCons "u" (PDelay "us'")) "us" "u")
+      parse P.term "pats" "let cons(u, delay(us')) = us in u" `shouldParse`
+        (tmlet (PCons "u" (PDelay "us'")) "us" "u")
 
     it "parses if-then-else" $ do
-      parse P.tmite "ite" "if x == 10 then True else False" `shouldBe`
-        Right (tmite ("x" === 10) (tmbool True) (tmbool False))
+      parse P.tmite "ite" "if x == 10 then True else False" `shouldParse`
+        (tmite ("x" === 10) (tmbool True) (tmbool False))
 
-      parse P.term "ite" "if x == 10 then True else False" `shouldBe`
-        Right (tmite ("x" === 10) (tmbool True) (tmbool False))
+      parse P.term "ite" "if x == 10 then True else False" `shouldParse`
+        (tmite ("x" === 10) (tmbool True) (tmbool False))
 
-      parse P.term "ite" "if x > 10 then x + 10 else x == 20" `shouldBe`
-        Right (tmite ("x" >. 10)
+      parse P.term "ite" "if x > 10 then x + 10 else x == 20" `shouldParse`
+        (tmite ("x" >. 10)
                      ("x" + 10)
                      ("x" === 20)
               )
 
-      parse P.term "ite" "42 + if x > 10 then x + 10 else x == 20" `shouldBe`
-        Right (42 + tmite ("x" >. 10)
+      parse P.term "ite" "42 + if x > 10 then x + 10 else x == 20" `shouldParse`
+        (42 + tmite ("x" >. 10)
                      ("x" + 10)
                      ("x" === 20)
               )
 
     it "parses case exprs" $ do
-      parse P.tmcase "case 1" "case x of | inl y -> 10 | inr z -> 20" `shouldBe`
-        Right (tmcase "x" ("y", 10) ("z", 20))
+      parse P.tmcase "case 1" "case x of | inl y -> 10 | inr z -> 20" `shouldParse`
+        (tmcase "x" ("y", 10) ("z", 20))
 
-      parse P.term "case 2" "10 + case x of | inl y -> 10 | inr z -> 4 + 1" `shouldBe`
-        Right (10 + tmcase "x" ("y", 10) ("z", 4 + 1))
+      parse P.term "case 2" "10 + case x of | inl y -> 10 | inr z -> 4 + 1" `shouldParse`
+        (10 + tmcase "x" ("y", 10) ("z", 4 + 1))
 
       let nested_case =
             [text|
@@ -208,18 +213,18 @@ spec = do
                 | inl zy -> zy * 10
                 | inr zz -> zz + 10
             |]
-      parse P.term "nested case" (unpack nested_case) `shouldBe`
-        Right (tmcase "x"
+      parse P.term "nested case" (unpack nested_case) `shouldParse`
+        (tmcase "x"
                 ("y", tmcase "y" ("yy", "yy" * 10) ("yz", "yz" - 10))
                 ("z", tmcase "z" ("zy", "zy" * 10) ("zz", "zz" + 10))
               )
 
     it "parses compound expressions" $ do
-      parse P.term "frp" "\\x -> \\y -> let z = x + y in cons(x, z * x + y)" `shouldBe`
-        Right ("x" --> "y" --> tmlet "z" ("x" + "y") $ tmcons "x" ("z" * "x" + "y"))
+      parse P.term "frp" "\\x -> \\y -> let z = x + y in cons(x, z * x + y)" `shouldParse`
+        ("x" --> "y" --> tmlet "z" ("x" + "y") $ tmcons "x" ("z" * "x" + "y"))
 
-      parse P.term "frp" "let y = 2 * 10 in (\\x -> 2 * x) (y + 2)" `shouldBe`
-        Right (tmlet "y" (2 * 10) $ ("x" --> 2 * "x") <| ("y" + 2))
+      parse P.term "frp" "let y = 2 * 10 in (\\x -> 2 * x) (y + 2)" `shouldParse`
+        (tmlet "y" (2 * 10) $ ("x" --> 2 * "x") <| ("y" + 2))
 
       let frp_const_ast =
             "n" --> "us" -->
@@ -227,7 +232,7 @@ spec = do
               tmlet (PStable "x") (tmpromote "n") $
               tmcons "x" (tmdelay "u" $ "const" <| "us'" <| "x")
 
-      parse P.term "frp_const" (unpack frp_const) `shouldBe` Right (frp_const_ast)
+      parse P.term "frp_const" (unpack frp_const) `shouldParse` (frp_const_ast)
 
       let frp_sum_acc_ast =
             "us" --> "ns" --> "acc" -->
@@ -236,7 +241,7 @@ spec = do
               tmlet (PStable "x") (tmpromote ("n" + "acc")) $
               tmcons "x" (tmdelay "u" ("sum_acc" <| "us'" <| "ns'" <| "x"))
 
-      parse P.term "frp_sum_acc" (unpack frp_sum_acc) `shouldBe` Right (frp_sum_acc_ast)
+      parse P.term "frp_sum_acc" (unpack frp_sum_acc) `shouldParse` (frp_sum_acc_ast)
 
       let frp_map_ast =
             "us" --> "h" --> "xs" -->
@@ -246,7 +251,7 @@ spec = do
               tmcons ("f" <| "x")
                      (tmdelay "u" ("map" <| "us'" <| tmstable "f" <| "xs'"))
 
-      parse P.term "frp_map" (unpack frp_map) `shouldBe` Right (frp_map_ast)
+      parse P.term "frp_map" (unpack frp_map) `shouldParse` (frp_map_ast)
 
       let frp_swap_ast =
             "us" --> "n" --> "xs" --> "ys" -->
@@ -260,7 +265,7 @@ spec = do
                                       ("m" - 1) <| "xs'" <| "ys'"
                        )
 
-      parse P.term "frp_swap" (unpack frp_swap) `shouldBe` Right (frp_swap_ast)
+      parse P.term "frp_swap" (unpack frp_swap) `shouldParse` (frp_swap_ast)
 
       let frp_switch_ast =
             "us" --> "xs" --> "e" -->
@@ -275,7 +280,7 @@ spec = do
                         )
                 )
 
-      parse P.term "frp_switch" (unpack frp_switch) `shouldBe` Right (frp_switch_ast)
+      parse P.term "frp_switch" (unpack frp_switch) `shouldParse` (frp_switch_ast)
 
       let frp_bind_ast =
             "us" --> "h" --> "e" -->
@@ -289,7 +294,7 @@ spec = do
                              )
                 )
 
-      parse P.term "frp_bind" (unpack frp_bind) `shouldBe` Right (frp_bind_ast)
+      parse P.term "frp_bind" (unpack frp_bind) `shouldParse` (frp_bind_ast)
 
   describe "type parsing" $ do
     it "parses Nat" $ do
@@ -382,16 +387,16 @@ spec = do
                  foo : Nat
                  foo = 5.
                 |]
-      parse P.decl "decl1" (unpack tc1) `shouldBe`
-        Right (Decl (TyNat) "foo" 5)
+      parse P.decl "decl1" (unpack tc1) `shouldParse`
+        (Decl (TyNat) "foo" 5)
 
     it "should parse simple decls2" $ do
       let tc2 = [text|
                  foo : Nat -> Nat
                  foo = \x -> x.
                 |]
-      parse P.decl "decl2" (unpack tc2) `shouldBe`
-        Right (Decl (TyNat `TyArr` TyNat) "foo" (tmlam "x" "x"))
+      parse P.decl "decl2" (unpack tc2) `shouldParse`
+        (Decl (TyNat `TyArr` TyNat) "foo" (tmlam "x" "x"))
 
     it "should parse simple decls3" $ do
       let tc3 = [text|
@@ -401,8 +406,8 @@ spec = do
                             let cons(x, xs') = xs in
                             x - 1.
                 |]
-      parse P.decl "decl3" (unpack tc3) `shouldBe`
-        Right (Decl (TyNat `TyArr` TyStream "a" `TyArr` "a") "foo"
+      parse P.decl "decl3" (unpack tc3) `shouldParse`
+        (Decl (TyNat `TyArr` TyStream "a" `TyArr` "a") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     it "should parse simple decls4" $ do
@@ -413,8 +418,8 @@ spec = do
                             let cons(x, xs') = xs in
                             x - 1.
                 |]
-      parse P.decl "decl4" (unpack tc4) `shouldBe`
-        Right (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
+      parse P.decl "decl4" (unpack tc4) `shouldParse`
+        (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     it "should parse with param list" $ do
@@ -424,15 +429,15 @@ spec = do
                     let cons(x, xs') = xs in
                     x - 1.
                 |]
-      parse P.decl "decl4" (unpack tc4) `shouldBe`
-        Right (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
+      parse P.decl "decl4" (unpack tc4) `shouldParse`
+        (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     describe "forall f in TestFunctions.frps. parse (ppshow f) = f" $ do
       mapM_ (\d -> it ("is true for " ++ _name d) $
         let e = parse P.decl ("decl_" ++ _name d) (ppshow d)
         in case e of
-          Right r -> r `shouldBe` d
+          Right r -> unitFunc r `shouldBe` d
           Left e  -> fail (ppshow d ++ "\n" ++ show e)) frps
 
   describe "program parsing" $ do
@@ -448,7 +453,8 @@ spec = do
               main us = const us 10.
               |]
       let Right r = parse P.prog "const" $ unpack p
-      r `shouldBe`
+      putStrLn . show $ r
+      unitFunc r `shouldBe`
         Program
           { _main = Decl
             { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
@@ -563,7 +569,7 @@ spec = do
                          }
                        ]
             }
-      r `shouldBe` exp
+      unitFunc r `shouldBe` exp
 
 
 

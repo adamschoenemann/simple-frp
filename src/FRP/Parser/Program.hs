@@ -8,7 +8,7 @@ import FRP.Parser.Decl
 import Text.Parsec.Char (endOfLine)
 import Data.List (find)
 
-prog :: Parser (Program ())
+prog :: Parser (Program SourcePos)
 prog = do
   decls <- many decl
   -- let mainM = Just $ head decls

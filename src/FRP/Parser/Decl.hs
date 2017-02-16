@@ -8,13 +8,14 @@ import FRP.Parser.Term
 import FRP.Parser.Type
 import Text.Parsec.Char (endOfLine)
 
-decl :: Parser (Decl ())
+decl :: Parser (Decl SourcePos)
 decl = do
   nam <- identifier
   typ <- reservedOp ":" *> ty
   _   <- string nam <* ws
   params <- many identifier <* ws <* reservedOp "="
   bod <- term <* char '.' <* ws
-  let body = paramsToLams params bod
+  p <- getPosition
+  let body = paramsToLams' p params bod
   return $ Decl typ nam body
 

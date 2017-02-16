@@ -1,11 +1,19 @@
-module FRP.Parser.Term where
+module FRP.Parser.Term (
+    module FRP.Parser.Term
+  , ParsedTerm
+) where
 
 import Text.Parsec
+import Text.Parsec.Pos
 import FRP.AST
-import qualified FRP.AST.Construct as C
+import qualified FRP.Parser.Construct as C
+import FRP.Parser.Construct (ParsedTerm)
 import FRP.Parser.Lang
 
-type ParsedTerm = Term ()
+test :: Parser (Term SourcePos)
+test = (TmVar <$> getPosition) <*> identifier
+  -- p <- getPosition
+  -- return (TmVar p)
 
 term = tmlam
    <|> buildExpressionParser tmtable tmexpr
@@ -32,43 +40,43 @@ tmexpr = tmcons
      <?> "simple expression"
 
 tmtable   = [ [Infix spacef AssocLeft]
-          , [binary "*" (bo Mult) AssocLeft, binary "/" (bo Div) AssocLeft ]
-          , [binary "+" (bo Add)  AssocLeft, binary "-" (bo Sub) AssocLeft ]
-          , [ binary "<" (bo Lt) AssocNone, binary "<=" (bo Leq) AssocNone
-            , binary ">" (bo Gt) AssocNone, binary ">=" (bo Geq) AssocNone
+          , [binary' "*" (bo Mult) AssocLeft, binary' "/" (bo Div) AssocLeft ]
+          , [binary' "+" (bo Add)  AssocLeft, binary' "-" (bo Sub) AssocLeft ]
+          , [ binary' "<" (bo Lt) AssocNone, binary' "<=" (bo Leq) AssocNone
+            , binary' ">" (bo Gt) AssocNone, binary' ">=" (bo Geq) AssocNone
             ]
-          , [binary "==" (bo Eq) AssocNone]
+          , [binary' "==" (bo Eq) AssocNone]
           ]
           where
             spacef = ws *> notFollowedBy (choice . map reservedOp $ opNames)
-                     >> return C.tmapp
+                     >> C.tmapp
                      <?> "space application"
-            bo = C.tmbinop
+            bo o = C.tmbinop <*> return o
 
 tmtup :: Parser ParsedTerm
-tmtup = parens (C.tmtup <$> (term <* comma) <*> term)
+tmtup = parens (C.tmtup <*> (term <* comma) <*> term)
 
 tmsnd :: Parser ParsedTerm
-tmsnd = C.tmsnd <$> (reserved "snd" *> tmexpr)
+tmsnd = C.tmsnd <*> (reserved "snd" *> tmexpr)
 
 tmfst :: Parser ParsedTerm
-tmfst = C.tmfst <$> (reserved "fst" *> tmexpr)
+tmfst = C.tmfst <*> (reserved "fst" *> tmexpr)
 
 tminl :: Parser ParsedTerm
-tminl = C.tminl <$> (reserved "inl" *> tmexpr)
+tminl = C.tminl <*> (reserved "inl" *> tmexpr)
 
 tminr :: Parser ParsedTerm
-tminr = C.tminr <$> (reserved "inr" *> tmexpr)
+tminr = C.tminr <*> (reserved "inr" *> tmexpr)
 
 tmout :: Parser ParsedTerm
-tmout = C.tmout <$> (reserved "out" *> tmexpr)
+tmout = C.tmout <*> (reserved "out" *> tmexpr)
 
 tminto :: Parser ParsedTerm
-tminto = C.tminto <$> (reserved "into" *> tmexpr)
+tminto = C.tminto <*> (reserved "into" *> tmexpr)
 
 tmcase :: Parser ParsedTerm
 tmcase =
-  C.tmcase <$> (reserved "case" *> term <* reserved "of")
+  C.tmcase <*> (reserved "case" *> term <* reserved "of")
          <*> ((,) <$> (reservedOp "|" *> reserved "inl" *> identifier)
                   <*> (reservedOp "->" *> term))
          <*> ((,) <$> (reservedOp "|" *> reserved "inr" *> identifier)
@@ -76,24 +84,25 @@ tmcase =
 
 
 tmstable :: Parser ParsedTerm
-tmstable = C.tmstable <$> (reserved "stable" *> parens term)
+tmstable = C.tmstable <*> (reserved "stable" *> parens term)
 
 tmpromote :: Parser ParsedTerm
-tmpromote = C.tmpromote <$> (reserved "promote" *> parens term)
+tmpromote = C.tmpromote <*> (reserved "promote" *> parens term)
 
 tmdelay :: Parser ParsedTerm
-tmdelay = reserved "delay" *> parens (C.tmdelay <$> term <*> (comma *> term))
+tmdelay = reserved "delay" *> parens (C.tmdelay <*> term <*> (comma *> term))
 
 tmlam :: Parser ParsedTerm
 tmlam = do
   params <- symbol "\\" *> many1 identifier
   bd <- reservedOp "->" *> term
-  let lams = paramsToLams params
+  p <- getPosition
+  let lams = paramsToLams' p params
   return (lams bd)
 
 tmite :: Parser ParsedTerm
 tmite =
-  C.tmite <$> (reserved "if" *> term)
+  C.tmite <*> (reserved "if" *> term)
           <*> (reserved "then" *> term)
           <*> (reserved "else" *> term)
 
@@ -106,19 +115,20 @@ tmpattern = PBind  <$> identifier
         <|> (parens (PTup <$> (ws *> tmpattern) <*> (ws *> comma *> tmpattern))) <* ws
 
 tmlet :: Parser ParsedTerm
-tmlet = C.tmlet <$> (reserved "let" >> ws >> tmpattern)
+tmlet = C.tmlet <*> (reserved "let" >> ws >> tmpattern)
               <*> (ws >> reservedOp "=" >> ws >> term)
               <*> (ws >> reserved "in" >> ws >> term)
 
 tmcons :: Parser ParsedTerm
 tmcons = reserved "cons" *> parens
-              (C.tmcons <$> (ws *> term) <*> (comma *> term)) <* ws
+              (C.tmcons <*> (ws *> term) <*> (comma *> term)) <* ws
 
 var, int, bool :: Parser ParsedTerm
-var  = C.tmvar <$> identifier
-int  = C.tmlit . LInt . fromInteger <$> integer
-bool = C.tmlit . LBool <$>
-  (const True <$> reserved "True" <|> const False <$> reserved "False") <* ws
+var  = C.tmvar <*> identifier
+int = C.tmlit <*> (LInt . fromInteger <$> integer)
+bool = C.tmlit <*> (LBool <$> (true <|> false)) where
+  true = reserved "True" >> return True
+  false = reserved "False" >> return False
 
 
 parseParsedTerm :: String -> Either ParseError ParsedTerm

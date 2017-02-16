@@ -254,3 +254,6 @@ unitFunc = fmap (const ())
 
 paramsToLams :: [String] -> EvalTerm -> EvalTerm
 paramsToLams = foldl (\acc x y -> acc (TmLam () x y)) id
+
+paramsToLams' :: a -> [String] -> Term a -> Term a
+paramsToLams' b = foldl (\acc x y -> acc (TmLam b x y)) id
