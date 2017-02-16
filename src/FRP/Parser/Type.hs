@@ -4,15 +4,24 @@ module FRP.Parser.Type where
 import Text.Parsec
 import FRP.AST
 import FRP.Parser.Lang
+import Text.Parsec.Pos
 
-ty :: Parser Type
+ty :: Parser (Type SourcePos)
 ty =  buildExpressionParser tytable tyexpr
   <?> "type"
 
-tytable = [ [prefix "S"  TyStream, prefix "#" TyStable, prefix "@" TyLater]
-          , [binary "*"  TyProd AssocRight]
-          , [binary "+"  TySum  AssocRight]
-          , [binary "->" TyArr  AssocRight]
+withPos :: (SourcePos -> a) -> Parser a
+withPos fn = do
+  p <- getPosition
+  return (fn p)
+
+tytable = [ [ prefix' "S"  (withPos TyStream)
+            , prefix' "#" (withPos TyStable)
+            , prefix' "@" (withPos TyLater)
+            ]
+          , [binary' "*"  (withPos TyProd) AssocRight]
+          , [binary' "+"  (withPos TySum)  AssocRight]
+          , [binary' "->" (withPos TyArr)  AssocRight]
           ]
 
 tyexpr = parens ty
@@ -21,7 +30,7 @@ tyexpr = parens ty
      <|> tyalloc
      <|> typaram
 
-tynat = reserved "Nat" >> return TyNat
-tyalloc = reserved "alloc" >> return TyAlloc
-typaram = TyParam <$> identifier
+tynat = reserved "Nat" >> withPos TyNat
+tyalloc = reserved "alloc" >> withPos TyAlloc
+typaram = withPos TyParam <*> identifier
 

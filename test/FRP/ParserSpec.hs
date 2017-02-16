@@ -298,88 +298,88 @@ spec = do
 
   describe "type parsing" $ do
     it "parses Nat" $ do
-      parse P.ty "nat" "Nat" `shouldBe` Right TyNat
+      parse P.ty "nat" "Nat" `shouldParse` tynat
     it "parses alloc" $ do
-      parse P.ty "alloc" "alloc" `shouldBe` Right TyAlloc
+      parse P.ty "alloc" "alloc" `shouldParse` tyalloc
     it "parses streams" $ do
-      parse P.ty "stream of nats" "S Nat" `shouldBe`
-        Right (TyStream TyNat)
-      parse P.ty "stream of allocs" "S alloc" `shouldBe`
-        Right (TyStream TyAlloc)
-      parse P.ty "stream of params" "S a" `shouldBe`
-        Right (TyStream $ TyParam "a")
-      parse P.ty "stream of params" "S s" `shouldBe`
-        Right (TyStream $ TyParam "s")
-      parse P.ty "stream of params" "S Sample" `shouldBe`
-        Right (TyStream $ TyParam "Sample")
+      parse P.ty "stream of nats" "S Nat" `shouldParse`
+        (tystream tynat)
+      parse P.ty "stream of allocs" "S alloc" `shouldParse`
+        (tystream tyalloc)
+      parse P.ty "stream of params" "S a" `shouldParse`
+        (tystream $ typaram "a")
+      parse P.ty "stream of params" "S s" `shouldParse`
+        (tystream $ typaram "s")
+      parse P.ty "stream of params" "S Sample" `shouldParse`
+        (tystream $ typaram "Sample")
     it "parses products" $ do
-      parse P.ty "pair of nats" "Nat * Nat" `shouldBe`
-        Right (TyProd TyNat TyNat)
-      parse P.ty "pair of nat x alloc" "Nat * alloc" `shouldBe`
-        Right (TyProd TyNat TyAlloc)
-      parse P.ty "pair of params" "a * b" `shouldBe`
-        Right (TyProd (TyParam "a") (TyParam "b"))
-      parse P.ty "pair of streams of nats" "S Nat * S Nat" `shouldBe`
-        Right (TyProd (TyStream TyNat) (TyStream TyNat))
-      parse P.ty "nested pair" "Nat * Nat * Nat" `shouldBe`
-        Right (TyProd TyNat (TyProd TyNat TyNat))
+      parse P.ty "pair of nats" "Nat * Nat" `shouldParse`
+        (typrod tynat tynat)
+      parse P.ty "pair of nat x alloc" "Nat * alloc" `shouldParse`
+        (typrod tynat tyalloc)
+      parse P.ty "pair of params" "a * b" `shouldParse`
+        (typrod (typaram "a") (typaram "b"))
+      parse P.ty "pair of streams of nats" "S Nat * S Nat" `shouldParse`
+        (typrod (tystream tynat) (tystream tynat))
+      parse P.ty "nested pair" "Nat * Nat * Nat" `shouldParse`
+        (typrod tynat (typrod tynat tynat))
     it "parses sums" $ do
-      parse P.ty "sum of nats" "Nat + Nat" `shouldBe`
-        Right (TySum TyNat TyNat)
-      parse P.ty "sum of nat x alloc" "Nat + alloc" `shouldBe`
-        Right (TySum TyNat TyAlloc)
-      parse P.ty "sum of params" "a + b" `shouldBe`
-        Right (TySum (TyParam "a") (TyParam "b"))
-      parse P.ty "sum of streams of nats" "S Nat + S Nat" `shouldBe`
-        Right (TySum (TyStream TyNat) (TyStream TyNat))
-      parse P.ty "nested sum" "Nat + Nat + Nat" `shouldBe`
-        Right (TySum TyNat (TySum TyNat TyNat))
+      parse P.ty "sum of nats" "Nat + Nat" `shouldParse`
+        (tysum tynat tynat)
+      parse P.ty "sum of nat x alloc" "Nat + alloc" `shouldParse`
+        (tysum tynat tyalloc)
+      parse P.ty "sum of params" "a + b" `shouldParse`
+        (tysum (typaram "a") (typaram "b"))
+      parse P.ty "sum of streams of nats" "S Nat + S Nat" `shouldParse`
+        (tysum (tystream tynat) (tystream tynat))
+      parse P.ty "nested sum" "Nat + Nat + Nat" `shouldParse`
+        (tysum tynat (tysum tynat tynat))
     it "parses arrows" $ do
-      parse P.ty "arrow of nats" "Nat -> Nat" `shouldBe`
-        Right (TyArr TyNat TyNat)
-      parse P.ty "arrow of nat x alloc" "Nat -> alloc" `shouldBe`
-        Right (TyArr TyNat TyAlloc)
-      parse P.ty "arrow of params" "a -> b" `shouldBe`
-        Right (TyArr (TyParam "a") (TyParam "b"))
-      parse P.ty "arrow of streams of nats" "S Nat -> S Nat" `shouldBe`
-        Right (TyArr (TyStream TyNat) (TyStream TyNat))
-      parse P.ty "nested arrows" "Nat -> Nat -> Nat" `shouldBe`
-        Right (TyArr TyNat (TyArr TyNat TyNat))
+      parse P.ty "arrow of nats" "Nat -> Nat" `shouldParse`
+        (tynat |-> tynat)
+      parse P.ty "arrow of nat x alloc" "Nat -> alloc" `shouldParse`
+        (tynat |-> tyalloc)
+      parse P.ty "arrow of params" "a -> b" `shouldParse`
+        (typaram "a" |-> typaram "b")
+      parse P.ty "arrow of streams of nats" "S Nat -> S Nat" `shouldParse`
+        (tystream tynat |-> tystream tynat)
+      parse P.ty "nested arrows" "Nat -> Nat -> Nat" `shouldParse`
+        (tynat |-> tynat |-> tynat)
     it "parses later" $ do
-      parse P.ty "later Nat" "@Nat" `shouldBe`
-        Right (TyLater TyNat)
-      parse P.ty "later Alloc" "@alloc" `shouldBe`
-        Right (TyLater TyAlloc)
-      parse P.ty "later S Alloc" "@(S alloc)" `shouldBe`
-        Right (TyLater $ TyStream TyAlloc)
-      parse P.ty "later Nat -> Nat" "@(Nat -> Nat)" `shouldBe`
-        Right (TyLater $ TyArr TyNat TyNat)
-      parse P.ty "later Nat * Nat" "@(Nat * Nat)" `shouldBe`
-        Right (TyLater $ TyProd TyNat TyNat)
+      parse P.ty "later Nat" "@Nat" `shouldParse`
+        (tylater tynat)
+      parse P.ty "later Alloc" "@alloc" `shouldParse`
+        (tylater tyalloc)
+      parse P.ty "later S Alloc" "@(S alloc)" `shouldParse`
+        (tylater $ tystream tyalloc)
+      parse P.ty "later Nat -> Nat" "@(Nat -> Nat)" `shouldParse`
+        (tylater (tynat |-> tynat))
+      parse P.ty "later Nat * Nat" "@(Nat * Nat)" `shouldParse`
+        (tylater $ typrod tynat tynat)
     it "parses stable" $ do
-      parse P.ty "stable Nat" "#Nat" `shouldBe`
-        Right (TyStable TyNat)
-      parse P.ty "stable Alloc" "#alloc" `shouldBe`
-        Right (TyStable TyAlloc)
-      parse P.ty "stable S Alloc" "#(S alloc)" `shouldBe`
-        Right (TyStable $ TyStream TyAlloc)
-      parse P.ty "stable Nat -> Nat" "#(Nat -> Nat)" `shouldBe`
-        Right (TyStable $ TyArr TyNat TyNat)
-      parse P.ty "stable Nat * Nat" "#(Nat * Nat)" `shouldBe`
-        Right (TyStable $ TyProd TyNat TyNat)
+      parse P.ty "stable Nat" "#Nat" `shouldParse`
+        (tystable tynat)
+      parse P.ty "stable Alloc" "#alloc" `shouldParse`
+        (tystable tyalloc)
+      parse P.ty "stable S Alloc" "#(S alloc)" `shouldParse`
+        (tystable $ tystream tyalloc)
+      parse P.ty "stable Nat -> Nat" "#(Nat -> Nat)" `shouldParse`
+        (tystable (tynat |-> tynat))
+      parse P.ty "stable Nat * Nat" "#(Nat * Nat)" `shouldParse`
+        (tystable $ typrod tynat tynat)
     it "parses compund types" $ do
-      parse P.ty "c1" "S Nat -> #(S A) -> X" `shouldBe`
-        Right (TyStream TyNat `TyArr` TyStable (TyStream "A") `TyArr` "X")
-      parse P.ty "map" "S alloc -> #(A -> B) -> S A -> S B" `shouldBe`
-        Right (TyStream TyAlloc `TyArr` TyStable ("A" `TyArr` "B") `TyArr`
-               TyStream "A" `TyArr` TyStream "B")
-      parse P.ty "tails" "S alloc -> S A -> S (S A)" `shouldBe`
-        Right (TyStream TyAlloc `TyArr` TyStream "A" `TyArr` TyStream (TyStream "A"))
-      parse P.ty "unfold" "S alloc -> #(X -> A * @X) -> X -> S A" `shouldBe`
-        Right (TyStream TyAlloc `TyArr`
-               TyStable ("X" `TyArr` TyProd "A" (TyLater "X")) `TyArr`
-               "X" `TyArr`
-               TyStream "A"
+      parse P.ty "c1" "S Nat -> #(S A) -> X" `shouldParse`
+        (tystream tynat |-> tystable (tystream "A") |-> "X")
+      parse P.ty "map" "S alloc -> #(A -> B) -> S A -> S B" `shouldParse`
+        (tystream tyalloc |-> tystable ("A" |-> "B") |->
+               tystream "A" |-> tystream "B")
+      parse P.ty "tails" "S alloc -> S A -> S (S A)" `shouldParse`
+        (tystream tyalloc |-> tystream "A" |-> tystream (tystream "A"))
+      parse P.ty "unfold" "S alloc -> #(X -> A * @X) -> X -> S A" `shouldParse`
+        (tystream tyalloc |->
+               tystable ("X" |-> typrod "A" (tylater "X")) |->
+               "X" |->
+               tystream "A"
               )
   describe "parsing declarations" $ do
     it "should parse simple decls1" $ do
@@ -388,7 +388,7 @@ spec = do
                  foo = 5.
                 |]
       parse P.decl "decl1" (unpack tc1) `shouldParse`
-        (Decl (TyNat) "foo" 5)
+        (Decl (tynat) "foo" 5)
 
     it "should parse simple decls2" $ do
       let tc2 = [text|
@@ -396,7 +396,7 @@ spec = do
                  foo = \x -> x.
                 |]
       parse P.decl "decl2" (unpack tc2) `shouldParse`
-        (Decl (TyNat `TyArr` TyNat) "foo" (tmlam "x" "x"))
+        (Decl (tynat |-> tynat) "foo" (tmlam "x" "x"))
 
     it "should parse simple decls3" $ do
       let tc3 = [text|
@@ -407,7 +407,7 @@ spec = do
                             x - 1.
                 |]
       parse P.decl "decl3" (unpack tc3) `shouldParse`
-        (Decl (TyNat `TyArr` TyStream "a" `TyArr` "a") "foo"
+        (Decl (tynat |-> tystream "a" |-> "a") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     it "should parse simple decls4" $ do
@@ -419,7 +419,7 @@ spec = do
                             x - 1.
                 |]
       parse P.decl "decl4" (unpack tc4) `shouldParse`
-        (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
+        (Decl (tynat |-> tystream "foo" |-> "foo") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     it "should parse with param list" $ do
@@ -430,7 +430,7 @@ spec = do
                     x - 1.
                 |]
       parse P.decl "decl4" (unpack tc4) `shouldParse`
-        (Decl (TyNat `TyArr` TyStream "foo" `TyArr` "foo") "foo"
+        (Decl (tynat |-> tystream "foo" |-> "foo") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     describe "forall f in TestFunctions.frps. parse (ppshow f) = f" $ do
@@ -457,13 +457,13 @@ spec = do
       unitFunc r `shouldBe`
         Program
           { _main = Decl
-            { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
+            { _type = tyarr (tystream tyalloc) (tystream tynat)
             , _name = "main"
             , _body = tmlam "us" (tmapp (tmapp (tmvar "const") (tmvar "us")) (tmlit (LInt 10)))
             }
           , _decls =
             [ Decl
-                { _type = TyArr (TyStream TyAlloc) (TyArr TyNat (TyStream TyNat))
+                { _type = tyarr (tystream tyalloc) (tyarr tynat (tystream tynat))
                 , _name = "const"
                 , _body =
                     tmlam "us" (tmlam "n"
@@ -501,7 +501,7 @@ spec = do
       let Right r = parse P.prog "sum" $ unpack p
       let exp = Program
             { _main = Decl
-              { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
+              { _type = tyarr (tystream tyalloc) (tystream tynat)
               , _name = "main"
               , _body = tmlam "us"
                           (tmapp
@@ -511,7 +511,7 @@ spec = do
                              (tmlit (LInt 0)))
               }
             , _decls = [ Decl
-                         { _type = TyArr (TyStream TyAlloc) (TyStream TyNat)
+                         { _type = tyarr (tystream tyalloc) (tystream tynat)
                          , _name = "nats"
                          , _body = tmlam "us"
                                      (tmlam "n"
@@ -529,9 +529,9 @@ spec = do
                                                           (tmlit (LInt 1)))))))))
                          }
                        , Decl
-                         { _type = TyArr (TyStream TyAlloc)
-                                     (TyArr (TyStream TyNat)
-                                        (TyArr TyNat (TyStream TyNat)))
+                         { _type = tyarr (tystream tyalloc)
+                                     (tyarr (tystream tynat)
+                                        (tyarr tynat (tystream tynat)))
                          , _name = "sum_acc"
                          , _body = tmlam "us"
                                      (tmlam "ns"
@@ -557,8 +557,8 @@ spec = do
                                                              (tmvar "x")))))))))
                          }
                        , Decl
-                         { _type = TyArr (TyStream TyAlloc)
-                                     (TyArr (TyStream TyNat) (TyStream TyNat))
+                         { _type = tyarr (tystream tyalloc)
+                                     (tyarr (tystream tynat) (tystream tynat))
                          , _name = "sum"
                          , _body = tmlam "us"
                                      (tmlam "ns"

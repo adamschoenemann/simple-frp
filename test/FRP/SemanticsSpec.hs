@@ -105,7 +105,7 @@ spec = do
         -- debug $ show $ interpProgram prog
       it "works with nats" $ do
         let mainbd = "us" --> "nats" <| "us" <| 0
-        let mainfn = frp_main mainbd (TyStream TyNat)
+        let mainfn = frp_main mainbd (tystream tynat)
         let prog = Program mainfn [frp_nats]
         take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) [0..99]
       it "works with sum" $ do

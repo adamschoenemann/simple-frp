@@ -10,7 +10,7 @@ frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
 
 frp_nats :: Decl ()
 frp_nats = Decl ty name body where
-  ty   = TyStream TyAlloc `TyArr` TyStream TyNat
+  ty   = tystream tyalloc |-> tystream tynat
   name = "nats"
   body =
       "us" --> "n" -->
@@ -22,10 +22,10 @@ frp_nats = Decl ty name body where
 
 frp_sum_acc :: Decl ()
 frp_sum_acc = Decl ty name body where
-  ty = TyArr (TyStream TyAlloc)
-             (TyArr (TyStream TyNat)
-                    (TyArr TyNat
-                           (TyStream TyNat)
+  ty = tyarr (tystream tyalloc)
+             (tyarr (tystream tynat)
+                    (tyarr tynat
+                           (tystream tynat)
                     )
              )
   name = "sum_acc"
@@ -43,7 +43,7 @@ frp_sum_acc = Decl ty name body where
 frp_sum :: Decl ()
 frp_sum = Decl ty name body where
   name = "sum"
-  ty   = TyStream TyAlloc `TyArr` TyStream TyNat `TyArr` TyStream TyNat
+  ty   = tystream tyalloc |-> tystream tynat |-> tystream tynat
   body = "us" --> "ns" -->
          ("sum_acc" <| "us" <| "ns") <| 0
 
@@ -51,22 +51,22 @@ frp_sum = Decl ty name body where
 frp_tails :: Decl ()
 frp_tails = Decl ty name body where
   name = "tails"
-  ty   = TyStream TyAlloc `TyArr` TyStream "A" `TyArr` TyStream (TyStream "A")
+  ty   = tystream tyalloc |-> tystream "A" |-> tystream (tystream "A")
   body = "us" --> "xs" -->
          tmlet (consp "u" "us'") "us" $
          tmlet (consp "x" "xs'") "xs" $
          tmcons "xs" (tmdelay "u" ("tails" <| "us'" <| "xs'"))
   consp h t = PCons h (PDelay t)
 
-frp_main :: EvalTerm -> Type -> Decl ()
+frp_main :: EvalTerm -> Type () -> Decl ()
 frp_main bd retTy = Decl ty "main" bd where
-  ty = TyStream TyAlloc `TyArr` retTy
+  ty = tystream tyalloc |-> retTy
 
 
 frp_map :: Decl ()
 frp_map = Decl ty name body where
-  ty = TyStream TyAlloc `TyArr` TyStable ("A" `TyArr` "B") `TyArr`
-       TyStream "A" `TyArr` TyStream "B"
+  ty = tystream tyalloc |-> tystable ("A" |-> "B") |->
+       tystream "A" |-> tystream "B"
   name = "map"
   body =
     "us" --> "h" --> "xs" -->
@@ -78,10 +78,10 @@ frp_map = Decl ty name body where
 
 frp_unfold :: Decl ()
 frp_unfold = Decl ty name body where
-  ty = TyStream TyAlloc `TyArr`
-       TyStable ("X" `TyArr` ("A" `TyProd` TyLater "X")) `TyArr`
-       "X" `TyArr`
-       TyStream "A"
+  ty = tystream tyalloc |->
+       tystable ("X" |-> ("A" `typrod` tylater "X")) |->
+       "X" |->
+       tystream "A"
   name = "unfold"
   body =
     "us" --> "h" --> "x" -->
@@ -92,7 +92,7 @@ frp_unfold = Decl ty name body where
 
 frp_fib :: Decl ()
 frp_fib = Decl ty name body where
- ty = TyStream TyAlloc `TyArr` TyStream TyNat
+ ty = tystream tyalloc |-> tystream tynat
  name = "fib"
  body =
     "us" -->
@@ -106,11 +106,11 @@ frp_fib = Decl ty name body where
 
 frp_swap :: Decl ()
 frp_swap = Decl ty name body where
-  ty = TyStream TyAlloc `TyArr`
-       TyNat `TyArr`
-       TyStream "A" `TyArr`
-       TyStream "A" `TyArr`
-       TyStream "A"
+  ty = tystream tyalloc |->
+       tynat |->
+       tystream "A" |->
+       tystream "A" |->
+       tystream "A"
   name = "swap"
   body = "us" --> "n" --> "xs" --> "ys" -->
          tmite (tmbinop Eq "n" 0)

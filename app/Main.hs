@@ -17,7 +17,7 @@ const us n =
 -}
 frp_const :: Decl ()
 frp_const = Decl ty name body where
-  ty = TyArr (TyStream TyAlloc) (TyArr TyNat (TyStream TyNat))
+  ty = (tystream tyalloc) |-> (tynat |-> (tystream tynat))
   name = "const"
   body = tmlam "us" (tmlam "n" lamBody)
   lamBody = tmlet pat1 rhs1 (tmlet pat2 rhs2 concl) where
@@ -45,12 +45,7 @@ sum acc us ns acc =
 -}
 frp_sum_acc :: Decl ()
 frp_sum_acc = Decl ty name body where
-  ty = TyArr (TyStream TyAlloc)
-             (TyArr (TyStream TyNat)
-                    (TyArr TyNat
-                           (TyStream TyNat)
-                    )
-             )
+  ty = tystream tyalloc |-> tystream tynat |-> tynat |-> tystream tynat
   name = "sum_acc"
   body = tmlam "us" (tmlam "ns" (tmlam "acc" lamBody))
   lamBody = tmlet pat1 rhs1 (tmlet pat2 rhs2 (tmlet pat3 rhs3 concl))
@@ -68,7 +63,7 @@ frp_sum_acc = Decl ty name body where
 
 frp_const_10 :: Decl ()
 frp_const_10 = Decl ty name body where
-  ty = TyArr (TyStream TyAlloc) (TyStream TyNat)
+  ty = tystream tyalloc |-> tystream tynat
   name = "const_10"
   body = case frp_const of
     Decl _ty _nm body -> tmapp (unitFunc body) (tmlit (LInt 10))

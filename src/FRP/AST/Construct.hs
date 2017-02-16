@@ -92,3 +92,17 @@ infixl 9 <|
 
 (>.) :: EvalTerm -> EvalTerm -> EvalTerm
 (>.) = tmbinop Gt
+
+typaram = TyParam ()
+typrod = TyProd ()
+tysum = TySum ()
+tyarr = TyArr ()
+tylater = TyLater ()
+tystable = TyStable ()
+tystream = TyStream ()
+tyalloc = TyAlloc ()
+tynat = TyNat ()
+
+infixr 0 |->
+(|->) :: Type () -> Type () -> Type ()
+(|->) = TyArr ()

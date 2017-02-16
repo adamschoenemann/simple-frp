@@ -17,29 +17,29 @@ type Env = Map String (Either EvalTerm Value)
 
 infixr 9 `TyArr`
 
-data Type
-  = TyParam Name
-  | TyProd Type Type
-  | TySum Type Type
-  | TyArr Type Type
-  | TyLater Type
-  | TyStable Type
-  | TyStream Type
-  | TyAlloc
-  | TyNat
-  deriving (Show, Eq)
+data Type a
+  = TyParam a Name
+  | TyProd a (Type a) (Type a)
+  | TySum a (Type a) (Type a)
+  | TyArr a (Type a) (Type a)
+  | TyLater a (Type a)
+  | TyStable a (Type a)
+  | TyStream a (Type a)
+  | TyAlloc a
+  | TyNat a
+  deriving (Show, Eq, Functor)
 
-instance Pretty Type where
+instance Pretty (Type a) where
   ppr n type' = case type' of
-    TyParam name  -> text name
-    TyProd ty ty' -> parens (ppr (n+1) ty <+> text "*" <+> ppr (n+1) ty')
-    TySum ty ty'  -> parens (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
-    TyArr ty ty'  -> prns $ ppr n ty <+> text "->" <+> ppr n ty'
-    TyLater ty    -> prns $ text "@" <> ppr (n+1) ty
-    TyStable ty   -> prns $ text "#" <> ppr (n+1) ty
-    TyStream ty   -> prns $ text "S" <+> ppr (n+1) ty
-    TyAlloc       -> text "alloc"
-    TyNat         -> text "Nat"
+    TyParam _a name  -> text name
+    TyProd _a ty ty' -> parens (ppr (n+1) ty <+> text "*" <+> ppr (n+1) ty')
+    TySum _a ty ty'  -> parens (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
+    TyArr _a ty ty'  -> prns $ ppr n ty <+> text "->" <+> ppr n ty'
+    TyLater _a ty    -> prns $ text "@" <> ppr (n+1) ty
+    TyStable _a ty   -> prns $ text "#" <> ppr (n+1) ty
+    TyStream _a ty   -> prns $ text "S" <+> ppr (n+1) ty
+    TyAlloc _a       -> text "alloc"
+    TyNat _a         -> text "Nat"
     where
       prns = if (n > 0)
              then parens
@@ -84,8 +84,8 @@ instance Pretty (Map String (Either (Term a) Value)) where
 instance IsString (EvalTerm) where
   fromString x = TmVar () x
 
-instance IsString Type where
-  fromString x = TyParam x
+instance IsString (Type ()) where
+  fromString x = TyParam () x
 
 instance IsString Pattern where
   fromString x = PBind x
@@ -224,7 +224,7 @@ instance Pretty Lit where
     LBool b -> text $ show b
 
 data Decl a =
-  Decl { _type :: Type
+  Decl { _type :: Type a
        , _name :: Name
        , _body :: Term a
        }
