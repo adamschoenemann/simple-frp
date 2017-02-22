@@ -22,6 +22,7 @@ import           NeatInterpolation
 import           Text.Parsec         (ParseError, parse)
 
 import           Data.Either         (isRight)
+import           FRP.Generators
 import           FRP.TestFunctions   (frps)
 import           Test.QuickCheck
 
@@ -574,8 +575,8 @@ spec = do
             }
       unitFunc r `shouldBe` exp
 
-    it "should work with QuickCheck" $ property $
-      \x -> (read . show $ x) == (x :: Int)
+    it "should work with QuickCheck" $ property $ forAll genSimpleTerm $
+      \p -> parse P.term (ppshow p) (ppshow p) `shouldParse` p
 
 
 
