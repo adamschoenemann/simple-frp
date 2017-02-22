@@ -1,27 +1,30 @@
-{-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 
 module FRP.ParserSpec where
 
-import Test.Hspec
-import FRP.AST
-import FRP.AST.Construct
-import qualified FRP.Parser.Term as P
-import qualified FRP.Parser.Type as P
-import qualified FRP.Parser.Decl as P
-import qualified FRP.Parser.Program as P
-import FRP.Pretty (ppputStrLn, ppshow)
+import           FRP.AST
+import           FRP.AST.Construct
+import qualified FRP.Parser.Decl     as P
+import qualified FRP.Parser.Program  as P
+import qualified FRP.Parser.Term     as P
+import qualified FRP.Parser.Type     as P
+import           FRP.Pretty          (ppputStrLn, ppshow)
+import           Test.Hspec
 
-import Control.Monad.State
-import Debug.Trace
-import qualified Data.Map.Strict as M
-import Data.List (unfoldr)
+import           Control.Monad.State
+import           Data.List           (unfoldr)
+import qualified Data.Map.Strict     as M
+import           Debug.Trace
 
-import Text.Parsec (parse, ParseError)
-import NeatInterpolation
-import Data.Text (Text, pack, unpack)
+import           Data.Text           (Text, pack, unpack)
+import           NeatInterpolation
+import           Text.Parsec         (ParseError, parse)
 
-import Data.Either (isRight)
-import FRP.TestFunctions (frps)
+import           Data.Either         (isRight)
+import           FRP.TestFunctions   (frps)
+import           Test.QuickCheck
+
 
 
 frp_nats =
@@ -179,21 +182,21 @@ spec = do
 
     it "parses if-then-else" $ do
       parse P.tmite "ite" "if x == 10 then True else False" `shouldParse`
-        (tmite ("x" === 10) (tmbool True) (tmbool False))
+        (tmite ("x" `eq` 10) (tmbool True) (tmbool False))
 
       parse P.term "ite" "if x == 10 then True else False" `shouldParse`
-        (tmite ("x" === 10) (tmbool True) (tmbool False))
+        (tmite ("x" `eq` 10) (tmbool True) (tmbool False))
 
       parse P.term "ite" "if x > 10 then x + 10 else x == 20" `shouldParse`
         (tmite ("x" >. 10)
                      ("x" + 10)
-                     ("x" === 20)
+                     ("x" `eq` 20)
               )
 
       parse P.term "ite" "42 + if x > 10 then x + 10 else x == 20" `shouldParse`
         (42 + tmite ("x" >. 10)
                      ("x" + 10)
-                     ("x" === 20)
+                     ("x" `eq` 20)
               )
 
     it "parses case exprs" $ do
@@ -255,7 +258,7 @@ spec = do
 
       let frp_swap_ast =
             "us" --> "n" --> "xs" --> "ys" -->
-              tmite ("n" === 0) "ys" $
+              tmite ("n" `eq` 0) "ys" $
                 tmlet (PCons "u" (PDelay "us'")) "us" $
                 tmlet (PCons "x" (PDelay "xs'")) "xs" $
                 tmlet (PCons "y" (PDelay "ys'")) "ys" $
@@ -570,6 +573,9 @@ spec = do
                        ]
             }
       unitFunc r `shouldBe` exp
+
+    it "should work with QuickCheck" $ property $
+      \x -> (read . show $ x) == (x :: Int)
 
 
 

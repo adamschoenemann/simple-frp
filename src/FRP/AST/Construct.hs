@@ -1,7 +1,7 @@
 
 module FRP.AST.Construct where
 
-import FRP.AST
+import           FRP.AST
 
 tmfst :: EvalTerm -> EvalTerm
 tmfst = TmFst ()
@@ -81,8 +81,8 @@ infixl 9 <|
 (<|) :: EvalTerm -> EvalTerm -> EvalTerm
 (<|) = tmapp
 
-(===) :: EvalTerm -> EvalTerm -> EvalTerm
-(===) = tmbinop Eq
+eq :: EvalTerm -> EvalTerm -> EvalTerm
+eq = tmbinop Eq
 
 (<==) :: EvalTerm -> EvalTerm -> EvalTerm
 (<==) = tmbinop Leq

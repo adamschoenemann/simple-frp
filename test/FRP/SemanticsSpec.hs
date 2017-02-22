@@ -1,19 +1,19 @@
 
 module FRP.SemanticsSpec where
 
-import Test.Hspec
-import FRP.AST
-import FRP.Semantics
-import FRP.Pretty
+import           FRP.AST
+import           FRP.AST.Construct
+import           FRP.Pretty
+import           FRP.Semantics
+import           Test.Hspec
 
-import Control.Monad.State
-import Debug.Trace
-import qualified Data.Map.Strict as M
-import Data.List (unfoldr)
+import           Control.Monad.State
+import           Data.List           (unfoldr)
+import qualified Data.Map.Strict     as M
+import           Debug.Trace
 
-import FRP.TestFunctions
-import FRP.TestPrograms
-import FRP.AST.Construct
+import           FRP.TestFunctions
+import           FRP.TestPrograms
 
 main :: IO ()
 main = hspec spec
@@ -63,7 +63,7 @@ spec = do
         v `shouldBe` (VLit (LInt 10))
         -- ppdebug v
       it "works for factorial" $ do
-        let fact = tmfix "f" ("n" --> tmite ("n" === 1) 1 ("n" * ("f" <| ("n" - 1))))
+        let fact = tmfix "f" ("n" --> tmite ("n" `eq` 1) 1 ("n" * ("f" <| ("n" - 1))))
         -- ppdebug fact
         let v = evalExpr M.empty (fact <| 4)
         v `shouldBe` (VLit (LInt 24))
@@ -115,17 +115,17 @@ spec = do
         ppdebug frp_sum_acc
         debug ""
         let (v, s) = evalProgram prog
-        debug "===== run 1 ======="
+        debug "======== run 1 ======="
         ppdebug v
         ppdebug s
         let VCons _ (VPntr l) = v
         let (v', s') = runExpr (tick s) M.empty (tmpntrderef l)
-        debug "===== run 2 ======="
+        debug "======== run 2 ======="
         ppdebug v'
         ppdebug s'
         let VCons _ (VPntr l') = v'
         let (v'', s'') = runExpr (tick s') M.empty (tmpntrderef l')
-        debug "===== run 3 ======="
+        debug "======== run 3 ======="
         ppdebug v''
         ppdebug s''
         debug . show $ take 500 (interpProgram prog)

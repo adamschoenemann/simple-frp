@@ -16,8 +16,9 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     FRP, FRP.AST, FRP.Pretty, FRP.Semantics, FRP.Parser.Lang
-                     , FRP.Parser.Term, FRP.Parser.Type, FRP.Parser.Decl, Utils
-                     , FRP.AST.Construct
+                     , FRP.Parser.Term, FRP.Parser.Program, FRP.Parser.Type
+                     , FRP.Parser.Decl, FRP.AST.Construct, Utils
+                     , FRP.Parser.Construct
   build-depends:       base >= 4.7 && < 5, pretty, containers, mtl, parsec
                      , neat-interpolation, template-haskell, text
   ghc-options:         -Wincomplete-patterns
@@ -41,7 +42,7 @@ test-suite simple-frp-test
   other-modules:       FRP.SemanticsSpec, FRP.ParserSpec, FRP.TestFunctions
                      , FRP.TestPrograms
   build-depends:       base , simple-frp, hspec, mtl, containers, parsec
-                     , neat-interpolation, template-haskell, text
+                     , neat-interpolation, template-haskell, text, QuickCheck
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
                        -fprof-auto -fprof-cafs
   default-language:    Haskell2010

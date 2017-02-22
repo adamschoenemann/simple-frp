@@ -12,7 +12,6 @@ import           FRP.AST
 import           FRP.AST.Construct
 import           FRP.Pretty
 
-
 data Qualifier
   = QNow
   | QStable
@@ -37,7 +36,6 @@ instance Pretty StoreVal where
 instance Pretty (Map Label StoreVal) where
   ppr n m = vcat . M.elems $ M.mapWithKey mapper m where
     mapper k v = char '{' <> int k <+> ppr n v <> char '}'
-
 
 data EvalState = EvalState
   { _store    :: Store
@@ -77,7 +75,7 @@ lookupPntr lbl = do
   store <- getStore
   case M.lookup lbl store of
     Nothing -> error $ "pntr " ++ show lbl ++ " not in store " ++ show store
-    Just x -> return x
+    Just x  -> return x
 
 useVar :: String -> EvalM Value
 useVar x = do
@@ -188,9 +186,6 @@ eval term = case term of
     return $ M.singleton x (Left $ tmpntrderef l)
   matchPat (PStable pat) (VStable v) =
     matchPat pat v
-  -- matchPat (PCons (PBind x) (PDelay (PBind y))) (VCons v (VPntr l)) = do
-  --   tl <- eval (TmPntrDeref l)
-  --   return $ M.fromList [(x,v), (y, tl)]
   matchPat (PCons hdp tlp) (VCons hd tl) =
     M.union <$> matchPat hdp hd <*> matchPat tlp tl
   matchPat (PTup p1 p2) (VTup v1 v2) =
@@ -202,12 +197,12 @@ eval term = case term of
           ++ "\nenv: " ++ (ppshow env) ++ "\nstore: " ++ ppshow store
 
   evalBinOp op el er = case op of
-      Add  -> intOp (+)
-      Sub  -> intOp (-)
-      Mult -> intOp (*)
-      Div  -> intOp div
-      And  -> boolOp (&&)
-      Or   -> boolOp (||)
+      Add  -> intOp    (+)
+      Sub  -> intOp    (-)
+      Mult -> intOp    (*)
+      Div  -> intOp    div
+      And  -> boolOp   (&&)
+      Or   -> boolOp   (||)
       Leq  -> intCmpOp (<=)
       Lt   -> intCmpOp (<)
       Geq  -> intCmpOp (>=)
@@ -215,16 +210,16 @@ eval term = case term of
       Eq   -> eqOp
       where
         intOp fn = do
-          VLit (LInt x) <- eval el
-          VLit (LInt y) <- eval er
+          VLit (LInt x)  <- eval el
+          VLit (LInt y)  <- eval er
           return $ VLit (LInt $ fn x y)
         boolOp fn = do
           VLit (LBool x) <- eval el
           VLit (LBool y) <- eval er
           return $ VLit (LBool $ fn x y)
         intCmpOp fn = do
-          VLit (LInt x) <- eval el
-          VLit (LInt y) <- eval er
+          VLit (LInt x)  <- eval el
+          VLit (LInt y)  <- eval er
           return $ VLit (LBool $ fn x y)
         eqOp = do
           VLit x <- eval el
@@ -238,7 +233,6 @@ tick st
   | otherwise = M.foldlWithKey' tock st (_store st) where
       tock acc k (SVLater e env) =
           let (v, st') =
-                  -- trace ("eval " ++ show k ++ "," ++ ppshow e ++ ", env: " ++ ppshow env ++ " in " ++ show acc ++ "\n") $
                   runExpr acc env e
               s = _store st'
           in  st' { _store  = M.insert k (SVNow v) s }
@@ -260,10 +254,13 @@ runProgram (Program main decls) = keepRunning initialState startMain
       in case p of
         VCons v (VPntr l) -> VCons (deepRunning s'' v) (keepRunning s'' (tmpntrderef l))
         _                 -> error $ ppshow p ++ " not expected"
+
     deepRunning s = \case
       VCons x (VPntr l) -> keepRunning s (tmpntrderef l)
       v                 -> v
-    globals    = globalEnv decls
+
+    globals   = globalEnv decls
+
     startMain = case main of
       Decl _ty _nm body -> mainEvalTerm $ unitFunc body
 
@@ -277,5 +274,6 @@ toHaskList = \case
 
 mainEvalTerm body = tmapp body (tmfix "xs" $ tmcons tmalloc (tmdelay tmalloc (tmvar "xs")))
 
-globalEnv decls = foldl go M.empty decls where
-  go env (Decl t n b) = M.insert n (Right $ evalExpr env $ unitFunc b) env
+globalEnv decls = foldl go M.empty decls
+  where
+    go env (Decl t n b) = M.insert n (Right $ evalExpr env $ unitFunc b) env
