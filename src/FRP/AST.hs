@@ -1,14 +1,17 @@
-{-# LANGUAGE FlexibleInstances, ExistentialQuantification, StandaloneDeriving
-           , DeriveFunctor, ScopedTypeVariables #-}
+{-# LANGUAGE DeriveFunctor             #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE StandaloneDeriving        #-}
 
 module FRP.AST where
 
 
-import Data.Map.Strict (Map)
+import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 
-import FRP.Pretty
-import Data.String (IsString(..))
+import           Data.String     (IsString (..))
+import           FRP.Pretty
 
 type Name = String
 type Label = Int
@@ -73,7 +76,7 @@ data Term a
 
 
 instance Pretty (Either (Term a) Value) where
-  ppr n (Left t) = ppr n t
+  ppr n (Left t)  = ppr n t
   ppr n (Right v) = ppr n v
 
 instance Pretty (Map String (Either (Term a) Value)) where
@@ -132,7 +135,7 @@ instance Num (EvalTerm) where
   x + y = TmBinOp () Add x y
   x * y = TmBinOp () Mult x y
   x - y = TmBinOp () Sub x y
-  abs x = undefined
+  abs _x = undefined
   signum = undefined
 
 data Value
@@ -220,7 +223,7 @@ data Lit
 
 instance Pretty Lit where
   ppr _ lit = case lit of
-    LInt  i -> int i
+    LInt  i -> if (i >= 0) then int i else parens (int i)
     LBool b -> text $ show b
 
 data Decl a =

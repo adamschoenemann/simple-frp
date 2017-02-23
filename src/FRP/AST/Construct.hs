@@ -93,6 +93,9 @@ eq = tmbinop Eq
 (>.) :: EvalTerm -> EvalTerm -> EvalTerm
 (>.) = tmbinop Gt
 
+(<.) :: EvalTerm -> EvalTerm -> EvalTerm
+(<.) = tmbinop Lt
+
 typaram = TyParam ()
 typrod = TyProd ()
 tysum = TySum ()

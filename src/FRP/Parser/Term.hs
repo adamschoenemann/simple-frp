@@ -3,12 +3,12 @@ module FRP.Parser.Term (
   , ParsedTerm
 ) where
 
-import Text.Parsec
-import Text.Parsec.Pos
-import FRP.AST
+import           FRP.AST
+import           FRP.Parser.Construct (ParsedTerm)
 import qualified FRP.Parser.Construct as C
-import FRP.Parser.Construct (ParsedTerm)
-import FRP.Parser.Lang
+import           FRP.Parser.Lang
+import           Text.Parsec
+import           Text.Parsec.Pos
 
 test :: Parser (Term SourcePos)
 test = (TmVar <$> getPosition) <*> identifier
@@ -40,17 +40,26 @@ tmexpr = tmcons
      <?> "simple expression"
 
 tmtable   = [ [Infix spacef AssocLeft]
-          , [binary' "*" (bo Mult) AssocLeft, binary' "/" (bo Div) AssocLeft ]
-          , [binary' "+" (bo Add)  AssocLeft, binary' "-" (bo Sub) AssocLeft ]
-          , [ binary' "<" (bo Lt) AssocNone, binary' "<=" (bo Leq) AssocNone
-            , binary' ">" (bo Gt) AssocNone, binary' ">=" (bo Geq) AssocNone
+            , [prefix "-" (negation)]
+            , [binary' "*" (bo Mult) AssocLeft, binary' "/" (bo Div) AssocLeft ]
+            , [binary' "+" (bo Add)  AssocLeft, binary' "-" (bo Sub) AssocLeft ]
+            , [ binary' "<" (bo Lt) AssocNone, binary' "<=" (bo Leq) AssocNone
+              , binary' ">" (bo Gt) AssocNone, binary' ">=" (bo Geq) AssocNone
+              ]
+            , [binary' "==" (bo Eq) AssocNone]
             ]
-          , [binary' "==" (bo Eq) AssocNone]
-          ]
           where
             spacef = ws *> notFollowedBy (choice . map reservedOp $ opNames)
                      >> C.tmapp
                      <?> "space application"
+            negation p =
+              let TmLit pos (LInt x) = p
+              in TmLit pos (LInt (negate x))
+
+            negation' = C.tmbinop <*> return Sub <*> one
+            one = do
+              pos <- getPosition
+              return $ TmLit pos (LInt 1)
             bo o = C.tmbinop <*> return o
 
 tmtup :: Parser ParsedTerm
@@ -125,7 +134,7 @@ tmcons = reserved "cons" *> parens
 
 var, int, bool :: Parser ParsedTerm
 var  = C.tmvar <*> identifier
-int = C.tmlit <*> (LInt . fromInteger <$> integer)
+int = C.tmlit <*> (LInt . fromInteger <$> natural)
 bool = C.tmlit <*> (LBool <$> (true <|> false)) where
   true = reserved "True" >> return True
   false = reserved "False" >> return False

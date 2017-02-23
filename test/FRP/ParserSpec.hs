@@ -300,6 +300,10 @@ spec = do
 
       parse P.term "frp_bind" (unpack frp_bind) `shouldParse` (frp_bind_ast)
 
+    it "parses negative numbers" $ do
+      parse P.term "neg" "-(10)" `shouldParse` (tmlit (LInt (-10)))
+      parse P.term "neg" "10 * -(10)" `shouldParse` (10 * (tmlit (LInt (-10))))
+
   describe "type parsing" $ do
     it "parses Nat" $ do
       parse P.ty "nat" "Nat" `shouldParse` tynat
@@ -457,7 +461,7 @@ spec = do
               main us = const us 10.
               |]
       let Right r = parse P.prog "const" $ unpack p
-      putStrLn . show $ r
+      -- putStrLn . show $ r
       unitFunc r `shouldBe`
         Program
           { _main = Decl
@@ -575,9 +579,19 @@ spec = do
             }
       unitFunc r `shouldBe` exp
 
-    it "should work with QuickCheck" $ property $ forAll genSimpleTerm $
+    it "should work with QuickCheck (1)" $ property $ forAll (genOps genSimpleTerm 10) $
       \p -> parse P.term (ppshow p) (ppshow p) `shouldParse` p
 
+    it "should work with QuickCheck (2)" $ property $ forAll (genLam (genOps genSimpleTerm 5) 10) $
+      \p -> parse P.term (ppshow p) (ppshow p) `shouldParse` p
+
+    -- it "should work with QuickCheck (3)" $ do
+    --   xs <- sample' (genApp (genOps genSimpleTerm 1) 1)
+    --   let fn e = let Right r = parse P.term "" (ppshow e) in replicate 20 '=' ++ "\n" ++ ppshow e ++ "\n\n" ++ ppshow (unitFunc r) ++ "\n"
+    --   mapM_ (putStrLn . fn) xs
+
+    it "shouldwork with QuickCheck (4)" $ property $ forAll (genApp (genOps genSimpleTerm 1) 1) $
+      \p -> parse P.term (ppshow p) (ppshow p) `shouldParse` p
 
 
 
