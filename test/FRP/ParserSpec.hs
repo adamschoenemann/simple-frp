@@ -590,7 +590,10 @@ spec = do
     --   let fn e = let Right r = parse P.term "" (ppshow e) in replicate 20 '=' ++ "\n" ++ ppshow e ++ "\n\n" ++ ppshow (unitFunc r) ++ "\n"
     --   mapM_ (putStrLn . fn) xs
 
-    it "shouldwork with QuickCheck (4)" $ property $ forAll (genApp (genOps genSimpleTerm 1) 1) $
+    it "should work with QuickCheck (3)" $ property $ forAll (genApp (genOps genSimpleTerm 1) 1) $
+      \p -> parse P.term (ppshow p) (ppshow p) `shouldParse` p
+
+    it "should work with QuickCheck (4)" $ property $ forAll (genLet (genOps genSimpleTerm 1) 1) $
       \p -> parse P.term (ppshow p) (ppshow p) `shouldParse` p
 
 

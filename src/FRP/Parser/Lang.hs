@@ -52,6 +52,7 @@ languageDef = Tok.LanguageDef
                           , "out"
                           , "into"
                           , "Nat"
+                          , "Bool"
                           , "S"
                           , "alloc"
                           ]

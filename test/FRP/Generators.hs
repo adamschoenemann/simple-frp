@@ -81,9 +81,5 @@ genLet termGen = go where
       then termGen
       else let m1 = (div n (m + 1))
            in tmlet <$> genPat m1 <*> termGen <*> go m1
-        -- pat <- genPat (div n (m + 1))
-        -- rhs <- termGen
-        -- next <- go (div n (m + 1))
-        -- return $ tmlet pat rhs next
 
 

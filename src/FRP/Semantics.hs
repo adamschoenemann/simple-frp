@@ -12,11 +12,6 @@ import           FRP.AST
 import           FRP.AST.Construct
 import           FRP.Pretty
 
-data Qualifier
-  = QNow
-  | QStable
-  | QLater
-  deriving (Show)
 
 data StoreVal
   = SVNow Value

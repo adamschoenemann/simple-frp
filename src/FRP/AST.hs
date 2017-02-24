@@ -18,6 +18,12 @@ type Label = Int
 type EvalTerm = Term ()
 type Env = Map String (Either EvalTerm Value)
 
+data Qualifier
+  = QNow
+  | QStable
+  | QLater
+  deriving (Show, Eq)
+
 infixr 9 `TyArr`
 
 data Type a
@@ -30,6 +36,7 @@ data Type a
   | TyStream a (Type a)
   | TyAlloc  a
   | TyNat    a
+  | TyBool   a
   deriving (Show, Eq, Functor)
 
 instance Pretty (Type a) where
@@ -43,6 +50,7 @@ instance Pretty (Type a) where
     TyStream _a ty     -> prns $ text "S" <+> ppr (n+1) ty
     TyAlloc  _a        -> text "alloc"
     TyNat    _a        -> text "Nat"
+    TyBool   _a        -> text "Bool"
     where
       prns = if (n > 0)
              then parens
