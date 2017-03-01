@@ -111,7 +111,7 @@ eval :: EvalTerm -> EvalM Value
 eval term = case term of
   TmVar _a x -> useVar x
   TmLit _a x -> return $ VLit x
-  TmLam _a x e -> VClosure x e <$> ask
+  TmLam _a x _ty e -> VClosure x e <$> ask
   TmApp _a e1 e2 -> do
     e3 <- eval e1
     case e3 of

@@ -5,6 +5,7 @@ module FRP.TypeChecker where
 
 import           Control.Monad.Except
 import           Control.Monad.State
+import           FRP.Pretty
 import           Data.Map                   (Map)
 import qualified Data.Map                   as M
 import           FRP.AST
@@ -16,12 +17,28 @@ data TypeErr t
   = CannotUnify (Ty t) (Ty t)
   | OccursCheckFailed Name (Ty t)
   | UnknownIdentifier Name
+  | NotSyntax (Term t)
+  | TypeAnnRequired (Term t)
   | NotStable (Ty t)
   deriving (Show)
+
+instance Pretty (TypeErr t) where
+  ppr n = \case
+    CannotUnify (ty1,q1) (ty2,q2)     ->
+      text "Cannot unify" <+> parens (ppr 0 (unitFunc ty1)) <+> text (show q1) <+> text "with"
+                          <+> parens (ppr 0 (unitFunc ty2)) <+> text (show q2)
+
+    OccursCheckFailed nm ty -> undefined
+    UnknownIdentifier nm    -> undefined
+    NotSyntax trm           -> undefined
+    TypeAnnRequired trm     -> undefined
+    NotStable ty            -> undefined
+
 
 newtype CheckM t a = CheckM (ExceptT (TypeErr t) (State [Name]) a)
   deriving ( Functor, Applicative, Monad, MonadState [Name]
            , MonadError (TypeErr t))
+
 
 freshName :: CheckM t Name
 freshName = do
@@ -85,9 +102,12 @@ checkTerm ctx = \case
     if (unitFunc c1 /= unitFunc c2)
       then throwError (CannotUnify (c1, QNow) (c2, QNow))
       else return (c1, QNow)
-  TmLam a nm trm         -> do
-    anm <- freshName
-    checkTerm (extendCtx nm (TyParam a anm, QNow) ctx) trm
+  tm@(TmLam a nm mty trm) ->
+    case mty of
+      Nothing -> throwError (TypeAnnRequired tm)
+      Just ty -> do
+        (bdty, QNow) <- checkTerm (extendCtx nm (ty, QNow) ctx) trm
+        return (TyArr a ty bdty, QNow)
   TmFix a b trm          -> undefined
   TmVar a v              -> do
     (vt, q) <- getVar ctx v
@@ -102,8 +122,13 @@ checkTerm ctx = \case
       else throwError (CannotUnify (t2, QNow) (at, QNow))
   TmCons a hd tl         -> do
     (ht, QNow) <- checkTerm ctx hd
-    (TyLater _ (TyStream tla tlt), QNow) <- checkTerm ctx tl
-    return (TyStream a tlt, QNow)
+    tlty <- checkTerm ctx tl
+    case tlty of
+      (TyLater _ (TyStream tla tlt), QNow) -> return (TyStream a tlt, QNow)
+      _ -> throwError (CannotUnify
+                        (TyLater a (TyStream a ht), QNow)
+                        tlty
+                      )
   TmDelay a alloc trm    -> do
     (t, QLater) <- checkTerm ctx trm
     (TyAlloc _, QNow) <- checkTerm ctx alloc
@@ -123,13 +148,41 @@ checkTerm ctx = \case
   TmLit a l              -> case l of
     LInt  _ -> return (TyNat a, QNow)
     LBool _ -> return (TyBool a, QNow)
-  TmBinOp a op l r       -> undefined
-  TmITE a b trmt trmf    -> undefined
-  TmPntr a pntr          -> undefined
-  TmPntrDeref a pntr     -> undefined
-  TmAlloc a              -> undefined
-  TmOut a trm            -> undefined
-  TmInto a trm           -> undefined
+  TmBinOp a op l r       -> do
+    let (retty, lty, rty) = binOpTy a op
+    (lt, QNow) <- checkTerm ctx l
+    (rt, QNow) <- checkTerm ctx r
+    if unitFunc lt /= unitFunc lty
+      then throwError (CannotUnify (lt, QNow) (lty, QNow))
+    else if unitFunc rt /= unitFunc rty
+      then throwError (CannotUnify (rt, QNow) (rty, QNow))
+    else return (retty, QNow)
+  TmITE a b trmt trmf    -> do
+    (TyBool _, qb) <- checkTerm ctx b
+    (tt, qt) <- checkTerm ctx trmt
+    (ft, qf) <- checkTerm ctx trmf
+    if unitFunc tt == unitFunc ft
+      then return (tt, qt)
+      else throwError (CannotUnify (tt, qt) (ft, qf))
+  tm@(TmPntr a p)        -> throwError (NotSyntax tm)
+  tm@(TmPntrDeref a p)   -> throwError (NotSyntax tm)
+  TmAlloc a              -> return (TyAlloc a, QNow)
+  TmOut a trm            -> error "type-checkign for TmOut not implemented"
+  TmInto a trm           -> error "type-checkign for TmInto not implemented"
+  where
+    binOpTy :: a -> BinOp -> (Type a, Type a, Type a)
+    binOpTy a = \case
+      Add  -> (TyNat a, TyNat a, TyNat a)
+      Sub  -> (TyNat a, TyNat a, TyNat a)
+      Mult -> (TyNat a, TyNat a, TyNat a)
+      Div  -> (TyNat a, TyNat a, TyNat a)
+      And  -> (TyBool a, TyBool a, TyBool a)
+      Or   -> (TyBool a, TyBool a, TyBool a)
+      Leq  -> (TyBool a, TyNat a, TyNat a)
+      Lt   -> (TyBool a, TyNat a, TyNat a)
+      Geq  -> (TyBool a, TyNat a, TyNat a)
+      Gt   -> (TyBool a, TyNat a, TyNat a)
+      Eq   -> (TyBool a, TyNat a, TyNat a) -- this should be parametric
 
 checkPtn :: Context t -> Pattern -> Ty t -> CheckM t (Context t)
 checkPtn ctx = go where

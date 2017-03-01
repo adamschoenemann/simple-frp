@@ -13,7 +13,7 @@ decl = do
   nam <- identifier
   typ <- reservedOp ":" *> ty
   _   <- string nam <* ws
-  params <- many identifier <* ws <* reservedOp "="
+  params <- map (\x -> (x, Nothing)) <$> many identifier <* ws <* reservedOp "="
   bod <- term <* char '.' <* ws
   p <- getPosition
   let body = paramsToLams' p params bod

@@ -7,6 +7,7 @@ import           FRP.AST
 import           FRP.Parser.Construct (ParsedTerm)
 import qualified FRP.Parser.Construct as C
 import           FRP.Parser.Lang
+import           FRP.Parser.Type
 import           Text.Parsec
 import           Text.Parsec.Pos
 
@@ -103,11 +104,14 @@ tmdelay = reserved "delay" *> parens (C.tmdelay <*> term <*> (comma *> term))
 
 tmlam :: Parser ParsedTerm
 tmlam = do
-  params <- symbol "\\" *> many1 identifier
+  params <- symbol "\\" *> many1 lamParam
   bd <- reservedOp "->" *> term
   p <- getPosition
   let lams = paramsToLams' p params
   return (lams bd)
+  where
+    lamParam = (\x -> (x,Nothing)) <$> identifier
+           <|> parens ((,) <$> identifier <*> (optionMaybe (reservedOp ":" *> ty)))
 
 tmite :: Parser ParsedTerm
 tmite =

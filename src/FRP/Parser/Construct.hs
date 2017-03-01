@@ -26,7 +26,7 @@ tminr = TmInr <$> getPosition
 tmcase :: Parser (ParsedTerm -> (Name, ParsedTerm) -> (Name, ParsedTerm) -> ParsedTerm)
 tmcase = TmCase <$> getPosition
 
-tmlam :: Parser (Name -> ParsedTerm -> ParsedTerm)
+tmlam :: Parser (Name -> (Maybe (Type SourcePos)) -> ParsedTerm -> ParsedTerm)
 tmlam = TmLam <$> getPosition
 
 tmvar :: Parser (Name -> ParsedTerm)

@@ -26,7 +26,7 @@ tytable = [ [ prefix' "S"  (withPos TyStream)
 
 tyexpr = parens ty
      <|> tynat
-     -- <|> tybool
+     <|> tybool
      <|> tyalloc
      <|> typaram
 

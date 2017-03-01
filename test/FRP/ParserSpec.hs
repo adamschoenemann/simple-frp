@@ -97,8 +97,6 @@ frp_bind =
                  into (inr (delay (u, bind us' stable(f) e')))
   |]
 
-tmbool = tmlit . LBool
-
 main :: IO ()
 main = hspec spec
 
@@ -121,6 +119,19 @@ spec = do
 
       parse P.term "lam1" "\\x y z -> y" `shouldParse`
         ("x" --> "y" --> "z" --> "y")
+
+    it "should parse lambdas with types" $ do
+      parse P.term "lamty" "\\(x:Nat) -> x" `shouldParse`
+        tmlamty "x" (TyNat ()) "x"
+      parse P.term "lamty" "\\(x:Nat) -> \\(y:Bool) -> x" `shouldParse`
+        tmlamty "x" (TyNat ()) (tmlamty "y" (TyBool ()) "x")
+
+      parse P.term "lamty" "\\(x:Nat) (y:Bool) -> x" `shouldParse`
+        tmlamty "x" (TyNat ()) (tmlamty "y" (TyBool ()) "x")
+
+      parse P.term "lamty" "\\(x:Nat -> S Bool) (y : Nat * Bool) -> x" `shouldParse`
+        tmlamty "x" (TyNat () |-> TyStream () $ TyBool ())
+          (tmlamty "y" (TyNat () .*. TyBool ()) "x")
 
     it "should parse let expressions" $ do
       parse P.tmlet "let" "let x = 10 in x" `shouldParse`

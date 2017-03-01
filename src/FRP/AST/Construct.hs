@@ -22,7 +22,10 @@ tmcase :: EvalTerm -> (Name, EvalTerm) -> (Name, EvalTerm) -> EvalTerm
 tmcase = TmCase ()
 
 tmlam :: Name -> EvalTerm -> EvalTerm
-tmlam = TmLam ()
+tmlam n t = TmLam () n Nothing t
+
+tmlamty :: Name -> Type () -> EvalTerm -> EvalTerm
+tmlamty n ty t = TmLam () n (Just ty) t
 
 tmvar :: Name -> EvalTerm
 tmvar = TmVar ()
@@ -54,6 +57,9 @@ tmlet = TmLet ()
 
 tmlit :: Lit -> EvalTerm
 tmlit = TmLit ()
+
+tmint  = tmlit . LInt
+tmbool = tmlit . LBool
 
 tmbinop :: BinOp -> EvalTerm -> EvalTerm -> EvalTerm
 tmbinop = TmBinOp ()
@@ -105,6 +111,10 @@ tystable = TyStable ()
 tystream = TyStream ()
 tyalloc = TyAlloc ()
 tynat = TyNat ()
+tybool = TyBool ()
+
+(.*.) :: Type () -> Type () -> Type ()
+(.*.) = TyProd ()
 
 infixr 0 |->
 (|->) :: Type () -> Type () -> Type ()

@@ -63,7 +63,7 @@ data Term a
   | TmInl a (Term a)
   | TmInr a (Term a)
   | TmCase a (Term a) (Name, (Term a)) (Name, (Term a))
-  | TmLam a Name (Term a)
+  | TmLam a Name (Maybe (Type a)) (Term a)
   | TmVar a Name
   | TmApp a (Term a) (Term a)
   | TmCons a (Term a) (Term a)
@@ -112,7 +112,9 @@ instance Pretty (Term a) where
       text "case" <+> ppr 0 trm <+> text "of"
         $$ nest (2) (text "| inl" <+> text vl <+> text "->" <+> ppr (0) trml)
         $$ nest (2) (text "| inr" <+> text vr <+> text "->" <+> ppr (0) trmr)
-    TmLam _a b trm          -> prns (text "\\" <> text b <+> text "->" <+> ppr (n) trm)
+    TmLam _a b mty trm      ->
+      let pty = maybe mempty (\t -> char ':' <> ppr 0 t) mty
+      in  prns (text "\\" <> text b <> pty <+>text "->" <+> ppr (n) trm)
     TmFix _a b trm          -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
     TmVar _a v              -> text v
     TmApp _a trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
@@ -166,7 +168,7 @@ valToTerm = \case
   VTup a b         -> TmTup () (valToTerm a) (valToTerm b)
   VInl v           -> TmInl () (valToTerm v)
   VInr v           -> TmInr () (valToTerm v)
-  VClosure x e env -> TmLam () x (fmap (const ()) e)
+  VClosure x e env -> TmLam () x Nothing (fmap (const ()) e)
   VPntr l          -> TmPntr () l
   VAlloc           -> TmAlloc ()
   VStable v        -> TmStable () (valToTerm v)
@@ -248,7 +250,7 @@ instance Pretty (Decl a) where
     in  text nm <+> char ':' <+> ppr n ty
         $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd' <> char '.')
     where
-      bindings (TmLam _a x b) =
+      bindings (TmLam _a x _ b) =
         let (y, b') = bindings b
         in  (x:y, b')
       bindings b           = ([], b)
@@ -264,7 +266,7 @@ unitFunc :: Functor f => f a -> f ()
 unitFunc = fmap (const ())
 
 paramsToLams :: [String] -> EvalTerm -> EvalTerm
-paramsToLams = foldl (\acc x y -> acc (TmLam () x y)) id
+paramsToLams = foldl (\acc x y -> acc (TmLam () x Nothing y)) id
 
-paramsToLams' :: a -> [String] -> Term a -> Term a
-paramsToLams' b = foldl (\acc x y -> acc (TmLam b x y)) id
+paramsToLams' :: a -> [(String, Maybe (Type a))] -> Term a -> Term a
+paramsToLams' b = foldl (\acc (x,t) y -> acc (TmLam b x t y)) id
