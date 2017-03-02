@@ -24,6 +24,12 @@ data Qualifier
   | QLater
   deriving (Show, Eq)
 
+instance Pretty Qualifier where
+  ppr n = \case
+    QNow    -> text "now"
+    QStable -> text "stable"
+    QLater  -> text "later"
+
 infixr 9 `TyArr`
 
 data Type a
@@ -82,10 +88,6 @@ data Term a
   | TmFix a Name (Term a)
   deriving (Show, Eq, Functor)
 
-
-instance Pretty (Either (Term a) Value) where
-  ppr n (Left t)  = ppr n t
-  ppr n (Right v) = ppr n v
 
 instance Pretty (Map String (Either (Term a) Value)) where
   ppr n env = char '[' $+$ nest 2 body $+$ char ']' where
@@ -237,7 +239,8 @@ instance Pretty Lit where
     LBool b -> text $ show b
 
 data Decl a =
-  Decl { _type :: Type a
+  Decl { _ann  :: a
+       , _type :: Type a
        , _name :: Name
        , _body :: Term a
        }
@@ -245,7 +248,7 @@ data Decl a =
 
 
 instance Pretty (Decl a) where
-  ppr n (Decl ty nm bd) =
+  ppr n (Decl _a ty nm bd) =
     let (bs, bd') = bindings bd
     in  text nm <+> char ':' <+> ppr n ty
         $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd' <> char '.')

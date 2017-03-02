@@ -236,7 +236,7 @@ tick st
 evalProgram :: Program a -> (Value, EvalState)
 evalProgram (Program main decls) =
   case main of
-    Decl _ty _nm body -> runExpr initialState globals (mainEvalTerm $ unitFunc body)
+    Decl _a _ty _nm body -> runExpr initialState globals (mainEvalTerm $ unitFunc body)
   where
     globals    = globalEnv decls
 
@@ -257,7 +257,7 @@ runProgram (Program main decls) = keepRunning initialState startMain
     globals   = globalEnv decls
 
     startMain = case main of
-      Decl _ty _nm body -> mainEvalTerm $ unitFunc body
+      Decl _a _ty _nm body -> mainEvalTerm $ unitFunc body
 
 interpProgram :: Program a -> [Value]
 interpProgram = toHaskList . runProgram
@@ -271,4 +271,4 @@ mainEvalTerm body = tmapp body (tmfix "xs" $ tmcons tmalloc (tmdelay tmalloc (tm
 
 globalEnv decls = foldl go M.empty decls
   where
-    go env (Decl t n b) = M.insert n (Right $ evalExpr env $ unitFunc b) env
+    go env (Decl _a t n b) = M.insert n (Right $ evalExpr env $ unitFunc b) env

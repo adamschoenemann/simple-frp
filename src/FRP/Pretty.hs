@@ -17,3 +17,10 @@ class Pretty p where
   ppputStrLn :: p -> IO ()
   ppputStrLn = putStrLn . ppshow
 
+instance (Pretty a, Pretty b) => Pretty (Either a b) where
+  ppr n = \case
+    Left l  -> ppr n l
+    Right r -> ppr n r
+
+instance (Pretty a, Pretty b) => Pretty (a,b) where
+  ppr n (f,s) = parens (ppr n f <> char ',' <+> ppr n s)

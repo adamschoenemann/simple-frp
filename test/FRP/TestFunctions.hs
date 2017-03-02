@@ -9,8 +9,8 @@ frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
        ]
 
 frp_nats :: Decl ()
-frp_nats = Decl ty name body where
-  ty   = tystream tyalloc |-> tystream tynat
+frp_nats = Decl () ty name body where
+  ty   = tystream tyalloc |-> tynat |-> tystream tynat
   name = "nats"
   body =
       "us" --> "n" -->
@@ -21,7 +21,7 @@ frp_nats = Decl ty name body where
         ))
 
 frp_sum_acc :: Decl ()
-frp_sum_acc = Decl ty name body where
+frp_sum_acc = Decl () ty name body where
   ty = tyarr (tystream tyalloc)
              (tyarr (tystream tynat)
                     (tyarr tynat
@@ -41,7 +41,7 @@ frp_sum_acc = Decl ty name body where
   delayBody = "sum_acc" <| "us'" <| "ns'" <| "x"
 
 frp_sum :: Decl ()
-frp_sum = Decl ty name body where
+frp_sum = Decl () ty name body where
   name = "sum"
   ty   = tystream tyalloc |-> tystream tynat |-> tystream tynat
   body = "us" --> "ns" -->
@@ -49,7 +49,7 @@ frp_sum = Decl ty name body where
 
 
 frp_tails :: Decl ()
-frp_tails = Decl ty name body where
+frp_tails = Decl () ty name body where
   name = "tails"
   ty   = tystream tyalloc |-> tystream "A" |-> tystream (tystream "A")
   body = "us" --> "xs" -->
@@ -59,12 +59,12 @@ frp_tails = Decl ty name body where
   consp h t = PCons h (PDelay t)
 
 frp_main :: EvalTerm -> Type () -> Decl ()
-frp_main bd retTy = Decl ty "main" bd where
+frp_main bd retTy = Decl () ty "main" bd where
   ty = tystream tyalloc |-> retTy
 
 
 frp_map :: Decl ()
-frp_map = Decl ty name body where
+frp_map = Decl () ty name body where
   ty = tystream tyalloc |-> tystable ("A" |-> "B") |->
        tystream "A" |-> tystream "B"
   name = "map"
@@ -77,7 +77,7 @@ frp_map = Decl ty name body where
 
 
 frp_unfold :: Decl ()
-frp_unfold = Decl ty name body where
+frp_unfold = Decl () ty name body where
   ty = tystream tyalloc |->
        tystable ("X" |-> ("A" `typrod` tylater "X")) |->
        "X" |->
@@ -91,7 +91,7 @@ frp_unfold = Decl ty name body where
     tmcons "a" (tmdelay "u" ("unfold" <| "us'" <| (tmstable "f") <| "x'"))
 
 frp_fib :: Decl ()
-frp_fib = Decl ty name body where
+frp_fib = Decl () ty name body where
  ty = tystream tyalloc |-> tystream tynat
  name = "fib"
  body =
@@ -105,7 +105,7 @@ frp_fib = Decl ty name body where
           tmtup "f" (tmdelay "u" (tmtup "b" "f"))
 
 frp_swap :: Decl ()
-frp_swap = Decl ty name body where
+frp_swap = Decl () ty name body where
   ty = tystream tyalloc |->
        tynat |->
        tystream "A" |->

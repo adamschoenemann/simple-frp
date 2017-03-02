@@ -99,8 +99,8 @@ spec = do
                 tmlet (PStable "x") (tmpromote "n") $
                 tmcons "x" (tmdelay "u" ("const" <| "us" <| "x"))
         let mainbd = "us" --> "const" <| "us" <| 10
-        let mainfn = Decl undefined "main" mainbd
-        let prog = Program mainfn [Decl undefined "const" constfn]
+        let mainfn = Decl () undefined "main" mainbd
+        let prog = Program mainfn [Decl () undefined "const" constfn]
         take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) (replicate 100 10)
         -- debug $ show $ interpProgram prog
       it "works with nats" $ do

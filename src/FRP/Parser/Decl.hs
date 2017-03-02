@@ -17,5 +17,5 @@ decl = do
   bod <- term <* char '.' <* ws
   p <- getPosition
   let body = paramsToLams' p params bod
-  return $ Decl typ nam body
+  return $ Decl p typ nam body
 

@@ -407,7 +407,7 @@ spec = do
                  foo = 5.
                 |]
       parse P.decl "decl1" (unpack tc1) `shouldParse`
-        (Decl (tynat) "foo" 5)
+        (Decl () (tynat) "foo" 5)
 
     it "should parse simple decls2" $ do
       let tc2 = [text|
@@ -415,7 +415,7 @@ spec = do
                  foo = \x -> x.
                 |]
       parse P.decl "decl2" (unpack tc2) `shouldParse`
-        (Decl (tynat |-> tynat) "foo" (tmlam "x" "x"))
+        (Decl () (tynat |-> tynat) "foo" (tmlam "x" "x"))
 
     it "should parse simple decls3" $ do
       let tc3 = [text|
@@ -426,7 +426,7 @@ spec = do
                             x - 1.
                 |]
       parse P.decl "decl3" (unpack tc3) `shouldParse`
-        (Decl (tynat |-> tystream "a" |-> "a") "foo"
+        (Decl () (tynat |-> tystream "a" |-> "a") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     it "should parse simple decls4" $ do
@@ -438,7 +438,7 @@ spec = do
                             x - 1.
                 |]
       parse P.decl "decl4" (unpack tc4) `shouldParse`
-        (Decl (tynat |-> tystream "foo" |-> "foo") "foo"
+        (Decl () (tynat |-> tystream "foo" |-> "foo") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     it "should parse with param list" $ do
@@ -449,7 +449,7 @@ spec = do
                     x - 1.
                 |]
       parse P.decl "decl4" (unpack tc4) `shouldParse`
-        (Decl (tynat |-> tystream "foo" |-> "foo") "foo"
+        (Decl () (tynat |-> tystream "foo" |-> "foo") "foo"
               ("a" --> "xs" --> tmlet (PCons "x" "xs'") "xs" $ "x" - 1))
 
     describe "forall f in TestFunctions.frps. parse (ppshow f) = f" $ do
@@ -476,13 +476,15 @@ spec = do
       unitFunc r `shouldBe`
         Program
           { _main = Decl
-            { _type = tyarr (tystream tyalloc) (tystream tynat)
+            { _ann  = ()
+            , _type = tyarr (tystream tyalloc) (tystream tynat)
             , _name = "main"
             , _body = tmlam "us" (tmapp (tmapp (tmvar "const") (tmvar "us")) (tmlit (LInt 10)))
             }
           , _decls =
             [ Decl
-                { _type = tyarr (tystream tyalloc) (tyarr tynat (tystream tynat))
+                { _ann  = ()
+                , _type = tyarr (tystream tyalloc) (tyarr tynat (tystream tynat))
                 , _name = "const"
                 , _body =
                     tmlam "us" (tmlam "n"
@@ -520,7 +522,8 @@ spec = do
       let Right r = parse P.prog "sum" $ unpack p
       let exp = Program
             { _main = Decl
-              { _type = tyarr (tystream tyalloc) (tystream tynat)
+              { _ann  = ()
+              , _type = tyarr (tystream tyalloc) (tystream tynat)
               , _name = "main"
               , _body = tmlam "us"
                           (tmapp
@@ -530,7 +533,8 @@ spec = do
                              (tmlit (LInt 0)))
               }
             , _decls = [ Decl
-                         { _type = tyarr (tystream tyalloc) (tystream tynat)
+                         { _ann  = ()
+                         , _type = tyarr (tystream tyalloc) (tystream tynat)
                          , _name = "nats"
                          , _body = tmlam "us"
                                      (tmlam "n"
@@ -548,7 +552,8 @@ spec = do
                                                           (tmlit (LInt 1)))))))))
                          }
                        , Decl
-                         { _type = tyarr (tystream tyalloc)
+                         { _ann  = ()
+                         , _type = tyarr (tystream tyalloc)
                                      (tyarr (tystream tynat)
                                         (tyarr tynat (tystream tynat)))
                          , _name = "sum_acc"
@@ -576,7 +581,8 @@ spec = do
                                                              (tmvar "x")))))))))
                          }
                        , Decl
-                         { _type = tyarr (tystream tyalloc)
+                         { _ann  = ()
+                         , _type = tyarr (tystream tyalloc)
                                      (tyarr (tystream tynat) (tystream tynat))
                          , _name = "sum"
                          , _body = tmlam "us"

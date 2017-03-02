@@ -19,7 +19,7 @@ import           NeatInterpolation
 import           Text.Parsec         (ParseError, parse)
 
 import           Data.Either         (isRight)
-import           FRP.TestFunctions   (frps)
+import           FRP.TestFunctions   (frps, frp_nats)
 
 
 shouldTC :: (Eq (f ()), Show (f ()), Functor f, Show t)
@@ -48,6 +48,9 @@ spec = do
       it "works for let y = x in x" $ do
         let ctx = (Ctx (M.singleton "x" (tynat, QNow)))
         runCheckTerm ctx (tmlet "y" "x" "x") `shouldTC` (tynat, QNow)
+      it "works for let y = x in y" $ do
+        let ctx = (Ctx (M.singleton "x" (tynat, QNow)))
+        runCheckTerm ctx (tmlet "y" "x" "y") `shouldTC` (tynat, QNow)
     describe "tuples" $ do
       it "works for fst (10,True)" $ do
         runCheckTerm' (tmfst (tmtup 10 10)) `shouldTC` (tynat, QNow)
@@ -80,6 +83,37 @@ spec = do
             (tmlamty "y" tynat $ "x" `eq` "x")) `shouldTC`
           (tynat |-> tynat |-> tybool, QNow)
       it "works for \\(xs: @(S Nat)) (x:Nat) -> cons(x,xs)" $ do
-        runCheckTerm' (tmlamty "xs" ((tystream tynat)) $
+        runCheckTerm' (tmlamty "xs" ((tylater $ tystream tynat)) $
                        tmlamty "x" tynat $ tmcons "x" "xs")
           `shouldTC` ((tylater $ tystream tynat) |-> tynat |-> tystream tynat, QNow)
+    describe "cons" $ do
+      it "works for cons(x,xs) where x:Nat, xs:@(S Nat)" $ do
+        let ctx = Ctx $ M.fromList
+              [ ("x", (tynat, QNow))
+              , ("xs", (tylater (tystream tynat), QNow))
+              ]
+        runCheckTerm ctx (tmcons "x" "xs") `shouldTC`
+          (tystream tynat, QNow)
+    describe "application" $ do
+      it "works for \\(f:Nat -> Bool) (x:Nat) -> f x" $ do
+        runCheckTerm' (tmlamty "f" (tynat |-> tybool) $
+                       tmlamty "x" tynat $ "f" <| "x")
+          `shouldTC` ((tynat |-> tybool) |-> tynat |-> tybool, QNow)
+      it "works for f 10 where (f : Nat -> Bool)" $ do
+        let ctx = Ctx $ M.singleton "f" (tynat |-> tybool, QNow)
+        runCheckTerm ctx ("f" <| 10) `shouldTC` (tybool, QNow)
+      it "works for f 10 True where (f : Nat -> Bool -> Nat)" $ do
+        let ctx = Ctx $ M.singleton "f" (tynat |-> tybool |-> tynat, QNow)
+        runCheckTerm ctx ("f" <| 10 <| tmbool True) `shouldTC`
+          (tynat, QNow)
+    describe "compound expressions" $ do
+      let expr = tmlet "x" (tmlamty "y" tynat $ "y" * 20) (("x" <| 1) + 20)
+      it ("works for " ++ ppshow expr) $ do
+        runCheckTerm' expr `shouldTC` (tynat, QNow)
+
+    -- describe "declarations" $ do
+    --   it "works for frp_nats" $ do
+    --     ppputStrLn frp_nats
+    --     let ty = runCheckDecl' frp_nats
+    --     ppputStrLn ty
+    --     True `shouldBe` True
