@@ -22,12 +22,7 @@ frp_nats = Decl () ty name body where
 
 frp_sum_acc :: Decl ()
 frp_sum_acc = Decl () ty name body where
-  ty = tyarr (tystream tyalloc)
-             (tyarr (tystream tynat)
-                    (tyarr tynat
-                           (tystream tynat)
-                    )
-             )
+  ty = tystream tyalloc |-> tystream tynat |-> tynat |-> tystream tynat
   name = "sum_acc"
   body = "us" --> "ns" --> "acc" --> lamBody
   lamBody = tmlet pat1 rhs1 (tmlet pat2 rhs2 (tmlet pat3 rhs3 concl))
@@ -97,12 +92,15 @@ frp_fib = Decl () ty name body where
  body =
     "us" -->
     tmlet (PCons "u" $ PDelay "us'") "us" $
-    tmlet "fibfn" fibfn $
+    tmlet "fibfun" fibfn $
+    tmlet (PStable "fibfn") (tmpromote "fibfun") $
     "unfold" <| "us" <| tmstable ("fibfn" <| "u") <| tmtup 0 1
- fibfn = "u" --> "x" -->
+ fibfn =  tmlamty "u" tyalloc $ tmlamty "x" (typrod tynat tynat) $
           tmlet (PTup "a" "b") "x" $
           tmlet "f" ("a" + "b") $
-          tmtup "f" (tmdelay "u" (tmtup "b" "f"))
+          tmlet (PStable "b'") (tmpromote "b") $
+          tmlet (PStable "f'") (tmpromote "f") $
+          tmtup "f" (tmdelay "u" (tmtup (tmstable "b'") (tmstable "f'")))
 
 frp_swap :: Decl ()
 frp_swap = Decl () ty name body where

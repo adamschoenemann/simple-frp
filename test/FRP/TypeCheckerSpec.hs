@@ -19,7 +19,7 @@ import           NeatInterpolation
 import           Text.Parsec         (ParseError, parse)
 
 import           Data.Either         (isRight)
-import           FRP.TestFunctions   (frps, frp_nats)
+import           FRP.TestFunctions
 import           Data.List            (intercalate)
 
 
@@ -55,6 +55,12 @@ spec = do
       it "works for let y = x in y" $ do
         let ctx = (Ctx (M.singleton "x" (tynat, QNow)))
         runCheckTerm ctx (tmlet "y" "x" "y") `shouldTC` (tynat, QNow)
+      it "works for let (x,y) = z in x where z : Nat * Bool" $ do
+        let ctx = (Ctx (M.singleton "z" (typrod tynat tybool, QNow)))
+        runCheckTerm ctx (tmlet (PTup "x" "y") "z" "x") `shouldTC` (tynat, QNow)
+      it "works for let (x,y) = z in y where z : Nat * Bool" $ do
+        let ctx = (Ctx (M.singleton "z" (typrod tynat tybool, QNow)))
+        runCheckTerm ctx (tmlet (PTup "x" "y") "z" "y") `shouldTC` (tybool, QNow)
       it "works for let stable(y) = promote(x) in delay(u,y)" $ do
         let ctx = Ctx $ M.fromList [("x", (tynat, QNow)), ("u", (tyalloc, QNow))]
         runCheckTerm ctx (tmlet (PStable "y") (tmpromote "x") (tmdelay "u" "y")) `shouldTC` (tylater tynat, QNow)
@@ -120,7 +126,30 @@ spec = do
 
     describe "declarations" $ do
       it "works for frp_nats" $ do
-        ppputStrLn frp_nats
-        let ty = runCheckDecl' frp_nats
-        ppputStrLn ty
-        True `shouldBe` True
+        runCheckDecl' frp_nats `shouldTC` (_type frp_nats, QNow)
+          -- (tystream tyalloc |-> tynat |-> tystream tynat, QNow)
+      it "works for frp_sum_acc" $ do
+        let ty = runCheckDecl' frp_sum_acc
+        ty `shouldTC` (_type frp_sum_acc, QNow)
+      it "works for frp_sum" $ do
+        let ctx = Ctx $ M.singleton "sum_acc" (_type frp_sum_acc, QStable)
+        let ty = runCheckDecl ctx frp_sum
+        ty `shouldTC` (_type frp_sum, QNow)
+      it "works for frp_tails" $ do
+        let ty = runCheckDecl' frp_tails
+        ty `shouldTC` (_type frp_tails, QNow)
+      it "works for frp_map" $ do
+        let ty = runCheckDecl' frp_map
+        ty `shouldTC` (_type frp_map, QNow)
+      it "works for frp_unfold" $ do
+        let ty = runCheckDecl' frp_unfold
+        ty `shouldTC` (_type frp_unfold, QNow)
+      it "works for frp_swap" $ do
+        let ty = runCheckDecl' frp_swap
+        ty `shouldTC` (_type frp_swap, QNow)
+      it "works for frp_fib" $ do
+        ppputStrLn frp_fib
+        let ctx = Ctx $ M.singleton "unfold" (_type frp_unfold, QStable)
+        let ty = runCheckDecl ctx frp_fib
+        ty `shouldTC` (_type frp_fib, QNow)
+

@@ -48,12 +48,12 @@ data Type a
 instance Pretty (Type a) where
   ppr n type' = case type' of
     TyParam  _a name   -> text name
-    TyProd   _a ty ty' -> parens (ppr (n+1) ty <+> text "*" <+> ppr (n+1) ty')
-    TySum    _a ty ty' -> parens (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
+    TyProd   _a ty ty' -> prns (ppr (n+1) ty <+> text "*" <+> ppr (n+1) ty')
+    TySum    _a ty ty' -> prns (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
     TyArr    _a ty ty' -> prns $ ppr n ty <+> text "->" <+> ppr n ty'
-    TyLater  _a ty     -> prns $ text "@" <> ppr (n+1) ty
-    TyStable _a ty     -> prns $ text "#" <> ppr (n+1) ty
-    TyStream _a ty     -> prns $ text "S" <+> ppr (n+1) ty
+    TyLater  _a ty     -> text "@" <> ppr (n+1) ty
+    TyStable _a ty     -> text "#" <> ppr (n+1) ty
+    TyStream _a ty     -> text "S" <+> ppr (n+1) ty
     TyAlloc  _a        -> text "alloc"
     TyNat    _a        -> text "Nat"
     TyBool   _a        -> text "Bool"
@@ -116,7 +116,8 @@ instance Pretty (Term a) where
         $$ nest (2) (text "| inr" <+> text vr <+> text "->" <+> ppr (0) trmr)
     TmLam _a b mty trm      ->
       let pty = maybe mempty (\t -> char ':' <> ppr 0 t) mty
-      in  prns (text "\\" <> text b <> pty <+>text "->" <+> ppr (n) trm)
+          maybePrns = maybe id (const parens) mty
+      in  prns (text "\\" <> maybePrns (text b <> pty) <+> text "->" <+> ppr (n) trm)
     TmFix _a b trm          -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
     TmVar _a v              -> text v
     TmApp _a trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'

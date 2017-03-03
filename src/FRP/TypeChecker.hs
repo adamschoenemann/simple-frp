@@ -80,11 +80,22 @@ laterCtx (Ctx c1) =
       QStable -> Just (t, QStable)
       QLater  -> Just (t, QNow)
 
+stableCtx :: Context t -> Context t
+stableCtx (Ctx c1) =
+  Ctx $ M.map (maybe (error "laterCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
+    mapper (t,q) = case q of
+      QNow -> Nothing
+      QStable -> Just (t, QStable)
+      QLater  -> Nothing
+
 
 isStable :: Type t -> Bool
-isStable (TyNat _)   = True
-isStable (TyBool _)   = True
-isStable _           = False
+isStable (TyNat _)      = True
+isStable (TyBool _)     = True
+isStable (TyProd _ a b) = isStable a && isStable b
+isStable (TySum  _ a b) = isStable a && isStable b
+isStable (TyStable _ _) = True
+isStable _              = False
 
 emptyCtx = Ctx M.empty
 
@@ -127,9 +138,9 @@ checkTerm ctx term = case term of
     if (unitFunc c1 /= unitFunc c2)
       then throwError (CannotUnify (c1, QNow) (c2, QNow) term ctx)
       else return (c1, QNow)
-  tm@(TmLam a nm mty trm) ->
+  TmLam a nm mty trm ->
     case mty of
-      Nothing -> throwError (TypeAnnRequired tm)
+      Nothing -> throwError (TypeAnnRequired term)
       Just ty -> do
         (bdty, QNow) <- checkTerm (extendCtx nm (ty, QNow) ctx) trm
         return (TyArr a ty bdty, QNow)
@@ -137,7 +148,7 @@ checkTerm ctx term = case term of
   TmVar a v              -> do
     (vt, q) <- getVar ctx v
     if q `elem` [QNow, QStable]
-     then return (vt, q)
+     then return (vt, QNow)
      else throwError (CannotUnify (vt, q) (vt, QNow) term ctx)
   TmApp a trm1 trm2      -> do
     (TyArr _ at bt, QNow) <- checkTerm ctx trm1
@@ -146,28 +157,38 @@ checkTerm ctx term = case term of
       then return (bt, QNow)
       else throwError (CannotUnify (t2, QNow) (at, QNow) term ctx)
   TmCons a hd tl         -> do
-    (ht, QNow) <- checkTerm ctx hd
-    tlty <- checkTerm ctx tl
-    case tlty of
-      (TyLater _ (TyStream tla tlt), QNow) -> return (TyStream a tlt, QNow)
-      _ -> throwError (CannotUnify
-                        (TyLater a (TyStream a ht), QNow)
-                        tlty
-                        term
-                        ctx
-                      )
+    hty <- checkTerm ctx hd
+    case hty of
+      (ht, QNow) -> do
+        tlty <- checkTerm ctx tl
+        case tlty of
+          (TyLater _ (TyStream tla tlt), QNow) -> return (TyStream a tlt, QNow)
+          _ -> throwError (CannotUnify
+                            (TyLater a (TyStream a ht), QNow)
+                            tlty
+                            term
+                            ctx
+                          )
+      (ht, q)    -> throwError (CannotUnify (ht, q) (ht, QNow) term ctx)
   TmDelay a alloc trm    -> do
     (TyAlloc _, QNow) <- checkTerm ctx alloc
     (t, q)  <- checkTerm (laterCtx ctx) trm
     return (TyLater a t, QNow)
   TmStable a trm         -> do
-    (t, QStable) <- checkTerm ctx trm
+    (t, QNow) <- checkTerm (stableCtx ctx) trm
     return (TyStable a t, QNow)
   TmPromote a trm        -> do
-    (t, QNow) <- checkTerm ctx trm
-    if (isStable t)
-      then return (TyStable a t, QNow)
-      else throwError (NotStable (t, QNow))
+    (ty, QNow) <- checkTerm ctx trm
+    if isStable ty
+      then return (TyStable a ty, QNow)
+      else checkTerm (stableCtx ctx) trm >>= \case
+        (t, QNow) -> return (TyStable a t, QNow)
+        (t, q)    -> throwError (NotStable (t, q))
+    -- (t, QNow) <- checkTerm ctx trm
+    -- isstab <- isStable ctx t
+    -- if isstab
+    --   then return (TyStable a t, QNow)
+    --   else throwError (NotStable (t, QNow))
   TmLet a ptn trm1 trm2   -> do
     t <- checkTerm ctx trm1
     ctx2 <- checkPtn ctx ptn t
