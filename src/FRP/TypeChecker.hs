@@ -24,7 +24,7 @@ instance Pretty (Context t) where
 data TypeErr t
   = CannotUnify (Ty t) (Ty t) (Term t) (Context t)
   | OccursCheckFailed Name (Ty t)
-  | UnknownIdentifier Name
+  | UnknownIdentifier Name (Context t)
   | NotSyntax (Term t)
   | TypeAnnRequired (Term t)
   | NotStable (Ty t)
@@ -41,8 +41,8 @@ instance Pretty (TypeErr t) where
             <+> text "in context:"
             $$  ppr 0 ctx
 
-    OccursCheckFailed nm ty -> text nm <+> "occurs in" <+> (ppr 0 ty)
-    UnknownIdentifier nm    -> text "unkown identifier" <+> text nm
+    OccursCheckFailed nm ty  -> text nm <+> "occurs in" <+> (ppr 0 ty)
+    UnknownIdentifier nm ctx -> text "unkown identifier" <+> text nm <+> "in context" $$ ppr 0 ctx
     NotSyntax trm           -> ppr 0 trm <+> "is not syntax"
     TypeAnnRequired trm     -> ppr 0 trm <+> text "requires a type annotation"
     NotStable ty            -> text "expected" <+> ppr n ty  <+> text "to be stable"
@@ -62,7 +62,7 @@ freshName = do
 
 getVar :: Context t -> Name -> CheckM t (Ty t)
 getVar (Ctx m) nm = case M.lookup nm m of
-  Nothing -> throwError (UnknownIdentifier nm)
+  Nothing -> throwError (UnknownIdentifier nm (Ctx m))
   Just x  -> return x
 
 extendCtx :: Name -> Ty t -> Context t -> Context t
@@ -134,7 +134,6 @@ checkTerm ctx term = case term of
         (bdty, QNow) <- checkTerm (extendCtx nm (ty, QNow) ctx) trm
         return (TyArr a ty bdty, QNow)
   TmFix a b trm          -> undefined
-  -- TmVar a v -> getVar ctx v
   TmVar a v              -> do
     (vt, q) <- getVar ctx v
     if q `elem` [QNow, QStable]
@@ -158,8 +157,8 @@ checkTerm ctx term = case term of
                         ctx
                       )
   TmDelay a alloc trm    -> do
-    (t, QLater) <- checkTerm ctx trm
     (TyAlloc _, QNow) <- checkTerm ctx alloc
+    (t, q)  <- checkTerm (laterCtx ctx) trm
     return (TyLater a t, QNow)
   TmStable a trm         -> do
     (t, QStable) <- checkTerm ctx trm
@@ -192,8 +191,8 @@ checkTerm ctx term = case term of
     if unitFunc tt == unitFunc ft
       then return (tt, qt)
       else throwError (CannotUnify (tt, qt) (ft, qf) term ctx)
-  (TmPntr a p)        -> throwError (NotSyntax term)
-  (TmPntrDeref a p)   -> throwError (NotSyntax term)
+  TmPntr a p        -> throwError (NotSyntax term)
+  TmPntrDeref a p   -> throwError (NotSyntax term)
   TmAlloc a              -> return (TyAlloc a, QNow)
   TmOut a trm            -> error "type-checkign for TmOut not implemented"
   TmInto a trm           -> error "type-checkign for TmInto not implemented"
@@ -221,7 +220,7 @@ checkPtn ctx = go where
     ctx2 <- checkPtn ctx1 tl (TyLater a (TyStream a x), QNow)
     return ctx2
   go (PStable p) (TyStable a t, QNow) = do
-    ctx1 <- checkPtn ctx p (t, QNow)
+    ctx1 <- checkPtn ctx p (t, QStable)
     return ctx1
   go (PTup p1 p2) (TyProd a t1 t2, QNow) = do
     ctx1 <- checkPtn ctx  p1 (t1, QNow)
@@ -236,7 +235,7 @@ checkPtn ctx = go where
 checkDecl :: Context t -> Decl t -> CheckM t (Ty t)
 checkDecl ctx (Decl a type0 name bd) = do
   bd0         <- inlineTypes type0 bd
-  (type1, q)  <- checkTerm (extendCtx name (type0, QNow) ctx) bd0
+  (type1, q)  <- checkTerm (extendCtx name (type0, QLater) ctx) bd0
   if (q /= QNow)
     then throwError $ NotNow (TmVar a name)
   else if (unitFunc type0 /= unitFunc type1)

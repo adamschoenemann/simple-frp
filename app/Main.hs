@@ -16,7 +16,7 @@ const us n =
   cons(x,δᵤ(const us' x))
 -}
 frp_const :: Decl ()
-frp_const = Decl ty name body where
+frp_const = Decl () ty name body where
   ty = (tystream tyalloc) |-> (tynat |-> (tystream tynat))
   name = "const"
   body = tmlam "us" (tmlam "n" lamBody)
@@ -44,7 +44,7 @@ sum acc us ns acc =
   App (App (App sum_acc us') ns') x
 -}
 frp_sum_acc :: Decl ()
-frp_sum_acc = Decl ty name body where
+frp_sum_acc = Decl () ty name body where
   ty = tystream tyalloc |-> tystream tynat |-> tynat |-> tystream tynat
   name = "sum_acc"
   body = tmlam "us" (tmlam "ns" (tmlam "acc" lamBody))
@@ -62,7 +62,7 @@ frp_sum_acc = Decl ty name body where
           (tmvar "x")
 
 frp_const_10 :: Decl ()
-frp_const_10 = Decl ty name body where
+frp_const_10 = Decl () ty name body where
   ty = tystream tyalloc |-> tystream tynat
   name = "const_10"
   body = case frp_const of

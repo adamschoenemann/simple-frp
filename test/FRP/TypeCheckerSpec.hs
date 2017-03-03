@@ -20,6 +20,7 @@ import           Text.Parsec         (ParseError, parse)
 
 import           Data.Either         (isRight)
 import           FRP.TestFunctions   (frps, frp_nats)
+import           Data.List            (intercalate)
 
 
 shouldTC :: (Eq (f ()), Show (f ()), Functor f, Show t)
@@ -32,6 +33,9 @@ shouldTyErr :: Show t => Either (TypeErr t) (Type t, Qualifier) -> Expectation
 shouldTyErr = \case
   Left err -> return ()
   Right (t,q) -> expectationFailure $ show (t, q)
+
+oneline :: String -> String
+oneline s = intercalate " " (lines s)
 
 main :: IO ()
 main = hspec spec
@@ -51,6 +55,9 @@ spec = do
       it "works for let y = x in y" $ do
         let ctx = (Ctx (M.singleton "x" (tynat, QNow)))
         runCheckTerm ctx (tmlet "y" "x" "y") `shouldTC` (tynat, QNow)
+      it "works for let stable(y) = promote(x) in delay(u,y)" $ do
+        let ctx = Ctx $ M.fromList [("x", (tynat, QNow)), ("u", (tyalloc, QNow))]
+        runCheckTerm ctx (tmlet (PStable "y") (tmpromote "x") (tmdelay "u" "y")) `shouldTC` (tylater tynat, QNow)
     describe "tuples" $ do
       it "works for fst (10,True)" $ do
         runCheckTerm' (tmfst (tmtup 10 10)) `shouldTC` (tynat, QNow)
@@ -108,12 +115,12 @@ spec = do
           (tynat, QNow)
     describe "compound expressions" $ do
       let expr = tmlet "x" (tmlamty "y" tynat $ "y" * 20) (("x" <| 1) + 20)
-      it ("works for " ++ ppshow expr) $ do
+      it ("works for " ++ oneline (ppshow expr)) $ do
         runCheckTerm' expr `shouldTC` (tynat, QNow)
 
-    -- describe "declarations" $ do
-    --   it "works for frp_nats" $ do
-    --     ppputStrLn frp_nats
-    --     let ty = runCheckDecl' frp_nats
-    --     ppputStrLn ty
-    --     True `shouldBe` True
+    describe "declarations" $ do
+      it "works for frp_nats" $ do
+        ppputStrLn frp_nats
+        let ty = runCheckDecl' frp_nats
+        ppputStrLn ty
+        True `shouldBe` True
