@@ -215,8 +215,8 @@ checkTerm ctx term = case term of
   TmPntr a p        -> throwError (NotSyntax term)
   TmPntrDeref a p   -> throwError (NotSyntax term)
   TmAlloc a              -> return (TyAlloc a, QNow)
-  TmOut a trm            -> error "type-checkign for TmOut not implemented"
-  TmInto a trm           -> error "type-checkign for TmInto not implemented"
+  TmOut a trm            -> error "type-checking for TmOut not implemented"
+  TmInto a trm           -> error "type-checking for TmInto not implemented"
   where
     binOpTy :: a -> BinOp -> (Type a, Type a, Type a)
     binOpTy a = \case

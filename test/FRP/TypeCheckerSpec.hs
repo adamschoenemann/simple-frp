@@ -21,7 +21,35 @@ import           Text.Parsec         (ParseError, parse)
 import           Data.Either         (isRight)
 import           FRP.TestFunctions
 import           Data.List            (intercalate)
+import           FRP.Parser.Decl
+import           Text.Parsec
 
+frp_natfn_text = [text|
+  natfn : (S alloc * Nat) -> (Nat * @(S alloc * Nat))
+  natfn x =
+    let (us, n) = x in
+    let cons(u, delay(us')) = us in
+    let stable(n') = promote(n) in
+    (n, delay(u, (us', n' + 1))).
+|]
+
+frp_nat_fn_parse :: Either ParseError (Decl (SourcePos))
+frp_nat_fn_parse = parse decl "" (unpack frp_natfn_text)
+
+frp_natfn = case frp_nat_fn_parse of
+  Right decl -> decl
+  Left e     -> error (show e)
+
+frp_nats_unfold_text = [text|
+  nats : S alloc -> S Nat
+  nats us =
+    let fn = stable(natfn) in
+    unfold us fn (us, 0).
+|]
+
+frp_nats_unfold = case (parse decl "" (unpack frp_nats_unfold_text)) of
+  Right decl -> decl
+  Left e     -> error (show e)
 
 shouldTC :: (Eq (f ()), Show (f ()), Functor f, Show t)
             => Either (TypeErr t) (f a, Qualifier) -> (f (), Qualifier) -> Expectation
@@ -147,9 +175,22 @@ spec = do
       it "works for frp_swap" $ do
         let ty = runCheckDecl' frp_swap
         ty `shouldTC` (_type frp_swap, QNow)
-      it "works for frp_fib" $ do
-        ppputStrLn frp_fib
-        let ctx = Ctx $ M.singleton "unfold" (_type frp_unfold, QStable)
-        let ty = runCheckDecl ctx frp_fib
-        ty `shouldTC` (_type frp_fib, QNow)
+      it "works for frp_natfn" $ do
+        let natfn = unitFunc frp_natfn
+        let ty = runCheckDecl' natfn
+        ty `shouldTC` (_type natfn, QNow)
+      it "works for frp_nats_unfold" $ do
+        let fn = unitFunc frp_nats_unfold
+        let ctx = Ctx $ M.fromList
+                    [ ("unfold", (_type frp_unfold, QStable))
+                    , ("natfn", (_type $ unitFunc frp_natfn, QStable))
+                    ]
+        let ty = runCheckDecl ctx fn
+        ty `shouldTC` (_type fn, QNow)
+
+      -- it "works for frp_fib" $ do
+      --   ppputStrLn frp_fib
+      --   let ctx = Ctx $ M.singleton "unfold" (_type frp_unfold, QStable)
+      --   let ty = runCheckDecl ctx frp_fib
+      --   ty `shouldTC` (_type frp_fib, QNow)
 

@@ -102,6 +102,7 @@ frp_fib = Decl () ty name body where
           tmlet (PStable "f'") (tmpromote "f") $
           tmtup "f" (tmdelay "u" (tmtup (tmstable "b'") (tmstable "f'")))
 
+
 frp_swap :: Decl ()
 frp_swap = Decl () ty name body where
   ty = tystream tyalloc |->
