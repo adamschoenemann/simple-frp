@@ -1,12 +1,22 @@
+{-# LANGUAGE QuasiQuotes #-}
 
 module FRP.TestFunctions where
 
 import FRP.AST
 import FRP.AST.Construct
+import FRP.AST.QuasiQuoter
 
 frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
-       , frp_unfold, frp_fib, frp_swap
+       , frp_unfold, frp_fib_wrong, frp_swap
        ]
+
+frp_const = unitFunc [decl|
+  const : S alloc -> Nat -> S Nat
+  const us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, const us' x)).
+|]
 
 frp_nats :: Decl ()
 frp_nats = Decl () ty name body where
@@ -19,6 +29,14 @@ frp_nats = Decl () ty name body where
         tmcons "x" (tmdelay "u"
           ("nats" <| "us'" <| ("x" + 1)))
         ))
+
+frp_nats' = [decl|
+  nats : S alloc -> Nat -> S Nat
+  nats us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats us' (x + 1))).
+|]
 
 frp_sum_acc :: Decl ()
 frp_sum_acc = Decl () ty name body where
@@ -85,8 +103,9 @@ frp_unfold = Decl () ty name body where
     tmlet (PTup "a" $ PDelay "x'") ("f" <| "x") $
     tmcons "a" (tmdelay "u" ("unfold" <| "us'" <| (tmstable "f") <| "x'"))
 
-frp_fib :: Decl ()
-frp_fib = Decl () ty name body where
+-- should not type-check!
+frp_fib_wrong :: Decl ()
+frp_fib_wrong = Decl () ty name body where
  ty = tystream tyalloc |-> tystream tynat
  name = "fib"
  body =
@@ -102,6 +121,21 @@ frp_fib = Decl () ty name body where
           tmlet (PStable "f'") (tmpromote "f") $
           tmtup "f" (tmdelay "u" (tmtup (tmstable "b'") (tmstable "f'")))
 
+frp_natfn = unitFunc [decl|
+  natfn : (S alloc * Nat) -> (Nat * @(S alloc * Nat))
+  natfn x =
+    let (us, n) = x in
+    let cons(u, delay(us')) = us in
+    let stable(n') = promote(n) in
+    (n, delay(u, (us', n' + 1))).
+|]
+
+frp_nats_unfold = unitFunc [decl|
+  nats : S alloc -> S Nat
+  nats us =
+    let fn = stable(natfn) in
+    unfold us fn (us, 0).
+|]
 
 frp_swap :: Decl ()
 frp_swap = Decl () ty name body where

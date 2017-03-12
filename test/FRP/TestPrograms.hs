@@ -24,16 +24,16 @@ prog_map =
 
 prog_unfold :: Program ()
 prog_unfold =
-  let mainfn = frp_main (_body frp_fib) (tystream tynat)
-  in Program mainfn [frp_unfold, frp_nats, frp_fib]
+  let mainfn = frp_main (_body frp_nats_unfold) (tystream tynat)
+  in Program mainfn [frp_unfold, frp_natfn, frp_nats_unfold]
 
-prog_swap_fib_nats = Program mainfn [frp_unfold, frp_fib, frp_nats, frp_swap]
+prog_swap_const_nats = Program mainfn [frp_unfold, frp_const, frp_nats, frp_swap]
   where
     mainfn = frp_main mainbd (tystream tynat)
     mainbd =
       "us" -->
       "swap" <| "us" <| 10 <|
-      ("nats" <| "us" <| 0) <| ("fib" <| "us")
+      ("nats" <| "us" <| 0) <| ("const" <| "us" <| 42)
 
 prog_sum = Program mainfn [frp_nats, frp_sum_acc, frp_sum] where
   mainbd = "us" -->

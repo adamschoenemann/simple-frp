@@ -3,6 +3,8 @@
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE StandaloneDeriving        #-}
+{-# LANGUAGE DeriveDataTypeable        #-}
+
 
 module FRP.AST where
 
@@ -12,6 +14,7 @@ import qualified Data.Map.Strict as M
 
 import           Data.String     (IsString (..))
 import           FRP.Pretty
+import           Data.Data
 
 type Name = String
 type Label = Int
@@ -22,7 +25,7 @@ data Qualifier
   = QNow
   | QStable
   | QLater
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
 
 instance Pretty Qualifier where
   ppr n = \case
@@ -43,7 +46,7 @@ data Type a
   | TyAlloc  a
   | TyNat    a
   | TyBool   a
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Data, Typeable)
 
 instance Pretty (Type a) where
   ppr n type' = case type' of
@@ -53,7 +56,7 @@ instance Pretty (Type a) where
     TyArr    _a ty ty' -> prns $ ppr n ty <+> text "->" <+> ppr n ty'
     TyLater  _a ty     -> text "@" <> ppr (n+1) ty
     TyStable _a ty     -> text "#" <> ppr (n+1) ty
-    TyStream _a ty     -> text "S" <+> ppr (n+1) ty
+    TyStream _a ty     -> prns $ text "S" <+> ppr (n+1) ty
     TyAlloc  _a        -> text "alloc"
     TyNat    _a        -> text "Nat"
     TyBool   _a        -> text "Bool"
@@ -86,7 +89,7 @@ data Term a
   | TmPntrDeref a Label
   | TmAlloc a
   | TmFix a Name (Term a)
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Data, Typeable)
 
 
 instance Pretty (Map String (Either (Term a) Value)) where
@@ -162,9 +165,7 @@ data Value
   | VInto Value
   | VCons Value Value
   | VLit Lit
-
-deriving instance Show Value
-deriving instance Eq Value
+  deriving (Show, Eq, Data, Typeable)
 
 valToTerm :: Value -> EvalTerm
 valToTerm = \case
@@ -189,7 +190,7 @@ data Pattern
   | PCons Pattern Pattern
   | PStable Pattern
   | PTup Pattern Pattern
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
 
 instance Pretty Pattern where
   ppr n pat = case pat of
@@ -212,7 +213,7 @@ data BinOp
   | Geq
   | Gt
   | Eq
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
 
 instance Pretty BinOp where
   ppr _ op = text $ case op of
@@ -232,7 +233,7 @@ instance Pretty BinOp where
 data Lit
   = LInt Int
   | LBool Bool
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
 
 instance Pretty Lit where
   ppr _ lit = case lit of
@@ -245,7 +246,7 @@ data Decl a =
        , _name :: Name
        , _body :: Term a
        }
-       deriving (Show, Eq, Functor)
+       deriving (Show, Eq, Functor, Data, Typeable)
 
 
 instance Pretty (Decl a) where
@@ -260,7 +261,7 @@ instance Pretty (Decl a) where
       bindings b           = ([], b)
 
 data Program a = Program { _main :: Decl a, _decls :: [Decl a]}
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Data, Typeable)
 
 instance Pretty (Program a) where
   ppr n (Program main decls) =

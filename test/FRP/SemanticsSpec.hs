@@ -147,21 +147,24 @@ spec = do
         let expect = map (VLit . LInt . (* 2)) [0..k-1]
         got `shouldBe` expect
 
-      it "works with unfold (fib)" $ do
+      it "works with unfold (nats)" $ do
         let prog = prog_unfold
         let k = 50
         let got = take k $ (interpProgram prog)
         -- mapM_ (debug . show) got
-        let expect = map (VLit . LInt) $ take k $ unfoldr (\(a,b) -> Just (a+b, (b,a+b))) (0,1)
+        let expect = map (VLit . LInt) $ [0..k-1]
         got `shouldBe` expect
 
-      it "works with swap 10 nats (fib)" $ do
-        let prog = prog_swap_fib_nats
+        -- old fibs expectation
+        -- take k $ unfoldr (\(a,b) -> Just (a+b, (b,a+b))) (0,1)
+
+      it "works with swap 10 nats (const 42)" $ do
+        let prog = prog_swap_const_nats
         let k = 50
         let got = take k $ (interpProgram prog)
         -- mapM_ (debug . show) got
-        let fibs = unfoldr (\(a,b) -> Just (a+b, (b,a+b))) (0,1)
-        let expect = map (VLit . LInt) $ [0..9] ++ take (k-10) (drop 10 fibs)
+        -- let fibs = unfoldr (\(a,b) -> Just (a+b, (b,a+b))) (0,1)
+        let expect = map (VLit . LInt) $ [0..9] ++ take (k-10) (repeat 42)
         got `shouldBe` expect
 
 

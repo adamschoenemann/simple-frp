@@ -276,3 +276,19 @@ inlineTypes ty trm = return trm
 
 runCheckDecl ctx t = runCheckM (checkDecl ctx t)
 runCheckDecl' t = runCheckM (checkDecl emptyCtx t)
+
+
+-- specialize type variables (dirty hack for now)
+specialize :: Map Name (Type a) -> Type a -> Type a
+specialize subst = go where
+  go ty = case ty of
+    TyParam  _ nm -> maybe ty id $ M.lookup nm subst
+    TyProd   a t1 t2 -> TyProd   a (go t1) (go t2)
+    TySum    a t1 t2 -> TySum    a (go t1) (go t2)
+    TyArr    a t1 t2 -> TyArr    a (go t1) (go t2)
+    TyLater  a t     -> TyLater  a (go t)
+    TyStable a t     -> TyStable a (go t)
+    TyStream a t     -> TyStream a (go t)
+    TyAlloc  a       -> TyAlloc  a
+    TyNat    a       -> TyNat    a
+    TyBool   a       -> TyBool   a
