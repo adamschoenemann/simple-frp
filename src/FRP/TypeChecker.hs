@@ -144,7 +144,11 @@ checkTerm ctx term = case term of
       Just ty -> do
         (bdty, QNow) <- checkTerm (extendCtx nm (ty, QNow) ctx) trm
         return (TyArr a ty bdty, QNow)
-  TmFix a b trm          -> undefined
+  -- below will not work without explicit type annotations
+  TmFix a x trm          -> do
+    let ctx' = extendCtx x (ty, QLater) $ stableCtx ctx
+    (ty, QNow) <- checkTerm (stableCtx ctx)
+    return (ty, QNow)
   TmVar a v              -> do
     (vt, q) <- getVar ctx v
     if q `elem` [QNow, QStable]

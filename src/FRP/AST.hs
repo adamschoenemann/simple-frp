@@ -88,7 +88,7 @@ data Term a
   | TmPntr a Label
   | TmPntrDeref a Label
   | TmAlloc a
-  | TmFix a Name (Term a)
+  | TmFix a Name (Term a) -- TODO: add type annotations here
   deriving (Show, Eq, Functor, Data, Typeable)
 
 
