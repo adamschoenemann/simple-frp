@@ -17,6 +17,7 @@ test = (TmVar <$> getPosition) <*> identifier
   -- return (TmVar p)
 
 term = tmlam
+   <|> tmfix
    <|> buildExpressionParser tmtable tmexpr
    <?> "term"
 
@@ -112,6 +113,11 @@ tmlam = do
   where
     lamParam = (\x -> (x,Nothing)) <$> identifier
            <|> parens ((,) <$> identifier <*> (optionMaybe (reservedOp ":" *> ty)))
+
+tmfix :: Parser ParsedTerm
+tmfix = C.tmfix <*> (reserved "fix" *> identifier)
+                <*> (reservedOp "->" *> term)
+
 
 tmite :: Parser ParsedTerm
 tmite =

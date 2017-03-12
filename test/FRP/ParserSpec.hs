@@ -196,6 +196,16 @@ spec = do
 
       parse P.term "app" (ppshow nestedAppExp) `shouldParse` nestedAppExp
 
+    it "parses fixpoint" $ do
+      parse P.term "fix" "fix x -> x" `shouldParse`
+        (tmfix "x" "x")
+
+      parse P.term "fix" "fix f -> (\\x y -> x)" `shouldParse`
+        (tmfix "f" $ "x" --> "y" --> "x")
+
+      parse P.term "fix" "fix f -> (\\x -> if x < 0 then 0 else f (x - 1))" `shouldParse`
+        (tmfix "f" $ "x" --> tmite ("x" <. 0) 0 ("f" <| ("x" - 1)))
+
     it "parses nested patterns" $ do
       parse P.term "pats" "let cons(u, delay(us')) = us in u" `shouldParse`
         (tmlet (PCons "u" (PDelay "us'")) "us" "u")

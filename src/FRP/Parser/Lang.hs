@@ -55,6 +55,7 @@ languageDef = Tok.LanguageDef
                           , "Bool"
                           , "S"
                           , "alloc"
+                          , "fix"
                           ]
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True
