@@ -89,7 +89,7 @@ data Term a
   | TmPntrDeref a Label
   | TmAlloc a
   | TmFix a Name (Term a)
-  deriving (Show, Eq, Functor, Data, Typeable)
+  deriving (Eq, Functor, Data, Typeable)
 
 
 instance Pretty (Map String (Either (Term a) Value)) where
@@ -123,7 +123,7 @@ instance Pretty (Term a) where
       in  prns (text "\\" <> maybePrns (text b <> pty) <+> text "->" <+> ppr (n) trm)
     TmFix _a b trm          -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
     TmVar _a v              -> text v
-    TmApp _a trm trm'       -> ppr (n+1) trm <+> ppr (n+1) trm'
+    TmApp _a trm trm'       -> parens (ppr 0 trm <+> ppr (n+1) trm')
     TmCons _a hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
     TmDelay _a alloc trm    -> text "delay" <> parens (ppr 0 alloc <> comma <+> ppr 0 trm)
     TmStable _a trm         -> text "stable" <> parens (ppr 0 trm)
@@ -145,6 +145,9 @@ instance Pretty (Term a) where
       prns = if (n > 0)
              then parens
              else id
+
+instance Show (Term a) where
+  show = ppshow
 
 instance Num (EvalTerm) where
   fromInteger = TmLit () . LInt . fromInteger

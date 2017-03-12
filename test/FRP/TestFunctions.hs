@@ -89,8 +89,8 @@ frp_map = Decl () ty name body where
       tmcons ("f" <| "x") (tmdelay "u" $ "map" <| "us'" <| tmstable "f" <| "xs'")
 
 
-frp_unfold :: Decl ()
-frp_unfold = Decl () ty name body where
+frp_unfold' :: Decl ()
+frp_unfold' = Decl () ty name body where
   ty = tystream tyalloc |->
        tystable ("X" |-> ("A" `typrod` tylater "X")) |->
        "X" |->
@@ -102,6 +102,15 @@ frp_unfold = Decl () ty name body where
     tmlet (PStable "f") "h" $
     tmlet (PTup "a" $ PDelay "x'") ("f" <| "x") $
     tmcons "a" (tmdelay "u" ("unfold" <| "us'" <| (tmstable "f") <| "x'"))
+
+frp_unfold = unitFunc [decl|
+  unfold : S alloc -> #(X -> (A * @X)) -> X -> S A
+  unfold us h x =
+    let cons(u, delay(us')) = us in
+    let stable(f) = h in
+    let (a, delay(x')) = f x in
+    cons(a, delay(u, unfold us' stable(f) x')).
+|]
 
 -- should not type-check!
 frp_fib_wrong :: Decl ()
