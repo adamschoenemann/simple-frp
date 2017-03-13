@@ -19,3 +19,7 @@ Evaluation of (\x. (\y. x y)) (\z. 10 + z) 5:
 stack repl --test [--trace]
 
 Use `:r` to reload and `Main.main` or `main` to run tests.
+
+## Rewrite rec defs to fixpoint
+- check if the name of the function occurs free in the definition
+- then it is a fixpoint

@@ -167,6 +167,7 @@ checkTerm ctx term = case term of
       else throwError (CannotUnify (t2, QNow) (at, QNow) term ctx)
   TmCons a hd tl         -> do
     hty <- checkTerm ctx hd
+    tlty <- checkTerm ctx tl
     case hty of
       (ht, QNow) -> do
         tlty <- checkTerm ctx tl

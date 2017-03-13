@@ -18,6 +18,15 @@ frp_const = unitFunc [decl|
     cons(x, delay(u, const us' x)).
 |]
 
+
+frp_nats' = [decl|
+  nats : S alloc -> Nat -> S Nat
+  nats us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats us' (x + 1))).
+|]
+
 frp_nats :: Decl ()
 frp_nats = Decl () ty name body where
   ty   = tystream tyalloc |-> tynat |-> tystream tynat
@@ -30,13 +39,6 @@ frp_nats = Decl () ty name body where
           ("nats" <| "us'" <| ("x" + 1)))
         ))
 
-frp_nats' = [decl|
-  nats : S alloc -> Nat -> S Nat
-  nats us n =
-    let cons(u, delay(us')) = us in
-    let stable(x) = promote(n) in
-    cons(x, delay(u, nats us' (x + 1))).
-|]
 
 frp_sum_acc :: Decl ()
 frp_sum_acc = Decl () ty name body where
