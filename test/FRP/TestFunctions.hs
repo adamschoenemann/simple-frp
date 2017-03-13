@@ -18,6 +18,14 @@ frp_const = unitFunc [decl|
     cons(x, delay(u, const us' x)).
 |]
 
+frp_const_fix = unitFunc [decl|
+  const : S alloc -> Nat -> S Nat
+  const = fix f. \us n ->
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, f us' x)).
+|]
+
 
 frp_nats' = [decl|
   nats : S alloc -> Nat -> S Nat
@@ -32,7 +40,7 @@ frp_nats = Decl () ty name body where
   ty   = tystream tyalloc |-> tynat |-> tystream tynat
   name = "nats"
   body =
-      "us" --> "n" -->
+      tmfix "nats" ty $ "us" --> "n" -->
         tmlet (PCons (PBind "u") (PDelay "us'")) "us" (
         tmlet (PStable (PBind "x")) (tmpromote "n") (
         tmcons "x" (tmdelay "u"

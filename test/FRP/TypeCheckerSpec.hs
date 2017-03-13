@@ -101,6 +101,42 @@ spec = do
         runCheckTerm' (tmlamty "xs" ((tylater $ tystream tynat)) $
                        tmlamty "x" tynat $ tmcons "x" "xs")
           `shouldTC` ((tylater $ tystream tynat) |-> tynat |-> tystream tynat, QNow)
+    describe "fixpoints" $ do
+      it "works for fix (x:Nat). 10" $ do
+        runCheckTerm' (tmfix "x" tynat 10) `shouldTC` (tynat, QNow)
+      it "errs for fix (x:Nat). x" $ do
+        shouldTyErr (runCheckTerm' (tmfix "x" tynat "x"))
+      it "works for fix (f:Nat -> @(S Nat) -> S Nat). \\(x : Nat) (xs : @(S Nat)) -> cons(x,xs)" $ do
+        let ty = tynat |-> tylater (tystream tynat) |-> tystream tynat
+        let trm = tmfix "f" ty $ ("x", tynat) -:> ("xs", tylater (tystream tynat)) -:>
+                    tmcons "x" "xs"
+        runCheckTerm' trm `shouldTC` (ty, QNow)
+      it "works for fix (f:Nat -> @(S Nat) -> S Nat). \\x xs -> cons(x,xs)" $ do
+        let ty = tynat |-> tylater (tystream tynat) |-> tystream tynat
+        let trm = tmfix "f" ty $ "x" --> "xs" -->
+                    tmcons "x" "xs"
+        runCheckTerm' trm `shouldTC` (ty, QNow)
+      it "works for frp_const_fix" $ do
+        runCheckDecl' frp_const_fix `shouldTC`
+          (tystream tyalloc |-> tynat |-> tystream tynat, QNow)
+    describe "inferFixLamTy" $ do
+      it "works for the base case" $ do
+        let trm = runCheckM $ inferFixLamTy emptyCtx tynat 10
+        trm `shouldBe` (Right 10)
+      it "does not destroy annotations" $ do
+        let ty = tynat |-> tylater (tystream tynat) |-> tystream tynat
+        let trm = ("x", tynat) -:> ("xs", tylater (tystream tynat)) -:>
+                    tmcons "x" "xs"
+        let res = runCheckM $ inferFixLamTy emptyCtx ty trm
+        res `shouldBe` (Right trm)
+      it "correctly adds annotations" $ do
+        let ty = tynat |-> tylater (tystream tynat) |-> tystream tynat
+        let exp = ("x", tynat) -:> ("xs", tylater (tystream tynat)) -:>
+                    tmcons "x" "xs"
+        let trm = "x" --> "xs" -->
+                    tmcons "x" "xs"
+        let res = runCheckM $ inferFixLamTy emptyCtx ty trm
+        res `shouldBe` (Right exp)
     describe "cons" $ do
       it "works for cons(x,xs) where x:Nat, xs:@(S Nat)" $ do
         let ctx = Ctx $ M.fromList

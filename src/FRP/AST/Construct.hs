@@ -83,6 +83,10 @@ infixr 0 -->
 (-->) :: Name -> EvalTerm -> EvalTerm
 (-->) = tmlam
 
+infixr 0 -:>
+(-:>) :: (Name, Type ()) -> EvalTerm -> EvalTerm
+(nm, ty) -:> trm = tmlamty nm ty trm
+
 infixl 9 <|
 (<|) :: EvalTerm -> EvalTerm -> EvalTerm
 (<|) = tmapp

@@ -12,3 +12,8 @@ since that is not the main goal atm. For now, `app` contains code that is helpfu
 
 `app/Main.hs` has two examples from the paper hand-encoded into the AST. You can pretty print them using `putStrLn . ppshow` and it
 should show a concrete syntax that is close to what is presented in the paper.
+
+
+## Gotcha's
+Recursive top-level declarations are converted to fixpoints, so beware of this
+when testing...

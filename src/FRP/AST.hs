@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE StandaloneDeriving        #-}
 {-# LANGUAGE DeriveDataTypeable        #-}
+{-# LANGUAGE NamedFieldPuns            #-}
 
 
 module FRP.AST where
@@ -11,6 +12,9 @@ module FRP.AST where
 
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+
+import           Data.Set (Set)
+import qualified Data.Set as S
 
 import           Data.String     (IsString (..))
 import           FRP.Pretty
@@ -91,6 +95,44 @@ data Term a
   | TmFix a Name (Maybe (Type a)) (Term a)
   deriving (Show, Eq, Functor, Data, Typeable)
 
+freeVars :: Term a -> [Name]
+freeVars = S.toList . go where
+  go = \case
+    TmFst a t                    -> go t
+    TmSnd a t                    -> go t
+    TmTup a t1 t2                -> go t1 +++ go t2
+    TmInl a t                    -> go t
+    TmInr a t                    -> go t
+    TmCase a t (ln, lt) (rn, rt) -> (go lt // ln) +++ (go rt // rn)
+    TmLam a nm mty t             -> go t // nm
+    TmVar a nm                   -> S.singleton nm
+    TmApp a  t1 t2               -> go t1 +++ go t2
+    TmCons a t1 t2               -> go t1 +++ go t2
+    TmOut a t                    -> go t
+    TmInto a t                   -> go t
+    TmStable a t                 -> go t
+    TmDelay a t1 t2              -> go t1 +++ go t2
+    TmPromote a t                -> go t
+    TmLet a pat t1 t2            -> (go t1 +++ go t2) \\ bindings pat
+    TmLit a l                    -> S.empty
+    TmBinOp a op t1 t2           -> go t1 +++ go t2
+    TmITE a b tt tf              -> go b +++ go tt +++ go tf
+    TmPntr a lbl                 -> S.empty
+    TmPntrDeref a lbl            -> S.empty
+    TmAlloc a                    -> S.empty
+    TmFix a nm mty t             -> go t // nm
+
+  (+++) = S.union
+  (//)  = flip S.delete
+  (\\)  = (S.\\)
+
+  bindings = \case
+    PBind  nm       -> S.singleton nm
+    PDelay nm       -> S.singleton nm
+    PCons pat1 pat2 -> bindings pat1 +++ bindings pat2
+    PStable pat     -> bindings pat
+    PTup pat1 pat2  -> bindings pat1 +++ bindings pat2
+
 
 instance Pretty (Map String (Either (Term a) Value)) where
   ppr n env = char '[' $+$ nest 2 body $+$ char ']' where
@@ -121,7 +163,7 @@ instance Pretty (Term a) where
       let pty = maybe mempty (\t -> char ':' <> ppr 0 t) mty
           maybePrns = maybe id (const parens) mty
       in  prns (text "\\" <> maybePrns (text b <> pty) <+> text "->" <+> ppr (n) trm)
-    TmFix _a b ty trm       -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
+    TmFix _a b ty trm       -> prns (text "fix" <+> text b <> char '.' <+> ppr (n+1) trm)
     TmVar _a v              -> text v
     TmApp _a trm trm'       -> parens (ppr 0 trm <+> ppr (n+1) trm')
     TmCons _a hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
@@ -250,15 +292,16 @@ data Decl a =
 
 
 instance Pretty (Decl a) where
-  ppr n (Decl _a ty nm bd) =
-    let (bs, bd') = bindings bd
-    in  text nm <+> char ':' <+> ppr n ty
-        $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd' <> char '.')
-    where
-      bindings (TmLam _a x _ b) =
-        let (y, b') = bindings b
-        in  (x:y, b')
-      bindings b           = ([], b)
+  ppr n = go n . unfixifyDecl where
+    go n (Decl _a ty nm bd) =
+      let (bs, bd') = bindings bd
+      in  text nm <+> char ':' <+> ppr n ty
+          $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd' <> char '.')
+      where
+        bindings (TmLam _a x _ b) =
+          let (y, b') = bindings b
+          in  (x:y, b')
+        bindings b           = ([], b)
 
 data Program a = Program { _main :: Decl a, _decls :: [Decl a]}
   deriving (Show, Eq, Functor, Data, Typeable)
@@ -275,3 +318,19 @@ paramsToLams = foldl (\acc x y -> acc (TmLam () x Nothing y)) id
 
 paramsToLams' :: a -> [(String, Maybe (Type a))] -> Term a -> Term a
 paramsToLams' b = foldl (\acc (x,t) y -> acc (TmLam b x t y)) id
+
+fixifyDecl :: Decl t -> Decl t
+fixifyDecl decl@(Decl {_ann, _name, _type, _body}) =
+  if _name `elem` freeVars _body
+    then decl {_body = TmFix _ann _name (Just _type) _body}
+    else decl
+
+-- FIXME: Will only work if the name bound by fix is _name
+unfixifyDecl :: Decl t -> Decl t
+unfixifyDecl decl@(Decl {_ann, _name, _type, _body}) =
+  case _body of
+    TmFix _a nm mty bd ->
+      if nm == _name
+        then decl {_body = bd}
+        else decl
+    _                  -> decl
