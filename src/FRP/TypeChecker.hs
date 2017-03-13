@@ -141,12 +141,22 @@ pushCtxHandler ctx m = m `catchError` handler where
 
 checkTerm :: Context t -> Term t -> CheckM t (Ty t)
 checkTerm ctx term = case term of
-  TmFst a trm            -> do
-    (TyProd _ t1 t2, QNow) <- checkTerm ctx trm
-    return (t1, QNow)
-  TmSnd a trm            -> do
-    (TyProd _ t1 t2, QNow) <- checkTerm ctx trm
-    return (t2, QNow)
+  TmFst a trm -> checkTerm ctx trm >>= \case
+    (TyProd _ t1 t2, QNow) -> return (t1, QNow)
+    (ty, q) ->
+        typeErr (CannotUnify
+                  (TyProd a (TyParam a "a0") (TyParam a "a1"), QNow)
+                  (ty, q)
+                  term
+                ) ctx
+  TmSnd a trm -> checkTerm ctx trm >>= \case
+    (TyProd _ t1 t2, QNow) -> return (t2, QNow)
+    (ty, q) ->
+        typeErr (CannotUnify
+                  (TyProd a (TyParam a "a0") (TyParam a "a1"), QNow)
+                  (ty, q)
+                  term
+                ) ctx
   TmTup a trm1 trm2      -> do
     (t1, QNow) <- checkTerm ctx trm1
     (t2, QNow) <- checkTerm ctx trm2
