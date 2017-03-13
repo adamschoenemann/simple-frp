@@ -23,7 +23,7 @@ import           Text.Parsec         (ParseError, parse)
 
 import           Data.Either         (isRight)
 import           FRP.Generators
-import           FRP.TestFunctions   (frps, frp_unfold, frp_unfold')
+import           FRP.TestFunctions   (frps, frp_unfold)
 import           Test.QuickCheck
 
 
@@ -478,8 +478,8 @@ spec = do
           Left e  -> fail (ppshow d ++ "\n" ++ show e)) frps
 
   describe "program parsing" $ do
-    it "should work with unfold program" $ do
-      frp_unfold `shouldBe` frp_unfold'
+    -- it "should work with unfold program" $ do
+    --   frp_unfold `shouldBe` frp_unfold'
 
     it "should work with const program" $ do
       let p = [text|
@@ -493,7 +493,7 @@ spec = do
               main us = const us 10.
               |]
       let Right r = parse P.prog "const" $ unpack p
-      -- putStrLn . show $ r
+      let constTy = tyarr (tystream tyalloc) (tyarr tynat (tystream tynat))
       unitFunc r `shouldBe`
         Program
           { _main = Decl
@@ -505,10 +505,10 @@ spec = do
           , _decls =
             [ Decl
                 { _ann  = ()
-                , _type = tyarr (tystream tyalloc) (tyarr tynat (tystream tynat))
+                , _type = constTy
                 , _name = "const"
                 , _body =
-                    tmlam "us" (tmlam "n"
+                    tmfix "const" constTy $ tmlam "us" (tmlam "n"
                       (tmlet (PCons (PBind "u") (PBind "us'")) (tmvar "us")
                       (tmlet (PStable (PBind "x")) (tmvar "n")
                       (tmcons (tmvar "x")
@@ -541,6 +541,10 @@ spec = do
                 sum us nats us 0.
               |]
       let Right r = parse P.prog "sum" $ unpack p
+      let sumTy = tyarr (tystream tyalloc)
+                        (tyarr (tystream tynat)
+                        (tyarr tynat (tystream tynat)))
+      let natTy = tyarr (tystream tyalloc) (tystream tynat)
       let exp = Program
             { _main = Decl
               { _ann  = ()
@@ -555,9 +559,9 @@ spec = do
               }
             , _decls = [ Decl
                          { _ann  = ()
-                         , _type = tyarr (tystream tyalloc) (tystream tynat)
+                         , _type = natTy
                          , _name = "nats"
-                         , _body = tmlam "us"
+                         , _body = tmfix "nats" natTy $ tmlam "us"
                                      (tmlam "n"
                                         (tmlet
                                            (PCons (PBind "u") (PDelay "us'"))
@@ -574,11 +578,9 @@ spec = do
                          }
                        , Decl
                          { _ann  = ()
-                         , _type = tyarr (tystream tyalloc)
-                                     (tyarr (tystream tynat)
-                                        (tyarr tynat (tystream tynat)))
+                         , _type = sumTy
                          , _name = "sum_acc"
-                         , _body = tmlam "us"
+                         , _body = tmfix "sum_acc" sumTy $ tmlam "us"
                                      (tmlam "ns"
                                         (tmlam "acc"
                                            (tmlet

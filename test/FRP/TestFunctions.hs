@@ -27,7 +27,7 @@ frp_const_fix = unitFunc [decl|
 |]
 
 
-frp_nats' = [decl|
+frp_nats = unitFunc [decl|
   nats : S alloc -> Nat -> S Nat
   nats us n =
     let cons(u, delay(us')) = us in
@@ -35,83 +35,55 @@ frp_nats' = [decl|
     cons(x, delay(u, nats us' (x + 1))).
 |]
 
-frp_nats :: Decl ()
-frp_nats = Decl () ty name body where
-  ty   = tystream tyalloc |-> tynat |-> tystream tynat
-  name = "nats"
-  body =
-      tmfix "nats" ty $ "us" --> "n" -->
-        tmlet (PCons (PBind "u") (PDelay "us'")) "us" (
-        tmlet (PStable (PBind "x")) (tmpromote "n") (
-        tmcons "x" (tmdelay "u"
-          ("nats" <| "us'" <| ("x" + 1)))
-        ))
-
-
 frp_sum_acc :: Decl ()
-frp_sum_acc = Decl () ty name body where
-  ty = tystream tyalloc |-> tystream tynat |-> tynat |-> tystream tynat
-  name = "sum_acc"
-  body = "us" --> "ns" --> "acc" --> lamBody
-  lamBody = tmlet pat1 rhs1 (tmlet pat2 rhs2 (tmlet pat3 rhs3 concl))
-  pat1 = PCons (PBind "u") (PDelay "us'")
-  rhs1 = "us"
-  pat2 = PCons (PBind "n") (PDelay "ns'")
-  rhs2 = "ns"
-  pat3 = PStable (PBind "x")
-  rhs3 = tmpromote (tmbinop Add "n" "acc")
-  concl = tmcons "x" (tmdelay "u" delayBody)
-  delayBody = "sum_acc" <| "us'" <| "ns'" <| "x"
+frp_sum_acc = unitFunc [decl|
+  sum_acc : S alloc -> S Nat -> Nat -> S Nat
+  sum_acc us ns acc =
+    let cons(u, delay(us')) = us in
+    let cons(n, delay(ns')) = ns in
+    let stable(x) = promote(n + acc) in
+    cons(x, delay(u, (((sum_acc us') ns') x))).
+|]
 
 frp_sum :: Decl ()
-frp_sum = Decl () ty name body where
-  name = "sum"
-  ty   = tystream tyalloc |-> tystream tynat |-> tystream tynat
-  body = "us" --> "ns" -->
-         ("sum_acc" <| "us" <| "ns") <| 0
+frp_sum = unitFunc [decl|
+  sum : S alloc -> S Nat -> S Nat
+  sum us ns = sum_acc us ns 0.
+|]
 
 
 frp_tails :: Decl ()
-frp_tails = Decl () ty name body where
-  name = "tails"
-  ty   = tystream tyalloc |-> tystream "A" |-> tystream (tystream "A")
-  body = "us" --> "xs" -->
-         tmlet (consp "u" "us'") "us" $
-         tmlet (consp "x" "xs'") "xs" $
-         tmcons "xs" (tmdelay "u" ("tails" <| "us'" <| "xs'"))
-  consp h t = PCons h (PDelay t)
-
-frp_main :: EvalTerm -> Type () -> Decl ()
-frp_main bd retTy = Decl () ty "main" bd where
-  ty = tystream tyalloc |-> retTy
-
+frp_tails = unitFunc [decl|
+  tails : S alloc -> S A -> S (S A)
+  tails us xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    cons(xs, delay(u, ((tails us') xs'))).
+|]
 
 frp_map :: Decl ()
-frp_map = Decl () ty name body where
-  ty = tystream tyalloc |-> tystable ("A" |-> "B") |->
-       tystream "A" |-> tystream "B"
-  name = "map"
-  body =
-    "us" --> "h" --> "xs" -->
-      tmlet (PCons "u" $ PDelay "us'") "us" $
-      tmlet (PCons "x" $ PDelay "xs'") "xs" $
-      tmlet (PStable "f") "h" $
-      tmcons ("f" <| "x") (tmdelay "u" $ "map" <| "us'" <| tmstable "f" <| "xs'")
+frp_map = unitFunc [decl|
+  map : S alloc -> #(A -> B) -> S A -> S B
+  map us h xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    let stable(f) = h in
+    cons((f x), delay(u, (((map us') stable(f)) xs'))).
+|]
 
-
-frp_unfold' :: Decl ()
-frp_unfold' = Decl () ty name body where
-  ty = tystream tyalloc |->
-       tystable ("X" |-> ("A" `typrod` tylater "X")) |->
-       "X" |->
-       tystream "A"
-  name = "unfold"
-  body =
-    "us" --> "h" --> "x" -->
-    tmlet (PCons "u" $ PDelay "us'") "us" $
-    tmlet (PStable "f") "h" $
-    tmlet (PTup "a" $ PDelay "x'") ("f" <| "x") $
-    tmcons "a" (tmdelay "u" ("unfold" <| "us'" <| (tmstable "f") <| "x'"))
+-- frp_unfold' :: Decl ()
+-- frp_unfold' = Decl () ty name body where
+--   ty = tystream tyalloc |->
+--        tystable ("X" |-> ("A" `typrod` tylater "X")) |->
+--        "X" |->
+--        tystream "A"
+--   name = "unfold"
+--   body =
+--     "us" --> "h" --> "x" -->
+--     tmlet (PCons "u" $ PDelay "us'") "us" $
+--     tmlet (PStable "f") "h" $
+--     tmlet (PTup "a" $ PDelay "x'") ("f" <| "x") $
+--     tmcons "a" (tmdelay "u" ("unfold" <| "us'" <| (tmstable "f") <| "x'"))
 
 frp_unfold = unitFunc [decl|
   unfold : S alloc -> #(X -> (A * @X)) -> X -> S A
@@ -140,6 +112,7 @@ frp_fib_wrong = Decl () ty name body where
           tmlet (PStable "f'") (tmpromote "f") $
           tmtup "f" (tmdelay "u" (tmtup (tmstable "b'") (tmstable "f'")))
 
+frp_natfn :: Decl ()
 frp_natfn = unitFunc [decl|
   natfn : (S alloc * Nat) -> (Nat * @(S alloc * Nat))
   natfn x =
@@ -157,21 +130,19 @@ frp_nats_unfold = unitFunc [decl|
 |]
 
 frp_swap :: Decl ()
-frp_swap = Decl () ty name body where
-  ty = tystream tyalloc |->
-       tynat |->
-       tystream "A" |->
-       tystream "A" |->
-       tystream "A"
-  name = "swap"
-  body = "us" --> "n" --> "xs" --> "ys" -->
-         tmite (tmbinop Eq "n" 0)
-            "ys" $
-            tmlet (PCons "u" $ PDelay "us'") "us" $
-            tmlet (PCons "x" $ PDelay "xs'") "xs" $
-            tmlet (PCons "y" $ PDelay "ys'") "ys" $
-            tmlet (PStable "m") (tmpromote "n")   $
-            tmcons "x" (tmdelay "u" $ recCall)
-  recCall = "swap" <| "us'" <| (tmbinop Sub "m" $ 1) <|
-            "xs'" <| "ys'"
+frp_swap = unitFunc [decl|
+  swap : S alloc -> Nat -> S A -> S A -> S A
+  swap us n xs ys =
+    if n == 0
+      then ys
+      else let cons(u, delay(us')) = us in
+           let cons(x, delay(xs')) = xs in
+           let cons(y, delay(ys')) = ys in
+           let stable(m) = promote(n) in
+           cons(x, delay(u, ((((swap us') (m - 1)) xs') ys'))).
+|]
 
+
+frp_main :: EvalTerm -> Type () -> Decl ()
+frp_main bd retTy = Decl () ty "main" bd where
+  ty = tystream tyalloc |-> retTy
