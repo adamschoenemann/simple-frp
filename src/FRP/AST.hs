@@ -165,7 +165,7 @@ instance Pretty (Term a) where
       in  prns (text "\\" <> maybePrns (text b <> pty) <+> text "->" <+> ppr (n) trm)
     TmFix _a b ty trm       -> prns (text "fix" <+> text b <> char '.' <+> ppr (n+1) trm)
     TmVar _a v              -> text v
-    TmApp _a trm trm'       -> parens (ppr 0 trm <+> ppr (n+1) trm')
+    TmApp _a trm trm'       -> prns (ppr 0 trm <+> ppr (n+1) trm')
     TmCons _a hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
     TmDelay _a alloc trm    -> text "delay" <> parens (ppr 0 alloc <> comma <+> ppr 0 trm)
     TmStable _a trm         -> text "stable" <> parens (ppr 0 trm)
@@ -296,7 +296,8 @@ instance Pretty (Decl a) where
     go n (Decl _a ty nm bd) =
       let (bs, bd') = bindings bd
       in  text nm <+> char ':' <+> ppr n ty
-          $$ hsep (map text (nm : bs)) <+> char '=' $$ nest 2 (ppr n bd' <> char '.')
+          $$ hsep (map text (nm : bs)) <+> char '='
+          $$ nest 2 (ppr 0 bd' <> char '.')
       where
         bindings (TmLam _a x _ b) =
           let (y, b') = bindings b
