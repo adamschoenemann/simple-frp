@@ -131,8 +131,8 @@ eval term = case term of
   TmInl _a trm -> VInl <$> eval trm
   TmInr _a trm -> VInr <$> eval trm
   TmCons _a hd tl -> VCons <$> eval hd <*> eval tl
-  TmFix _a x e ->
-    local (M.insert x (Left $ tmfix x e)) $ eval e
+  TmFix _a x ty e ->
+    local (M.insert x (Left $ term)) $ eval e
   TmDelay _a e' e -> do
     v <- eval e'
     case v of
@@ -267,7 +267,7 @@ toHaskList = \case
   v         -> error $ "expected cons but got " ++ ppshow v
 
 
-mainEvalTerm body = tmapp body (tmfix "xs" $ tmcons tmalloc (tmdelay tmalloc (tmvar "xs")))
+mainEvalTerm body = tmapp body (tmfix "xs" undefined $ tmcons tmalloc (tmdelay tmalloc (tmvar "xs")))
 
 globalEnv decls = foldl go M.empty decls
   where

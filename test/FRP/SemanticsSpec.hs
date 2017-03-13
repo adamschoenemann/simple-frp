@@ -58,18 +58,18 @@ spec = do
         -- debug $ "result: " ++ (ppshow r)
     describe "fixpoint" $ do
       it "works for const" $ do
-        let fp = tmfix "x" ("y" --> "y") <| 10
+        let fp = tmfix "x" tynat ("y" --> "y") <| 10
         let v = evalExpr M.empty fp
         v `shouldBe` (VLit (LInt 10))
         -- ppdebug v
       it "works for factorial" $ do
-        let fact = tmfix "f" ("n" --> tmite ("n" `eq` 1) 1 ("n" * ("f" <| ("n" - 1))))
+        let fact = tmfix "f" (tynat |-> tynat) ("n" --> tmite ("n" `eq` 1) 1 ("n" * ("f" <| ("n" - 1))))
         -- ppdebug fact
         let v = evalExpr M.empty (fact <| 4)
         v `shouldBe` (VLit (LInt 24))
         -- ppdebug v
       it "works for fibonacci" $ do
-        let fib = tmfix "f" $ "n" -->
+        let fib = tmfix "f" (tynat |-> tynat |-> tynat) $ "n" -->
                     tmite ("n" <== 1)
                       "n"
                       ("f" <| ("n" - 1) + "f" <| ("n" - 2))
@@ -80,7 +80,7 @@ spec = do
 
     describe "fixedpoint" $ do
       it "works with stream of allocators" $ do
-        let fp = tmfix "xs" $ tmcons tmalloc (tmdelay tmalloc "xs")
+        let fp = tmfix "xs" undefined $ tmcons tmalloc (tmdelay tmalloc "xs")
         let run s e n =
               let (v, s')  = runExpr s M.empty e
                   VCons _ (VPntr l) = v

@@ -145,10 +145,15 @@ checkTerm ctx term = case term of
         (bdty, QNow) <- checkTerm (extendCtx nm (ty, QNow) ctx) trm
         return (TyArr a ty bdty, QNow)
   -- below will not work without explicit type annotations
-  TmFix a x trm          -> do
-    let ctx' = extendCtx x (ty, QLater) $ stableCtx ctx
-    (ty, QNow) <- checkTerm (stableCtx ctx)
-    return (ty, QNow)
+  TmFix a x ty0 trm          ->
+    case ty0 of
+      Nothing -> throwError (TypeAnnRequired term)
+      Just ty -> do
+        let ctx' = extendCtx x (ty, QLater) $ stableCtx ctx
+        (ty1, q) <- checkTerm (stableCtx ctx) trm
+        if ((unitFunc ty, QNow) /= (unitFunc ty1, QNow))
+          then throwError (CannotUnify (ty, QNow) (ty1, q) term ctx)
+          else return (ty, QNow)
   TmVar a v              -> do
     (vt, q) <- getVar ctx v
     if q `elem` [QNow, QStable]
@@ -188,11 +193,6 @@ checkTerm ctx term = case term of
       else checkTerm (stableCtx ctx) trm >>= \case
         (t, QNow) -> return (TyStable a t, QNow)
         (t, q)    -> throwError (NotStable (t, q))
-    -- (t, QNow) <- checkTerm ctx trm
-    -- isstab <- isStable ctx t
-    -- if isstab
-    --   then return (TyStable a t, QNow)
-    --   else throwError (NotStable (t, QNow))
   TmLet a ptn trm1 trm2   -> do
     t <- checkTerm ctx trm1
     ctx2 <- checkPtn ctx ptn t

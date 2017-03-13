@@ -76,8 +76,8 @@ tmpntrderef = TmPntrDeref ()
 tmalloc :: EvalTerm
 tmalloc = TmAlloc ()
 
-tmfix :: Name -> EvalTerm -> EvalTerm
-tmfix = TmFix ()
+tmfix :: Name -> Type () -> EvalTerm -> EvalTerm
+tmfix n ty t = TmFix () n (Just ty) t
 
 infixr 0 -->
 (-->) :: Name -> EvalTerm -> EvalTerm

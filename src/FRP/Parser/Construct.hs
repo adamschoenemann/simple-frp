@@ -75,5 +75,5 @@ tmpntrderef = TmPntrDeref <$> getPosition
 tmalloc :: Parser (ParsedTerm)
 tmalloc = TmAlloc <$> getPosition
 
-tmfix :: Parser (Name -> ParsedTerm -> ParsedTerm)
+tmfix :: Parser (Name -> (Maybe (Type SourcePos)) -> ParsedTerm -> ParsedTerm)
 tmfix = TmFix <$> getPosition

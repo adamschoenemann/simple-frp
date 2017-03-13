@@ -114,9 +114,15 @@ tmlam = do
     lamParam = (\x -> (x,Nothing)) <$> identifier
            <|> parens ((,) <$> identifier <*> (optionMaybe (reservedOp ":" *> ty)))
 
+tmparam = (\x -> (x,Nothing)) <$> identifier
+           <|> parens ((,) <$> identifier <*> (optionMaybe (reservedOp ":" *> ty)))
+
 tmfix :: Parser ParsedTerm
-tmfix = C.tmfix <*> (reserved "fix" *> identifier)
-                <*> (reservedOp "->" *> term)
+tmfix = do
+  _ <- reserved "fix"
+  (nm, ty) <- tmparam
+  trm <- reservedOp "->" *> term
+  C.tmfix <*> return nm <*> return ty <*> return trm
 
 
 tmite :: Parser ParsedTerm

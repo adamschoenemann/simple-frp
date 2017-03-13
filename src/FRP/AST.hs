@@ -88,7 +88,7 @@ data Term a
   | TmPntr a Label
   | TmPntrDeref a Label
   | TmAlloc a
-  | TmFix a Name (Term a) -- TODO: add type annotations here
+  | TmFix a Name (Maybe (Type a)) (Term a)
   deriving (Show, Eq, Functor, Data, Typeable)
 
 
@@ -121,7 +121,7 @@ instance Pretty (Term a) where
       let pty = maybe mempty (\t -> char ':' <> ppr 0 t) mty
           maybePrns = maybe id (const parens) mty
       in  prns (text "\\" <> maybePrns (text b <> pty) <+> text "->" <+> ppr (n) trm)
-    TmFix _a b trm          -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
+    TmFix _a b ty trm       -> prns (text "fix" <+> text b <+> text "->" <+> ppr (n+1) trm)
     TmVar _a v              -> text v
     TmApp _a trm trm'       -> parens (ppr 0 trm <+> ppr (n+1) trm')
     TmCons _a hd tl         -> text "cons" <> parens (ppr (n+1) hd <> comma <+> ppr (n+1) tl)
