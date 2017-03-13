@@ -197,13 +197,13 @@ spec = do
       parse P.term "app" (ppshow nestedAppExp) `shouldParse` nestedAppExp
 
     it "parses fixpoint" $ do
-      parse P.term "fix" "fix (x:Nat) -> x" `shouldParse`
+      parse P.term "fix" "fix (x:Nat). x" `shouldParse`
         (tmfix "x" tynat "x")
 
-      parse P.term "fix" "fix (f:Nat) -> (\\x y -> x)" `shouldParse`
+      parse P.term "fix" "fix (f:Nat). (\\x y -> x)" `shouldParse`
         (tmfix "f" tynat $ "x" --> "y" --> "x")
 
-      parse P.term "fix" "fix (f:Nat -> Nat) -> (\\x -> if x < 0 then 0 else f (x - 1))" `shouldParse`
+      parse P.term "fix" "fix (f:Nat -> Nat). (\\x -> if x < 0 then 0 else f (x - 1))" `shouldParse`
         (tmfix "f" (tynat |-> tynat) $ "x" --> tmite ("x" <. 0) 0 ("f" <| ("x" - 1)))
 
     it "parses nested patterns" $ do

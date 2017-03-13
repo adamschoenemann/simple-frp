@@ -121,7 +121,7 @@ tmfix :: Parser ParsedTerm
 tmfix = do
   _ <- reserved "fix"
   (nm, ty) <- tmparam
-  trm <- reservedOp "->" *> term
+  trm <- reservedOp "." *> term
   C.tmfix <*> return nm <*> return ty <*> return trm
 
 
