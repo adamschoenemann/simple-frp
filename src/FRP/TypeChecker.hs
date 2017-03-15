@@ -145,7 +145,7 @@ checkTerm ctx term = case term of
     (TyProd _ t1 t2, QNow) -> return (t1, QNow)
     (ty, q) ->
         typeErr (CannotUnify
-                  (TyProd a (TyParam a "a0") (TyParam a "a1"), QNow)
+                  (TyProd a (TyVar a "a0") (TyVar a "a1"), QNow)
                   (ty, q)
                   term
                 ) ctx
@@ -153,7 +153,7 @@ checkTerm ctx term = case term of
     (TyProd _ t1 t2, QNow) -> return (t2, QNow)
     (ty, q) ->
         typeErr (CannotUnify
-                  (TyProd a (TyParam a "a0") (TyParam a "a1"), QNow)
+                  (TyProd a (TyVar a "a0") (TyVar a "a1"), QNow)
                   (ty, q)
                   term
                 ) ctx
@@ -168,10 +168,10 @@ checkTerm ctx term = case term of
                       in typeErr (CannotUnify (et, QNow) (et, eq) etrm) ctx
   -- these also won't work without explicit type annotations
   TmInl a trm -> checkTerm ctx trm >>= \case
-    (t1, QNow) -> freshName >>= (\b -> return (TySum a t1 (TyParam a b), QNow))
+    (t1, QNow) -> freshName >>= (\b -> return (TySum a t1 (TyVar a b), QNow))
     (t1, q)    -> typeErr (CannotUnify (t1, QNow) (t1, q) trm) ctx
   TmInr a trm -> checkTerm ctx term >>= \case
-    (t2, QNow) -> freshName >>= (\b -> return (TySum a (TyParam a b) t2, QNow))
+    (t2, QNow) -> freshName >>= (\b -> return (TySum a (TyVar a b) t2, QNow))
     (t2, q)    -> typeErr (CannotUnify (t2, QNow) (t2, q) trm) ctx
   TmCase a trm (vl, trml) (vr, trmr) -> checkTerm ctx term >>= \case
     (TySum a' t1 t2, QNow) -> do
@@ -187,7 +187,7 @@ checkTerm ctx term = case term of
         then typeErr (CannotUnify (c2, QNow) (c2, q2) trmr) rctx
       else return (c1, QNow)
     (et, eq) ->
-      let expTy = TySum a (TyParam a "a0") (TyParam a "a1")
+      let expTy = TySum a (TyVar a "a0") (TyVar a "a1")
       in  typeErr (CannotUnify (et, eq) (expTy, QNow) term) ctx
   TmLam a nm mty trm ->
     case mty of
@@ -224,7 +224,7 @@ checkTerm ctx term = case term of
     (et, eq) -> do
       a1 <- freshName
       a2 <- freshName
-      let expTy = TyArr a (TyParam a a1) (TyParam a a2)
+      let expTy = TyArr a (TyVar a a1) (TyVar a a2)
       typeErr (CannotUnify (expTy, QNow) (et, eq) trm1) ctx
   TmCons a hd tl         -> do
     hty <- checkTerm ctx hd
@@ -365,7 +365,7 @@ runCheckDecl' t = runCheckM (checkDecl emptyCtx t)
 specialize :: Map Name (Type a) -> Type a -> Type a
 specialize subst = go where
   go ty = case ty of
-    TyParam  _ nm -> maybe ty id $ M.lookup nm subst
+    TyVar  _ nm -> maybe ty id $ M.lookup nm subst
     TyProd   a t1 t2 -> TyProd   a (go t1) (go t2)
     TySum    a t1 t2 -> TySum    a (go t1) (go t2)
     TyArr    a t1 t2 -> TyArr    a (go t1) (go t2)

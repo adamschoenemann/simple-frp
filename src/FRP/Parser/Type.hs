@@ -28,10 +28,10 @@ tyexpr = parens ty
      <|> tynat
      <|> tybool
      <|> tyalloc
-     <|> typaram
+     <|> tyvar
 
 tynat = reserved "Nat" >> withPos TyNat
 tybool = reserved "Bool" >> withPos TyBool
 tyalloc = reserved "alloc" >> withPos TyAlloc
-typaram = withPos TyParam <*> identifier
+tyvar = withPos TyVar <*> identifier
 

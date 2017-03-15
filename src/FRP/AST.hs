@@ -40,7 +40,7 @@ instance Pretty Qualifier where
 infixr 9 `TyArr`
 
 data Type a
-  = TyParam  a Name
+  = TyVar  a Name
   | TyProd   a (Type a) (Type a)
   | TySum    a (Type a) (Type a)
   | TyArr    a (Type a) (Type a)
@@ -54,7 +54,7 @@ data Type a
 
 instance Pretty (Type a) where
   ppr n type' = case type' of
-    TyParam  _a name   -> text name
+    TyVar  _a name   -> text name
     TyProd   _a ty ty' -> prns (ppr (n+1) ty <+> text "*" <+> ppr (n+1) ty')
     TySum    _a ty ty' -> prns (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
     TyArr    _a ty ty' -> prns $ ppr n ty <+> text "->" <+> ppr n ty'
@@ -143,7 +143,7 @@ instance IsString (EvalTerm) where
   fromString x = TmVar () x
 
 instance IsString (Type ()) where
-  fromString x = TyParam () x
+  fromString x = TyVar () x
 
 instance IsString Pattern where
   fromString x = PBind x

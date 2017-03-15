@@ -344,18 +344,18 @@ spec = do
       parse P.ty "stream of allocs" "S alloc" `shouldParse`
         (tystream tyalloc)
       parse P.ty "stream of params" "S a" `shouldParse`
-        (tystream $ typaram "a")
+        (tystream $ tyvar "a")
       parse P.ty "stream of params" "S s" `shouldParse`
-        (tystream $ typaram "s")
+        (tystream $ tyvar "s")
       parse P.ty "stream of params" "S Sample" `shouldParse`
-        (tystream $ typaram "Sample")
+        (tystream $ tyvar "Sample")
     it "parses products" $ do
       parse P.ty "pair of nats" "Nat * Nat" `shouldParse`
         (typrod tynat tynat)
       parse P.ty "pair of nat x alloc" "Nat * alloc" `shouldParse`
         (typrod tynat tyalloc)
       parse P.ty "pair of params" "a * b" `shouldParse`
-        (typrod (typaram "a") (typaram "b"))
+        (typrod (tyvar "a") (tyvar "b"))
       parse P.ty "pair of streams of nats" "S Nat * S Nat" `shouldParse`
         (typrod (tystream tynat) (tystream tynat))
       parse P.ty "nested pair" "Nat * Nat * Nat" `shouldParse`
@@ -366,7 +366,7 @@ spec = do
       parse P.ty "sum of nat x alloc" "Nat + alloc" `shouldParse`
         (tysum tynat tyalloc)
       parse P.ty "sum of params" "a + b" `shouldParse`
-        (tysum (typaram "a") (typaram "b"))
+        (tysum (tyvar "a") (tyvar "b"))
       parse P.ty "sum of streams of nats" "S Nat + S Nat" `shouldParse`
         (tysum (tystream tynat) (tystream tynat))
       parse P.ty "nested sum" "Nat + Nat + Nat" `shouldParse`
@@ -377,7 +377,7 @@ spec = do
       parse P.ty "arrow of nat x alloc" "Nat -> alloc" `shouldParse`
         (tynat |-> tyalloc)
       parse P.ty "arrow of params" "a -> b" `shouldParse`
-        (typaram "a" |-> typaram "b")
+        (tyvar "a" |-> tyvar "b")
       parse P.ty "arrow of streams of nats" "S Nat -> S Nat" `shouldParse`
         (tystream tynat |-> tystream tynat)
       parse P.ty "nested arrows" "Nat -> Nat -> Nat" `shouldParse`

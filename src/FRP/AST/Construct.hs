@@ -106,7 +106,7 @@ eq = tmbinop Eq
 (<.) :: EvalTerm -> EvalTerm -> EvalTerm
 (<.) = tmbinop Lt
 
-typaram = TyParam ()
+tyvar = TyVar ()
 typrod = TyProd ()
 tysum = TySum ()
 tyarr = TyArr ()
