@@ -30,8 +30,8 @@ tyexpr = parens ty
      <|> tyalloc
      <|> tyvar
 
-tynat = reserved "Nat" >> withPos TyNat
-tybool = reserved "Bool" >> withPos TyBool
+tynat = reserved "Nat"   >> withPos (\p -> TyPrim p TyNat)
+tybool = reserved "Bool" >> withPos (\p -> TyPrim p TyBool)
 tyalloc = reserved "alloc" >> withPos TyAlloc
 tyvar = withPos TyVar <*> identifier
 

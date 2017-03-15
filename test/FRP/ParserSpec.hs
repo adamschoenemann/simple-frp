@@ -122,16 +122,16 @@ spec = do
 
     it "should parse lambdas with types" $ do
       parse P.term "lamty" "\\(x:Nat) -> x" `shouldParse`
-        tmlamty "x" (TyNat ()) "x"
+        tmlamty "x" tynat "x"
       parse P.term "lamty" "\\(x:Nat) -> \\(y:Bool) -> x" `shouldParse`
-        tmlamty "x" (TyNat ()) (tmlamty "y" (TyBool ()) "x")
+        tmlamty "x" tynat (tmlamty "y" (tybool) "x")
 
       parse P.term "lamty" "\\(x:Nat) (y:Bool) -> x" `shouldParse`
-        tmlamty "x" (TyNat ()) (tmlamty "y" (TyBool ()) "x")
+        tmlamty "x" tynat (tmlamty "y" (tybool) "x")
 
       parse P.term "lamty" "\\(x:Nat -> S Bool) (y : Nat * Bool) -> x" `shouldParse`
-        tmlamty "x" (TyNat () |-> TyStream () $ TyBool ())
-          (tmlamty "y" (TyNat () .*. TyBool ()) "x")
+        tmlamty "x" (tynat |-> TyStream () $ tybool)
+          (tmlamty "y" (tynat .*. tybool) "x")
 
     it "should parse let expressions" $ do
       parse P.tmlet "let" "let x = 10 in x" `shouldParse`

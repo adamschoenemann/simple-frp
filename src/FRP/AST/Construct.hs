@@ -114,8 +114,8 @@ tylater = TyLater ()
 tystable = TyStable ()
 tystream = TyStream ()
 tyalloc = TyAlloc ()
-tynat = TyNat ()
-tybool = TyBool ()
+tynat  = TyPrim () TyNat
+tybool = TyPrim () TyBool
 
 (.*.) :: Type () -> Type () -> Type ()
 (.*.) = TyProd ()

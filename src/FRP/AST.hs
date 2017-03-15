@@ -40,7 +40,7 @@ instance Pretty Qualifier where
 infixr 9 `TyArr`
 
 data Type a
-  = TyVar  a Name
+  = TyVar    a Name
   | TyProd   a (Type a) (Type a)
   | TySum    a (Type a) (Type a)
   | TyArr    a (Type a) (Type a)
@@ -48,9 +48,10 @@ data Type a
   | TyStable a (Type a)
   | TyStream a (Type a)
   | TyAlloc  a
-  | TyNat    a
-  | TyBool   a
+  | TyPrim   a TyPrim
   deriving (Show, Eq, Functor, Data, Typeable)
+
+data TyPrim = TyBool | TyNat deriving (Show, Eq, Data, Typeable)
 
 instance Pretty (Type a) where
   ppr n type' = case type' of
@@ -62,8 +63,8 @@ instance Pretty (Type a) where
     TyStable _a ty     -> text "#" <> ppr (n+1) ty
     TyStream _a ty     -> prns $ text "S" <+> ppr (n+1) ty
     TyAlloc  _a        -> text "alloc"
-    TyNat    _a        -> text "Nat"
-    TyBool   _a        -> text "Bool"
+    TyPrim   _a TyNat  -> text "Nat"
+    TyPrim   _a TyBool -> text "Bool"
     where
       prns = if (n > 0)
              then parens

@@ -105,8 +105,7 @@ stableCtx (Ctx c1) =
 
 
 isStable :: Type t -> Bool
-isStable (TyNat _)      = True
-isStable (TyBool _)     = True
+isStable (TyPrim _ _ )  = True
 isStable (TyProd _ a b) = isStable a && isStable b
 isStable (TySum  _ a b) = isStable a && isStable b
 isStable (TyStable _ _) = True
@@ -259,8 +258,8 @@ checkTerm ctx term = case term of
     ctx2 <- checkPtn ctx ptn t
     checkTerm ctx2 trm2
   TmLit a l              -> case l of
-    LInt  _ -> return (TyNat a, QNow)
-    LBool _ -> return (TyBool a, QNow)
+    LInt  _ -> return (TyPrim a TyNat,  QNow)
+    LBool _ -> return (TyPrim a TyBool, QNow)
   TmBinOp a op l r       -> do
     let (retty, lty, rty) = binOpTy a op
     (lt, QNow) <- checkTerm ctx l
@@ -271,7 +270,7 @@ checkTerm ctx term = case term of
       then typeErr (CannotUnify (rt, QNow) (rty, QNow) term) ctx
     else return (retty, QNow)
   TmITE a b trmt trmf    -> do
-    (TyBool _, qb) <- checkTerm ctx b
+    (TyPrim _ TyBool, qb) <- checkTerm ctx b
     (tt, qt) <- checkTerm ctx trmt
     (ft, qf) <- checkTerm ctx trmf
     if unitFunc tt == unitFunc ft
@@ -284,18 +283,20 @@ checkTerm ctx term = case term of
   TmInto a trm    -> error "type-checking for TmInto not implemented"
   where
     binOpTy :: a -> BinOp -> (Type a, Type a, Type a)
-    binOpTy a = \case
-      Add  -> (TyNat  a, TyNat  a, TyNat  a)
-      Sub  -> (TyNat  a, TyNat  a, TyNat  a)
-      Mult -> (TyNat  a, TyNat  a, TyNat  a)
-      Div  -> (TyNat  a, TyNat  a, TyNat  a)
-      And  -> (TyBool a, TyBool a, TyBool a)
-      Or   -> (TyBool a, TyBool a, TyBool a)
-      Leq  -> (TyBool a, TyNat  a, TyNat  a)
-      Lt   -> (TyBool a, TyNat  a, TyNat  a)
-      Geq  -> (TyBool a, TyNat  a, TyNat  a)
-      Gt   -> (TyBool a, TyNat  a, TyNat  a)
-      Eq   -> (TyBool a, TyNat  a, TyNat  a) -- FIXME: this should be parametric
+    binOpTy a =
+      let fromPrim (x,y,z) = (TyPrim a x, TyPrim a y, TyPrim a z)
+      in  \case
+        Add  -> fromPrim (TyNat , TyNat , TyNat )
+        Sub  -> fromPrim (TyNat , TyNat , TyNat )
+        Mult -> fromPrim (TyNat , TyNat , TyNat )
+        Div  -> fromPrim (TyNat , TyNat , TyNat )
+        And  -> fromPrim (TyBool, TyBool, TyBool)
+        Or   -> fromPrim (TyBool, TyBool, TyBool)
+        Leq  -> fromPrim (TyBool, TyNat , TyNat )
+        Lt   -> fromPrim (TyBool, TyNat , TyNat )
+        Geq  -> fromPrim (TyBool, TyNat , TyNat )
+        Gt   -> fromPrim (TyBool, TyNat , TyNat )
+        Eq   -> fromPrim (TyBool, TyNat , TyNat ) -- FIXME:his shoulde parametc
 
 -- dirty hack to avoid duplicate type signatures for fixpoints, e.g.
 -- fix (f: Nat -> @(S Nat) -> S Nat). \(x : Nat) (xs : @(S Nat)) -> cons(x, xs)
@@ -373,5 +374,4 @@ specialize subst = go where
     TyStable a t     -> TyStable a (go t)
     TyStream a t     -> TyStream a (go t)
     TyAlloc  a       -> TyAlloc  a
-    TyNat    a       -> TyNat    a
-    TyBool   a       -> TyBool   a
+    TyPrim   a p     -> TyPrim a p
