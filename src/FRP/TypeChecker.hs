@@ -312,6 +312,8 @@ inferFixLamTy ctx (TyArr _ a b) term@(TmLam ann x lty body) =
                    else typeErr (CannotUnify (a, QStable) (lty0, QStable) term) ctx
 inferFixLamTy ctx ty term = return term
 
+-- "Type check" a pattern. Basically, it unfold the pattern, makes sure
+-- it matches the term, and then adds the appropriate names to the input context
 checkPtn :: Context t -> Pattern -> QualTy t -> CheckM t (Context t)
 checkPtn ctx = go where
   go (PBind nm) t                    = return (extendCtx nm t ctx)
@@ -327,10 +329,11 @@ checkPtn ctx = go where
     ctx1 <- checkPtn ctx  p1 (t1, QNow)
     ctx2 <- checkPtn ctx1 p2 (t2, QNow)
     return ctx2
-  go p t = typeErr (CannotUnify undefined undefined undefined) ctx
+  go p t = typeErr (CannotUnify undefined undefined undefined) ctx -- FIXME
 
 -- check a declaration
--- recursive decls will fail if they've not been written as fixpoints
+-- recursive decls will fail if they've not been written or have been
+-- automatically translated to fixpoints after parsing
 checkDecl :: Context t -> Decl t -> CheckM t (QualTy t)
 checkDecl ctx (Decl a type0 name bd) = do
   bd0         <- inlineTypes type0 bd
@@ -355,7 +358,7 @@ inlineTypes (TyArr _a1 t1 t2) term@(TmLam a2 nm t3 bd) =
       return $ TmLam a2 nm (Just t1) bd0
     Just t4 -> if (unitFunc t1 == unitFunc t4)
                  then TmLam a2 nm (Just t4) <$> inlineTypes t2 bd
-                 else typeErr (CannotUnify (t1, QNow) (t4, QNow) term) undefined
+                 else typeErr (CannotUnify (t1, QNow) (t4, QNow) term) undefined -- FIXME
 inlineTypes ty trm = return trm
 
 runCheckDecl ctx t = runCheckM (checkDecl ctx t)
