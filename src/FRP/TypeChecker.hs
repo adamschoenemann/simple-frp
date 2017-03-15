@@ -15,31 +15,31 @@ import           Debug.Trace
 import           Data.Maybe (isJust)
 
 
-type Ty t = (Type t, Qualifier)
-newtype Context t = Ctx {unCtx :: Map Name (Ty t)} deriving (Show, Eq)
+type QualTy t = (Type t, Qualifier)
+newtype Context t = Ctx {unCtx :: Map Name (QualTy t)} deriving (Show, Eq)
 
 instance Pretty (Context t) where
   ppr n (Ctx map) = vcat $ fmap mapper $ M.toList map where
     mapper (k, v) = text k <+> char ':' <+> ppr 0 v
 
-newtype TypeErr t = TypeErr (Err t, Context t)
+newtype TyExcept t = TyExcept (TyErr t, Context t)
   deriving (Show, Eq)
 
-data Err t
-  = CannotUnify (Ty t) (Ty t) (Term t)
-  | OccursCheckFailed Name (Ty t)
+data TyErr t
+  = CannotUnify (QualTy t) (QualTy t) (Term t)
+  | OccursCheckFailed Name (QualTy t)
   | UnknownIdentifier Name
   | NotSyntax (Term t)
   | TypeAnnRequired (Term t)
-  | NotStableTy (Ty t)
+  | NotStableTy (QualTy t)
   | NotStableVar Name
   | NotNow (Term t)
   deriving (Show, Eq)
 
-instance Pretty (TypeErr t) where
-  ppr n (TypeErr (err, ctx)) = ppr n err $$ text "in context: " $$ ppr n ctx
+instance Pretty (TyExcept t) where
+  ppr n (TyExcept (err, ctx)) = ppr n err $$ text "in context: " $$ ppr n ctx
 
-instance Pretty (Err t) where
+instance Pretty (TyErr t) where
   ppr n = \case
     CannotUnify t1 t2 trm ->
       text "Cannot unify expected type"
@@ -58,9 +58,9 @@ instance Pretty (Err t) where
 
 
 
-newtype CheckM t a = CheckM (ExceptT (TypeErr t) (State [Name]) a)
+newtype CheckM t a = CheckM (ExceptT (TyExcept t) (State [Name]) a)
   deriving ( Functor, Applicative, Monad, MonadState [Name]
-           , MonadError (TypeErr t))
+           , MonadError (TyExcept t))
 
 
 freshName :: CheckM t Name
@@ -69,18 +69,18 @@ freshName = do
   put nms
   return nm
 
-typeErr :: Err t -> Context t -> CheckM t a
-typeErr err ctx = throwError (TypeErr (err, ctx))
+typeErr :: TyErr t -> Context t -> CheckM t a
+typeErr err ctx = throwError (TyExcept (err, ctx))
 
-lookupCtx :: Name -> Context t -> Maybe (Ty t)
+lookupCtx :: Name -> Context t -> Maybe (QualTy t)
 lookupCtx nm (Ctx m) = M.lookup nm m
 
-getVar :: Context t -> Name -> CheckM t (Ty t)
+getVar :: Context t -> Name -> CheckM t (QualTy t)
 getVar (Ctx m) nm = case M.lookup nm m of
   Nothing -> typeErr (UnknownIdentifier nm) (Ctx m)
   Just x  -> return x
 
-extendCtx :: Name -> Ty t -> Context t -> Context t
+extendCtx :: Name -> QualTy t -> Context t -> Context t
 extendCtx n t c = Ctx $ M.insert n t $ unCtx c
 
 unionCtx :: Context t -> Context t -> Context t
@@ -118,7 +118,7 @@ emptyCtx = Ctx M.empty
 runCheckTerm ctx t = runCheckM (checkTerm ctx t)
 runCheckTerm' t = runCheckM (checkTerm emptyCtx t)
 
-runCheckM :: CheckM t a -> Either (TypeErr t) a
+runCheckM :: CheckM t a -> Either (TyExcept t) a
 runCheckM (CheckM m) = evalState (runExceptT m) (infiniteSupply alphabet)
   where
     alphabet = map (:[]) ['a'..'z']
@@ -130,16 +130,16 @@ runCheckM (CheckM m) = evalState (runExceptT m) (infiniteSupply alphabet)
 -- I want to avoid the "UnkownIdentifier" err for a variable that has been
 -- removed by laterCtx or stableCtx
 -- think about it some more...
-pushCtxHandler :: forall t. Context t -> CheckM t (Ty t) -> CheckM t (Ty t)
+pushCtxHandler :: forall t. Context t -> CheckM t (QualTy t) -> CheckM t (QualTy t)
 pushCtxHandler ctx m = m `catchError` handler where
-  handler :: TypeErr t -> CheckM t (Ty t)
-  handler (TypeErr (e@(UnknownIdentifier nm), ctx')) =
+  handler :: TyExcept t -> CheckM t (QualTy t)
+  handler (TyExcept (e@(UnknownIdentifier nm), ctx')) =
       case lookupCtx nm ctx of
         Nothing -> typeErr e ctx
         Just _  -> typeErr (NotStableVar nm) ctx
   handler e = throwError e
 
-checkTerm :: Context t -> Term t -> CheckM t (Ty t)
+checkTerm :: Context t -> Term t -> CheckM t (QualTy t)
 checkTerm ctx term = case term of
   TmFst a trm -> checkTerm ctx trm >>= \case
     (TyProd _ t1 t2, QNow) -> return (t1, QNow)
@@ -157,32 +157,47 @@ checkTerm ctx term = case term of
                   (ty, q)
                   term
                 ) ctx
-  TmTup a trm1 trm2      -> do
-    (t1, QNow) <- checkTerm ctx trm1
-    (t2, QNow) <- checkTerm ctx trm2
-    return $ (TyProd a t1 t2, QNow)
-  TmInl a trm            -> do
-    (t1, QNow) <- checkTerm ctx trm
-    b <- freshName
-    return $ (TySum a t1 (TyParam a b), QNow)
-  TmInr a trm            -> do
-    (t2, QNow) <- checkTerm ctx trm
-    b <- freshName
-    return $ (TySum a (TyParam a b) t2, QNow)
-  TmCase a trm (vl, trml) (vr, trmr) -> do
-    (TySum a' t1 t2, QNow) <- checkTerm ctx trm
-    (c1, QNow) <- checkTerm (extendCtx vl (t1, QNow) ctx) trml
-    (c2, QNow) <- checkTerm (extendCtx vr (t2, QNow) ctx) trmr
-    if (unitFunc c1 /= unitFunc c2)
-      then typeErr (CannotUnify (c1, QNow) (c2, QNow) term) ctx
+  TmTup a trm1 trm2 -> do
+    (t1, q1) <- checkTerm ctx trm1
+    (t2, q2) <- checkTerm ctx trm2
+    case (q1,q2) of
+      (QNow, QNow) -> return $ (TyProd a t1 t2, QNow)
+      (_ ,_)       -> let (eq,et,etrm) = if q1 /= QNow
+                                            then (q1, t1,trm1)
+                                            else (q2, t2,trm2)
+                      in typeErr (CannotUnify (et, QNow) (et, eq) etrm) ctx
+  -- these also won't work without explicit type annotations
+  TmInl a trm -> checkTerm ctx trm >>= \case
+    (t1, QNow) -> freshName >>= (\b -> return (TySum a t1 (TyParam a b), QNow))
+    (t1, q)    -> typeErr (CannotUnify (t1, QNow) (t1, q) trm) ctx
+  TmInr a trm -> checkTerm ctx term >>= \case
+    (t2, QNow) -> freshName >>= (\b -> return (TySum a (TyParam a b) t2, QNow))
+    (t2, q)    -> typeErr (CannotUnify (t2, QNow) (t2, q) trm) ctx
+  TmCase a trm (vl, trml) (vr, trmr) -> checkTerm ctx term >>= \case
+    (TySum a' t1 t2, QNow) -> do
+      let lctx = extendCtx vl (t1, QNow) ctx
+      let rctx = extendCtx vr (t2, QNow) ctx
+      (c1, q1) <- checkTerm lctx trml
+      (c2, q2) <- checkTerm rctx trmr
+      if (unitFunc c1 /= unitFunc c2)
+        then typeErr (CannotUnify (c1, QNow) (c2, QNow) term) ctx
+      else if q1 /= QNow
+        then typeErr (CannotUnify (c1, QNow) (c1, q1) trml) lctx
+      else if q2 /= QNow
+        then typeErr (CannotUnify (c2, QNow) (c2, q2) trmr) rctx
       else return (c1, QNow)
+    (et, eq) ->
+      let expTy = TySum a (TyParam a "a0") (TyParam a "a1")
+      in  typeErr (CannotUnify (et, eq) (expTy, QNow) term) ctx
   TmLam a nm mty trm ->
     case mty of
       Nothing -> typeErr (TypeAnnRequired term) ctx
       Just ty -> do
-        (bdty, QNow) <- checkTerm (extendCtx nm (ty, QNow) ctx) trm
-        return (TyArr a ty bdty, QNow)
-  -- below will not work without explicit type annotations
+        let bdctx = extendCtx nm (ty, QNow) ctx
+        (bdty, q) <- checkTerm bdctx trm
+        if (q /= QNow)
+          then typeErr (CannotUnify (bdty, QNow) (bdty, q) trm) bdctx
+          else return (TyArr a ty bdty, QNow)
   TmFix a x ty0 trm          ->
     case ty0 of
       Nothing -> typeErr (TypeAnnRequired term) ctx
@@ -198,12 +213,19 @@ checkTerm ctx term = case term of
     if q `elem` [QNow, QStable]
      then return (vt, QNow)
      else typeErr (CannotUnify (vt, q) (vt, QNow) term) ctx
-  TmApp a trm1 trm2      -> do
-    (TyArr _ at bt, QNow) <- checkTerm ctx trm1
-    (t2, QNow) <- checkTerm ctx trm2
-    if (unitFunc t2 == unitFunc at)
-      then return (bt, QNow)
-      else typeErr (CannotUnify (t2, QNow) (at, QNow) term) ctx
+  TmApp a trm1 trm2      -> checkTerm ctx trm1 >>= \case
+    (TyArr _ at bt, QNow) -> do
+      (t2, q) <- checkTerm ctx trm2
+      if (q /= QNow)
+        then typeErr (CannotUnify (t2,QNow) (t2, q) trm2) ctx
+      else if (unitFunc t2 /= unitFunc at)
+        then typeErr (CannotUnify (t2, QNow) (at, QNow) term) ctx
+      else return (bt, QNow)
+    (et, eq) -> do
+      a1 <- freshName
+      a2 <- freshName
+      let expTy = TyArr a (TyParam a a1) (TyParam a a2)
+      typeErr (CannotUnify (expTy, QNow) (et, eq) trm1) ctx
   TmCons a hd tl         -> do
     hty <- checkTerm ctx hd
     tlty <- checkTerm ctx tl
@@ -255,11 +277,11 @@ checkTerm ctx term = case term of
     if unitFunc tt == unitFunc ft
       then return (tt, qt)
       else typeErr (CannotUnify (tt, qt) (ft, qf) term) ctx
-  TmPntr a p        -> typeErr (NotSyntax term) ctx
-  TmPntrDeref a p   -> typeErr (NotSyntax term) ctx
-  TmAlloc a              -> return (TyAlloc a, QNow)
-  TmOut a trm            -> error "type-checking for TmOut not implemented"
-  TmInto a trm           -> error "type-checking for TmInto not implemented"
+  TmPntr a p      -> typeErr (NotSyntax term) ctx
+  TmPntrDeref a p -> typeErr (NotSyntax term) ctx
+  TmAlloc a       -> return (TyAlloc a, QNow)
+  TmOut a trm     -> error "type-checking for TmOut not implemented"
+  TmInto a trm    -> error "type-checking for TmInto not implemented"
   where
     binOpTy :: a -> BinOp -> (Type a, Type a, Type a)
     binOpTy a = \case
@@ -289,7 +311,7 @@ inferFixLamTy ctx (TyArr _ a b) term@(TmLam ann x lty body) =
                    else typeErr (CannotUnify (a, QStable) (lty0, QStable) term) ctx
 inferFixLamTy ctx ty term = return term
 
-checkPtn :: Context t -> Pattern -> Ty t -> CheckM t (Context t)
+checkPtn :: Context t -> Pattern -> QualTy t -> CheckM t (Context t)
 checkPtn ctx = go where
   go (PBind nm) t                    = return (extendCtx nm t ctx)
   go (PDelay nm) (TyLater a t, QNow) = return (extendCtx nm (t, QLater) ctx)
@@ -306,20 +328,20 @@ checkPtn ctx = go where
     return ctx2
   go p t = typeErr (CannotUnify undefined undefined undefined) ctx
 
--- to check a declaration, we must first inline the
--- declaration's type with its outermost lambdas
--- We should extend the context with something similar to the rule
--- for fix... Hmmm....
-checkDecl :: Context t -> Decl t -> CheckM t (Ty t)
+-- check a declaration
+-- recursive decls will fail if they've not been written as fixpoints
+checkDecl :: Context t -> Decl t -> CheckM t (QualTy t)
 checkDecl ctx (Decl a type0 name bd) = do
   bd0         <- inlineTypes type0 bd
-  (type1, q)  <- checkTerm (extendCtx name (type0, QLater) (stableCtx ctx)) bd0
+  (type1, q)  <- checkTerm ctx bd0
   if (q /= QNow)
     then typeErr (NotNow (TmVar a name)) ctx
   else if (unitFunc type0 /= unitFunc type1)
     then typeErr (CannotUnify (type0, QNow) (type1, q) (TmVar a name)) ctx
   else return (type1, q)
 
+-- inline the type of a declaration into its term, if the term is a lambda
+-- or fixpoint
 inlineTypes :: Type a -> Term a -> CheckM a (Term a)
 inlineTypes t                 term@(TmFix a2 nm t2 bd) =
   case t2 of

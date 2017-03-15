@@ -1,25 +1,24 @@
 # Notes
 
-substitution rule as far as I remember it:  
-(λx. e)τ = (λy. e[x ↦ y])τ
-
-The plan is, as I understand it, to simply rename lambda binders to special
-names after parsing, so that we cannot have variable capture in the sense
-that free variables become bound when substitution occurs.
-
-Evaluation of (\x. (\y. x y)) (\z. 10 + z) 5:
-    (\x. (\y. x y)) (\z. 10 + z) 5 =>
-    (\y. (\z. 10 + z) y) 5 =>
-    (\z. 10 + z) 5 =>
-    10 + 5 => 
-    15
-    
-    
 ## Command for interactive testing
 stack repl --test [--trace]
 
 Use `:r` to reload and `Main.main` or `main` to run tests.
+Use `:rr Spec.main` to reload and run `Spec.main` (or any other def you want)
 
-## Rewrite rec defs to fixpoint
-- check if the name of the function occurs free in the definition
-- then it is a fixpoint
+## TODO
+
+### Need
+- Rewrite Program to not require main functions (easy)
+    - Rewrite evaluation to be partial and fail if no main function given
+      (perhaps parameterized by the name of the main function)
+- Type-check and eval into and out (easy)
+- Recursive type constructor (mu binding) (easy)
+- Figure out how to interface with Haskell (medium)
+- Improve quasi-quotation features (medium)
+
+### Want
+- Reduce some primitives from the language, e.g. fst, snd, stream
+- Type inference (medium)
+- Switch to using a recursive type for the ast (big refactor!) (hard)
+- Inductive types <3 (hard)

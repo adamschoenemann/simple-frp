@@ -26,12 +26,12 @@ import           Text.Parsec
 
 
 shouldTC :: (Eq (f ()), Show (f ()), Functor f, Show t)
-            => Either (TypeErr t) (f a, Qualifier) -> (f (), Qualifier) -> Expectation
+            => Either (TyExcept t) (f a, Qualifier) -> (f (), Qualifier) -> Expectation
 shouldTC eith expect = case eith of
   Left err  -> expectationFailure (ppshow err)
   Right (t,q) -> (unitFunc t, q) `shouldBe` expect
 
-shouldTyErr :: Show t => Either (TypeErr t) (Type t, Qualifier) -> Expectation
+shouldTyErr :: Show t => Either (TyExcept t) (Type t, Qualifier) -> Expectation
 shouldTyErr = \case
   Left err -> return ()
   Right (t,q) -> expectationFailure $ show (t, q)
