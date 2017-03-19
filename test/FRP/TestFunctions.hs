@@ -71,6 +71,25 @@ frp_map = unitFunc [decl|
     cons((f x), delay(u, (((map us') stable(f)) xs'))).
 |]
 
+frp_prog_1 = [prog|
+
+  map : S alloc -> #(A -> B) -> S A -> S B
+  map us h xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    let stable(f) = h in
+    cons((f x), delay(u, (((map us') stable(f)) xs'))).
+
+  nats : S alloc -> Nat -> S Nat
+  nats us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats us' (x + 1))).
+
+  main : S alloc -> S Nat
+  main us = nats us.
+|]
+
 -- frp_unfold' :: Decl ()
 -- frp_unfold' = Decl () ty name body where
 --   ty = tystream tyalloc |->

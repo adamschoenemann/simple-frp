@@ -11,4 +11,5 @@ import Data.List (find)
 prog :: Parser (Program SourcePos)
 prog = do
   decls <- many decl
+  _ <- eof
   return $ Program decls
