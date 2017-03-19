@@ -100,13 +100,13 @@ spec = do
                 tmcons "x" (tmdelay "u" ("const" <| "us" <| "x"))
         let mainbd = "us" --> "const" <| "us" <| 10
         let mainfn = Decl () undefined "main" mainbd
-        let prog = Program mainfn [Decl () undefined "const" constfn]
+        let prog = Program [mainfn, Decl () undefined "const" constfn]
         take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) (replicate 100 10)
         -- debug $ show $ interpProgram prog
       it "works with nats" $ do
         let mainbd = "us" --> "nats" <| "us" <| 0
         let mainfn = frp_main mainbd (tystream tynat)
-        let prog = Program mainfn [frp_nats]
+        let prog = Program [mainfn, frp_nats]
         take 100 (interpProgram prog) `shouldBe` map (VLit . LInt) [0..99]
       it "works with sum" $ do
         let prog = prog_sum
