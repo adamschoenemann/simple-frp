@@ -70,6 +70,18 @@ instance Pretty (Type a) where
              then parens
              else id
 
+typeAnn :: Type a -> a
+typeAnn = \case
+    TyVar    a _   -> a
+    TyProd   a _ _ -> a
+    TySum    a _ _ -> a
+    TyArr    a _ _ -> a
+    TyLater  a _   -> a
+    TyStable a _   -> a
+    TyStream a _   -> a
+    TyAlloc  a     -> a
+    TyPrim   a _   -> a
+
 data Term a
   = TmFst a (Term a)
   | TmSnd a (Term a)
@@ -95,6 +107,7 @@ data Term a
   | TmAlloc a
   | TmFix a Name (Maybe (Type a)) (Term a)
   deriving (Show, Eq, Functor, Data, Typeable)
+
 
 freeVars :: Term a -> [Name]
 freeVars = S.toList . go where
