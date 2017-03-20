@@ -7,6 +7,7 @@ import           Control.Monad.State
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as M
 import           Debug.Trace
+import           Data.List (find)
 
 import           FRP.AST
 import           FRP.AST.Construct
@@ -234,15 +235,19 @@ tick st
       tock acc k (SVNow _)  = acc { _store = M.delete k (_store acc) }
 
 evalProgram :: Program a -> (Value, EvalState)
-evalProgram (Program main decls) =
-  case main of
+evalProgram (Program decls) =
+  let main = maybe (error "no main function") id
+           $ find (\d -> _name d == "main") decls
+  in  case main of
     Decl _a _ty _nm body -> runExpr initialState globals (mainEvalTerm $ unitFunc body)
   where
     globals    = globalEnv decls
 
 runProgram :: Program a -> Value
-runProgram (Program main decls) = keepRunning initialState startMain
+runProgram (Program decls) = keepRunning initialState startMain
   where
+    main = maybe (error "no main function") id
+           $ find (\d -> _name d == "main") decls
     keepRunning s e  =
       let (p, s') = runExpr s globals e
           s'' = tick s'

@@ -496,13 +496,7 @@ spec = do
       let constTy = tyarr (tystream tyalloc) (tyarr tynat (tystream tynat))
       unitFunc r `shouldBe`
         Program
-          { _main = Decl
-            { _ann  = ()
-            , _type = tyarr (tystream tyalloc) (tystream tynat)
-            , _name = "main"
-            , _body = tmlam "us" (tmapp (tmapp (tmvar "const") (tmvar "us")) (tmlit (LInt 10)))
-            }
-          , _decls =
+          { _decls =
             [ Decl
                 { _ann  = ()
                 , _type = constTy
@@ -515,6 +509,13 @@ spec = do
                         (tmdelay (tmvar "u") (tmapp (tmapp (tmvar "const") (tmvar "us'")) (tmvar "x")))
                       ))))
                 }
+
+            , Decl
+              { _ann  = ()
+              , _type = tyarr (tystream tyalloc) (tystream tynat)
+              , _name = "main"
+              , _body = tmlam "us" (tmapp (tmapp (tmvar "const") (tmvar "us")) (tmlit (LInt 10)))
+              }
             ]
           }
     it "should work with sum program" $ do
@@ -546,18 +547,7 @@ spec = do
                         (tyarr tynat (tystream tynat)))
       let natTy = tyarr (tystream tyalloc) (tystream tynat)
       let exp = Program
-            { _main = Decl
-              { _ann  = ()
-              , _type = tyarr (tystream tyalloc) (tystream tynat)
-              , _name = "main"
-              , _body = tmlam "us"
-                          (tmapp
-                             (tmapp
-                                (tmapp (tmapp (tmvar "sum") (tmvar "us")) (tmvar "nats"))
-                                (tmvar "us"))
-                             (tmlit (LInt 0)))
-              }
-            , _decls = [ Decl
+            { _decls = [ Decl
                          { _ann  = ()
                          , _type = natTy
                          , _name = "nats"
@@ -615,6 +605,17 @@ spec = do
                                               (tmvar "ns"))
                                            (tmlit (LInt 0))))
                          }
+                       , Decl
+                          { _ann  = ()
+                          , _type = tyarr (tystream tyalloc) (tystream tynat)
+                          , _name = "main"
+                          , _body = tmlam "us"
+                                      (tmapp
+                                         (tmapp
+                                            (tmapp (tmapp (tmvar "sum") (tmvar "us")) (tmvar "nats"))
+                                            (tmvar "us"))
+                                         (tmlit (LInt 0)))
+                          }
                        ]
             }
       unitFunc r `shouldBe` exp

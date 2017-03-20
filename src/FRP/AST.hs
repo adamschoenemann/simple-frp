@@ -318,12 +318,12 @@ instance Pretty (Decl a) where
           in  (x:y, b')
         bindings b           = ([], b)
 
-data Program a = Program { _main :: Decl a, _decls :: [Decl a]}
+data Program a = Program { _decls :: [Decl a] }
   deriving (Show, Eq, Functor, Data, Typeable)
 
 instance Pretty (Program a) where
-  ppr n (Program main decls) =
-    vcat (map (\d -> ppr n d <> char '\n') (decls ++ [main]))
+  ppr n (Program decls) =
+    vcat (map (\d -> ppr n d <> char '\n') decls)
 
 unitFunc :: Functor f => f a -> f ()
 unitFunc = fmap (const ())
