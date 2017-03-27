@@ -58,7 +58,7 @@ instance Pretty (Type a) where
     TyVar  _a name   -> text name
     TyProd   _a ty ty' -> prns (ppr (n+1) ty <+> text "*" <+> ppr (n+1) ty')
     TySum    _a ty ty' -> prns (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
-    TyArr    _a ty ty' -> prns $ ppr n ty <+> text "->" <+> ppr n ty'
+    TyArr    _a ty ty' -> prns $ ppr (n+1) ty <+> text "->" <+> ppr 0 ty'
     TyLater  _a ty     -> text "@" <> ppr (n+1) ty
     TyStable _a ty     -> text "#" <> ppr (n+1) ty
     TyStream _a ty     -> prns $ text "S" <+> ppr (n+1) ty

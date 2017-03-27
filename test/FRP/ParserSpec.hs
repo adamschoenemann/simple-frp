@@ -130,7 +130,7 @@ spec = do
         tmlamty "x" tynat (tmlamty "y" (tybool) "x")
 
       parse P.term "lamty" "\\(x:Nat -> S Bool) (y : Nat * Bool) -> x" `shouldParse`
-        tmlamty "x" (tynat |-> TyStream () $ tybool)
+        tmlamty "x" (tynat |-> TyStream () tybool)
           (tmlamty "y" (tynat .*. tybool) "x")
 
     it "should parse let expressions" $ do

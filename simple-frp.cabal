@@ -42,6 +42,7 @@ test-suite simple-frp-test
   main-is:             Spec.hs
   other-modules:       FRP.SemanticsSpec, FRP.ParserSpec, FRP.TestFunctions
                      , FRP.TestPrograms, FRP.Generators, FRP.TypeCheckerSpec
+                     , FRP.TypeInferenceSpec
   build-depends:       base , simple-frp, hspec, mtl, containers, parsec
                      , neat-interpolation, template-haskell, text, QuickCheck
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N

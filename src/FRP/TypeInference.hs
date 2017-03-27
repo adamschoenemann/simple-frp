@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 
 module FRP.TypeInference where
@@ -25,14 +26,21 @@ import           Data.Maybe (isJust)
 
 
 data Scheme a = Forall [TVar] (Type a)
-  deriving (Show, Eq)
+  deriving (Eq, Functor)
 
 unScheme :: Scheme a -> Type a
 unScheme (Forall _ ty) = ty
 
+toScheme :: Type a -> Scheme a
+toScheme = Forall []
+
 instance Pretty (Scheme a) where
+  ppr n (Forall [] tau) = ppr n tau
   ppr n (Forall vs tau) =
     text "forall" <+> hcat (map text vs) <> char '.' <+> ppr 0 tau
+
+instance Show (Scheme a) where
+  show = ppshow
 
 
 type QualSchm t = (Scheme t, Qualifier)
@@ -65,7 +73,8 @@ newtype TyExcept t = TyExcept (TyErr t, Context t)
   deriving (Show, Eq)
 
 data TyErr t
-  = CannotUnify (QualSchm t) (QualSchm t) (Term t)
+  = CannotUnify (Type t) (Type t) (Term t)
+  | UnificationMismatch [Type t] [Type t]
   | OccursCheckFailed Name (Type t)
   | UnknownIdentifier Name
   | NotSyntax (Term t)
@@ -87,6 +96,12 @@ instance Pretty (TyErr t) where
             <+> ppr 0 t2
             <+> text "at" <+> ppr 0 trm
 
+    UnificationMismatch t1 t2 ->
+      text "UnificationMismatch: "
+            <+> hcat (punctuate (char ',') $ map (ppr 0) t1)
+            <+> text "with"
+            <+> hcat (punctuate (char ',') $ map (ppr 0) t2)
+
     OccursCheckFailed nm ty -> text nm <+> "occurs in" <+> (ppr 0 ty)
     UnknownIdentifier nm    -> text "unkown identifier" <+> text nm
     NotSyntax trm           -> ppr 0 trm <+> "is not syntax"
@@ -95,7 +110,8 @@ instance Pretty (TyErr t) where
     NotStableVar v          -> text "expected" <+> text v <+> text "to be stable"
     NotNow    trm           -> text "expected" <+> ppr n trm <+> text "to be now"
 
-typeErr :: TyErr t -> Context t -> Infer t a
+typeErr :: MonadError (TyExcept t) m
+        => TyErr t -> Context t -> m a
 typeErr err ctx = throwError (TyExcept (err, ctx))
 
 
@@ -103,19 +119,25 @@ typeErr err ctx = throwError (TyExcept (err, ctx))
 --   deriving ( Functor, Applicative, Monad, MonadState [Name]
 --            , MonadError (TyExcept t))
 
+-- syntax highlighting is being a bitch so I added braces
 freshName :: Infer t Name
-freshName = do
-  nm:nms <- get
-  put nms
-  return nm
+freshName =
+  do {
+    nm:nms <- get;
+    put nms;
+    return nm
+  }
 
 
 -- runInferTerm ctx t = runInfer (checkTerm ctx t)
 -- runInferTerm' t = runInfer (checkTerm emptyCtx t)
 
-runInfer :: Infer t a -> Either (TyExcept t) (a, [Constraint t])
-runInfer inf =
-  let r = runExcept (runRWST inf emptyCtx (infiniteSupply alphabet))
+runInfer' :: Infer t a -> Either (TyExcept t) (a, [Constraint t])
+runInfer' = runInfer emptyCtx
+
+runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, [Constraint t])
+runInfer ctx inf =
+  let r = runExcept (runRWST inf ctx (infiniteSupply alphabet))
   in  noSnd <$> r
   where
     noSnd (a,b,c) = (a,c)
@@ -143,13 +165,13 @@ s1 `compose` s2 = M.map (apply s1) s2 `M.union` s1
 instance Substitutable (Type a) a where
   apply st typ = case typ of
     TyVar    a name   -> M.findWithDefault typ name st
-    TyProd   a l r    -> TyProd a (apply st l) (apply st r)
-    TySum    a l r    -> TySum a (apply st l) (apply st r)
-    TyArr    a t1 t2  -> TyArr a (apply st t1) (apply st t2)
-    TyLater  a ty     -> TyLater a (apply st ty)
+    TyProd   a l r    -> TyProd   a (apply st l) (apply st r)
+    TySum    a l r    -> TySum    a (apply st l) (apply st r)
+    TyArr    a t1 t2  -> TyArr    a (apply st t1) (apply st t2)
+    TyLater  a ty     -> TyLater  a (apply st ty)
     TyStable a ty     -> TyStable a (apply st ty)
     TyStream a ty     -> TyStream a (apply st ty)
-    TyAlloc  a        -> TyAlloc a
+    TyAlloc  a        -> TyAlloc  a
     TyPrim{}          -> typ
 
   ftv = \case
@@ -170,7 +192,7 @@ instance Substitutable (Scheme a) a where
 
   ftv (Forall vs t) = ftv t `S.difference` S.fromList vs
 
-instance Substitutable a a => Substitutable [a] a  where
+instance Substitutable (f a) a => Substitutable [f a] a  where
   apply = fmap . apply
   ftv   = foldr ((+++) . ftv) S.empty
 
@@ -184,14 +206,18 @@ instance Substitutable (Context a) a where
   apply s (Ctx ctx) = Ctx $ M.map (apply s) ctx
   ftv (Ctx ctx)     = foldr ((+++) . ftv) S.empty $ M.elems ctx
 
+instance Substitutable (Constraint a) a where
+   apply s (Constraint (t1, t2)) = Constraint (apply s t1, apply s t2)
+   ftv (Constraint (t1, t2)) = ftv t1 +++ ftv t2
+
 occursCheck :: Substitutable a b => TVar -> a -> Bool
 occursCheck a t = a `S.member` ftv t
 
 
--- bind :: TVar -> Type a -> Infer a (Subst a)
--- bind a t | unitFunc t == TyVar () a = return nullSubst
---          | occursCheck a t = typeErr (OccursCheckFailed a t) emptyCtx
---          | otherwise       = return $ M.singleton a t
+bind :: TVar -> Type a -> Solve a (Unifier a)
+bind a t | unitFunc t == TyVar () a = return emptyUnifier
+         | occursCheck a t = typeErr (OccursCheckFailed a t) emptyCtx
+         | otherwise       = return $ Unifier (M.singleton a t, [])
 
 -- unify :: Type a -> Type a -> Infer a (Subst a)
 -- unify type1 type2 = case (type1, type2) of
@@ -241,6 +267,9 @@ generalize ctx t = Forall as t
   where as = S.toList $ ftv t `S.difference` ftv ctx
 
 -- monad to do inference by constraint generation first and the solving
+
+type InferState = [String]
+
 type Infer t a =
   (RWST (Context t)
         [Constraint t]
@@ -249,16 +278,78 @@ type Infer t a =
         a
   )
 
-type Constraint t = (Type t, Type t)
-type Unifier t = (Subst t, [Constraint t])
+newtype Constraint t = Constraint (Type t, Type t)
+  deriving (Eq)
 
-type Solve t a = StateT (Unifier t) (ExceptT (TyExcept t) Identity) a
+instance Functor Constraint where
+  fmap f (Constraint (a,b)) = Constraint (fmap f a, fmap f b)
 
-type InferState = [String]
--- newtype InferState = InferState { count :: Int }
+instance Pretty (Constraint a) where
+  ppr n (Constraint (t1, t2)) = ppr n t1 <+> text ".=." <+> ppr n t2
+
+instance Show (Constraint a) where
+  show = ppshow
+
+
+infixr 0 .=.
+(.=.) :: Type t -> Type t -> Constraint t
+t1 .=. t2 = Constraint (t1, t2)
+
+newtype Unifier t = Unifier (Subst t, [Constraint t])
+  deriving (Eq, Show, Functor)
+
+emptyUnifier :: Unifier t
+emptyUnifier = Unifier (nullSubst, [])
+
+newtype Solve t a = Solve (StateT (Unifier t) (Except (TyExcept t)) a)
+  deriving ( Functor, Monad, MonadState (Unifier t)
+           , MonadError (TyExcept t), Applicative
+           )
+
+runSolve :: Unifier t -> Either (TyExcept t) (Subst t, Unifier t)
+runSolve un = runExcept (runStateT (unSolver solver) un) where
+  unSolver (Solve m) = m
+
+inferTerm' :: Term t -> Either (TyExcept t) (QualSchm t)
+inferTerm' = inferTerm emptyCtx
+
+inferTerm :: Context t -> Term t -> Either (TyExcept t) (QualSchm t)
+inferTerm ctx trm = case runInfer ctx (infer trm) of
+  Left err -> Left err
+  Right ((ty,q), cs) -> case runSolve (un cs) of
+    Left err -> Left err
+    Right (subst, unies) -> Right $ (closeOver $ apply subst ty, q)
+  where
+    closeOver = generalize emptyCtx
+    un cs = Unifier (nullSubst, cs)
+
+unifies :: Type t -> Type t -> Solve t (Unifier t)
+unifies t1 t2 | unitFunc t1 == unitFunc t2 = return emptyUnifier
+unifies (TyVar _ v) t = v `bind` t
+unifies t (TyVar _ v) = v `bind` t
+unifies (TyArr _ t1 t2) (TyArr _ t3 t4) = unifyMany [t1,t2] [t3,t4]
+unifies t1 t2 = typeErr (CannotUnify t1 t2 undefined) emptyCtx
+
+unifyMany :: [Type t] -> [Type t] -> Solve t (Unifier t)
+unifyMany [] [] = return emptyUnifier
+unifyMany (t1 : ts1) (t2 : ts2) =
+  do Unifier (su1, cs1) <- unifies t1 t2
+     Unifier (su2, cs2) <- unifyMany (apply su1 ts1) (apply su1 ts2)
+     return $ Unifier (su2 `compose` su1, cs1 ++ cs2)
+unifyMany t1 t2 = typeErr (UnificationMismatch t1 t2) emptyCtx
+
+solver :: Solve t (Subst t)
+solver = do
+  Unifier (su, cs) <- get
+  case cs of
+    [] -> return su
+    (Constraint (t1,t2) : cs0) -> do
+      Unifier (su1, cs1) <- unifies t1 t2
+      put $ Unifier (su1 `compose` su, cs1 ++ (apply su1 cs0))
+      solver
 
 uni :: Type t -> Type t -> Infer t ()
-uni t1 t2 = tell [(t1, t2)]
+uni t1 t2 = tell [Constraint (t1, t2)]
 
 inEnv :: (Name, QualSchm t) -> Infer t a -> Infer t a
 inEnv (x, sc) m = do
@@ -282,9 +373,9 @@ infer = \case
 
   TmVar a x -> lookupCtx x
 
+  -- FIXME: for now, we ignore the maybe type signature on the lambda
   TmLam a x mty e -> do
-    nm <- freshName
-    let tv = TyVar a nm
+    tv <- TyVar a <$> freshName
     (t, q) <- inEnv (x, (Forall [] tv, QNow)) (inferNow e)
     return (TyArr a tv t, q)
 
@@ -300,10 +391,53 @@ infer = \case
     env2 <- inferPtn p t1
     local (const env2) (inferNow e2)
 
+  -- FIXME: we ignore type signatures
+  TmFix a x mty e -> do
+    tv <- TyVar a <$> freshName
+    (t, q) <- inEnv (x, (Forall [] tv, QLater)) (inferNow e)
+    uni tv t
+    return (tv, QNow)
 
+  TmBinOp a op e1 e2 -> do
+    (t1, q1) <- inferNow e1
+    (t2, q2) <- inferNow e2
+    tv <- TyVar a <$> freshName
+    let u1 = TyArr a t1 (TyArr a t2 tv)
+        u2 = binOpTy a op
+    uni u1 u2
+    return (tv, QNow)
+
+  TmITE a cond tr fl -> do
+    (t1,q1) <- inferNow cond
+    (t2,q2) <- inferNow tr
+    (t3,q3) <- inferNow fl
+    uni t1 (TyPrim a TyBool)
+    uni t2 t3
+    return (t2, QNow)
+
+  where
+    binOpTy :: a -> BinOp -> Type a -- (Type a, Type a, Type a)
+    binOpTy a =
+      let fromPrim (x,y,z) = (TyPrim a x, TyPrim a y, TyPrim a z)
+          toArr (x,y,z)    = TyArr a y (TyArr a z x)
+          primArr = toArr . fromPrim
+      in  \case
+        --               ret     left    right
+        Add  -> primArr (TyNat , TyNat , TyNat )
+        Sub  -> primArr (TyNat , TyNat , TyNat )
+        Mult -> primArr (TyNat , TyNat , TyNat )
+        Div  -> primArr (TyNat , TyNat , TyNat )
+        And  -> primArr (TyBool, TyBool, TyBool)
+        Or   -> primArr (TyBool, TyBool, TyBool)
+        Leq  -> primArr (TyBool, TyNat , TyNat )
+        Lt   -> primArr (TyBool, TyNat , TyNat )
+        Geq  -> primArr (TyBool, TyNat , TyNat )
+        Gt   -> primArr (TyBool, TyNat , TyNat )
+        Eq   -> primArr (TyBool, TyNat , TyNat )
 
 -- "Type check" a pattern. Basically, it unfold the pattern, makes sure
 -- it matches the term, and then adds the appropriate names to the input context
+-- TODO: Finish this
 inferPtn :: Pattern -> Type t -> Infer t (Context t)
 inferPtn (PBind nm) ty = do
   ctx <- ask

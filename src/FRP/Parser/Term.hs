@@ -48,6 +48,8 @@ tmtable   = [ [Infix spacef AssocLeft]
             , [ binary' "<" (bo Lt) AssocNone, binary' "<=" (bo Leq) AssocNone
               , binary' ">" (bo Gt) AssocNone, binary' ">=" (bo Geq) AssocNone
               ]
+            , [binary' "||" (bo Or) AssocLeft]
+            , [binary' "&&" (bo And) AssocLeft]
             , [binary' "==" (bo Eq) AssocNone]
             ]
           where
