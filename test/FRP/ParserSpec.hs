@@ -28,7 +28,7 @@ import           Test.QuickCheck
 
 
 
-frp_nats =
+txt_frp_nats =
   [text|
   \n us ->
     let cons(u, delay(us')) = us in
@@ -36,7 +36,7 @@ frp_nats =
     cons(x, delay (u, const us' (x + 1)))
   |]
 
-frp_const =
+txt_frp_const =
   [text|
   \n us ->
     let cons(u, delay(us')) = us in
@@ -44,7 +44,7 @@ frp_const =
     cons(x, delay (u, const us' x))
   |]
 
-frp_sum_acc =
+txt_frp_sum_acc =
   [text|
   \us ns acc ->
     let cons(u, delay(us')) = us in
@@ -53,7 +53,7 @@ frp_sum_acc =
     cons(x, delay(u, sum_acc us' ns' x))
   |]
 
-frp_map =
+txt_frp_map =
   [text|
   \us h xs ->
     let cons(u, delay(us')) = us in
@@ -62,7 +62,7 @@ frp_map =
     cons(f x, delay(u, map us' stable(f) xs'))
   |]
 
-frp_swap =
+txt_frp_swap =
   [text|
   \us n xs ys ->
     if n == 0 then
@@ -75,7 +75,7 @@ frp_swap =
       cons(x, delay(u, swap us' (m - 1) xs' ys'))
   |]
 
-frp_switch =
+txt_frp_switch =
   [text|
   \us xs e ->
     let cons(u, delay(us')) = us in
@@ -86,7 +86,7 @@ frp_switch =
                   cons(x, delay (u, switch us' xs' e')))
   |]
 
-frp_bind =
+txt_frp_bind =
   [text|
   \us -> \h -> \e ->
     let cons(u, delay(us')) = us in
@@ -259,24 +259,24 @@ spec = do
       parse P.term "frp" "let y = 2 * 10 in (\\x -> 2 * x) (y + 2)" `shouldParse`
         (tmlet "y" (2 * 10) $ ("x" --> 2 * "x") <| ("y" + 2))
 
-      let frp_const_ast =
+      let txt_frp_const_ast =
             "n" --> "us" -->
               tmlet (PCons "u" (PDelay "us'")) "us" $
               tmlet (PStable "x") (tmpromote "n") $
               tmcons "x" (tmdelay "u" $ "const" <| "us'" <| "x")
 
-      parse P.term "frp_const" (unpack frp_const) `shouldParse` (frp_const_ast)
+      parse P.term "txt_frp_const" (unpack txt_frp_const) `shouldParse` (txt_frp_const_ast)
 
-      let frp_sum_acc_ast =
+      let txt_frp_sum_acc_ast =
             "us" --> "ns" --> "acc" -->
               tmlet (PCons "u" (PDelay "us'")) "us" $
               tmlet (PCons "n" (PDelay "ns'")) "ns" $
               tmlet (PStable "x") (tmpromote ("n" + "acc")) $
               tmcons "x" (tmdelay "u" ("sum_acc" <| "us'" <| "ns'" <| "x"))
 
-      parse P.term "frp_sum_acc" (unpack frp_sum_acc) `shouldParse` (frp_sum_acc_ast)
+      parse P.term "txt_frp_sum_acc" (unpack txt_frp_sum_acc) `shouldParse` (txt_frp_sum_acc_ast)
 
-      let frp_map_ast =
+      let txt_frp_map_ast =
             "us" --> "h" --> "xs" -->
               tmlet (PCons "u" (PDelay "us'")) "us" $
               tmlet (PCons "x" (PDelay "xs'")) "xs" $
@@ -284,9 +284,9 @@ spec = do
               tmcons ("f" <| "x")
                      (tmdelay "u" ("map" <| "us'" <| tmstable "f" <| "xs'"))
 
-      parse P.term "frp_map" (unpack frp_map) `shouldParse` (frp_map_ast)
+      parse P.term "txt_frp_map" (unpack txt_frp_map) `shouldParse` (txt_frp_map_ast)
 
-      let frp_swap_ast =
+      let txt_frp_swap_ast =
             "us" --> "n" --> "xs" --> "ys" -->
               tmite ("n" `eq` 0) "ys" $
                 tmlet (PCons "u" (PDelay "us'")) "us" $
@@ -298,9 +298,9 @@ spec = do
                                       ("m" - 1) <| "xs'" <| "ys'"
                        )
 
-      parse P.term "frp_swap" (unpack frp_swap) `shouldParse` (frp_swap_ast)
+      parse P.term "txt_frp_swap" (unpack txt_frp_swap) `shouldParse` (txt_frp_swap_ast)
 
-      let frp_switch_ast =
+      let txt_frp_switch_ast =
             "us" --> "xs" --> "e" -->
               tmlet (PCons "u" (PDelay "us'")) "us" $
               tmlet (PCons "x" (PDelay "xs'")) "xs" $
@@ -313,9 +313,9 @@ spec = do
                         )
                 )
 
-      parse P.term "frp_switch" (unpack frp_switch) `shouldParse` (frp_switch_ast)
+      parse P.term "txt_frp_switch" (unpack txt_frp_switch) `shouldParse` (txt_frp_switch_ast)
 
-      let frp_bind_ast =
+      let txt_frp_bind_ast =
             "us" --> "h" --> "e" -->
               tmlet (PCons "u" (PDelay "us'")) "us" $
               tmlet (PStable "f") "h" $
@@ -327,7 +327,7 @@ spec = do
                              )
                 )
 
-      parse P.term "frp_bind" (unpack frp_bind) `shouldParse` (frp_bind_ast)
+      parse P.term "txt_frp_bind" (unpack txt_frp_bind) `shouldParse` (txt_frp_bind_ast)
 
     it "parses negative numbers" $ do
       parse P.term "neg" "-(10)" `shouldParse` (tmlit (LInt (-10)))
@@ -479,7 +479,7 @@ spec = do
 
   describe "program parsing" $ do
     -- it "should work with unfold program" $ do
-    --   frp_unfold `shouldBe` frp_unfold'
+    --   txt_frp_unfold `shouldBe` txt_frp_unfold'
 
     it "should work with const program" $ do
       let p = [text|

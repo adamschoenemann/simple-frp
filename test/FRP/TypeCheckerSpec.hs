@@ -66,6 +66,9 @@ spec = do
       it "works for let stable(y) = promote(x) in delay(u,y)" $ do
         let ctx = Ctx $ M.fromList [("x", (tynat, QNow)), ("u", (tyalloc, QNow))]
         runCheckTerm ctx (tmlet (PStable "y") (tmpromote "x") (tmdelay "u" "y")) `shouldTC` (tylater tynat, QNow)
+      it "works for let delay(y) = x in delay(u,y)" $ do
+        let ctx = Ctx $ M.fromList [("x", (tylater tynat, QNow)), ("u", (tyalloc, QNow))]
+        runCheckTerm ctx (tmlet (PDelay "y") "x" (tmdelay "u" "y")) `shouldTC` (tylater tynat, QNow)
     describe "tuples" $ do
       it "works for fst (10,True)" $ do
         runCheckTerm' (tmfst (tmtup 10 10)) `shouldTC` (tynat, QNow)

@@ -110,5 +110,54 @@ spec = do
         inferTerm' [term|\f x -> if f x then f 10 else False|] `shouldSolve`
           (toScheme $ (tynat |-> tybool) |-> tynat |-> tybool, QNow)
 
+    describe "cons" $ do
+      it "\\x xs -> cons(x,xs) : a -> @(S a) -> S a" $ do
+        inferTerm' [term|\x xs -> cons(x,xs) |] `shouldSolve`
+          (Forall ["a"] ("a" |-> tylater (tystream "a") |-> tystream "a"), QNow)
+
+      it "\\f x xs -> cons(f x, xs) : (a -> b) -> a -> @(S b) -> S b" $ do
+        inferTerm' [term|\f x xs -> cons(f x,xs) |] `shouldSolve`
+          (Forall ["b", "d"]
+             (("b" |-> "d") |-> "b" |-> tylater (tystream "d") |-> tystream "d")
+          , QNow)
+
+    describe "let-generalization" $ do
+      it "let f = (\\x -> x) in let g = (f True) in f 3" $ do
+        inferTerm' [term|let f = (\x -> x) in let g = (f True) in f 3|] `shouldSolve`
+          (toScheme tynat, QNow)
+
+    describe "delay-elim" $ do
+      it "\\u x -> let delay(x') = x in delay(u,x')" $ do
+        inferTerm' [term|\u x -> let delay(x') = x in delay(u,x')|] `shouldSolve`
+          (Forall ["c"] $ tyalloc |-> tylater "c" |-> tylater "c", QNow)
+
+    describe "cons-elim" $ do
+      it "\\xs -> let cons(x, xs') = xs in x" $ do
+        inferTerm' [term|\xs -> let cons(x, xs') = xs in x|] `shouldSolve`
+          (Forall ["b"] $ tystream "b" |-> "b", QNow)
+
+
+    describe "fixpoint" $ do
+      it "fix f. 10 : Nat" $ do
+        inferTerm' [term|fix f. 10|] `shouldSolve`
+          (toScheme $ tynat, QNow)
+
+      it "fix f. \\x -> 10 : a -> Nat" $ do
+        inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
+          (Forall ["b"] $ "b" |-> tynat, QNow)
+
+      it "fix f. \\x y -> 10 : a -> Nat" $ do
+        inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
+          (Forall ["b"] $ "b" |-> tynat, QNow)
+
+      -- it "fix f. \\x y -> f x y : a -> b -> c" $ do
+      --   inferTerm' [term|fix f. \x y -> f x y|] `shouldSolve`
+      --     (Forall ["b","c","e"] $ "b" |-> "c" |-> "e", QNow)
+
+  describe "test functions" $ do
+    it "works for const" $ do
+      inferTerm' (_body frp_const) `shouldSolve`
+        (Forall ["h"] $ tystream tyalloc |-> "h" |-> tystream "h", QNow)
+
 
 
