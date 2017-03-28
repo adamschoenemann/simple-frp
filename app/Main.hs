@@ -68,5 +68,3 @@ frp_const_10 = Decl () ty name body where
   body = case frp_const of
     Decl _ _ty _nm body -> tmapp (unitFunc body) (tmlit (LInt 10))
 
-frp_constProg :: Program ()
-frp_constProg = Program { _main = frp_const_10, _decls = []}

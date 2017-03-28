@@ -22,3 +22,5 @@ Use `:rr Spec.main` to reload and run `Spec.main` (or any other def you want)
 - Type inference (medium)
 - Switch to using a recursive type for the ast (big refactor!) (hard)
 - Inductive types <3 (hard)
+- Reflect type of FRP program to type-level, so it can be used as a stream
+  transformer in a type-safe way

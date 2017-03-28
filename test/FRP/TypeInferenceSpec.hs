@@ -36,7 +36,7 @@ shouldInfer eith expect = case eith of
   Left err  -> expectationFailure (ppshow err)
   Right ((t,q), cs) -> (unitFunc t, q, fmap unitFunc cs) `shouldBe` expect
 
-shouldTyErr :: Show t => Either (TyExcept t) (Type t, Qualifier) -> Expectation
+shouldTyErr :: Show t => Either e (QualSchm t) -> Expectation
 shouldTyErr = \case
   Left err -> return ()
   Right (t,q) -> expectationFailure $ show (t, q)
@@ -117,9 +117,48 @@ spec = do
 
       it "\\f x xs -> cons(f x, xs) : (a -> b) -> a -> @(S b) -> S b" $ do
         inferTerm' [term|\f x xs -> cons(f x,xs) |] `shouldSolve`
-          (Forall ["b", "d"]
-             (("b" |-> "d") |-> "b" |-> tylater (tystream "d") |-> tystream "d")
+          (Forall ["a", "b"]
+             (("a" |-> "b") |-> "a" |-> tylater (tystream "b") |-> tystream "b")
           , QNow)
+
+    describe "fst" $ do
+      it "\\x -> fst x"  $ do
+        inferTerm' [term|\x -> fst x|] `shouldSolve`
+          (Forall ["a", "b"] $ "a" .*. "b" |-> "a", QNow)
+
+      it "\\x -> (fst x) * 2"  $ do
+        inferTerm' [term|\x -> (fst x) * 2|] `shouldSolve`
+          (Forall ["a"] $ tynat .*. "a" |-> tynat, QNow)
+
+      it "\\x -> fst x * 2"  $ do
+        inferTerm' [term|\x -> fst x * 2|] `shouldSolve`
+          (Forall ["a"] $ tynat .*. "a" |-> tynat, QNow)
+
+    describe "snd" $ do
+      it "\\x -> snd x"  $ do
+        inferTerm' [term|\x -> snd x|] `shouldSolve`
+          (Forall ["a", "b"] $ "a" .*. "b" |-> "b", QNow)
+
+      it "\\x -> (snd x) * 2"  $ do
+        inferTerm' [term|\x -> (snd x) * 2|] `shouldSolve`
+          (Forall ["a"] $ "a" .*. tynat |-> tynat, QNow)
+
+      it "\\x -> snd x * 2"  $ do
+        inferTerm' [term|\x -> snd x * 2|] `shouldSolve`
+          (Forall ["a"] $ "a" .*. tynat |-> tynat, QNow)
+
+    describe "tuples" $ do
+      it "\\x y -> (x,y) : a -> b -> a * b"  $ do
+        inferTerm' [term|\x y -> (x,y)|] `shouldSolve`
+          (Forall ["a","b"] $ "a" |-> "b" |-> "a" .*. "b", QNow)
+
+      it "\\x y -> (x * 2,y) : Nat -> a -> a * b"  $ do
+        inferTerm' [term|\x y -> (x * 2,y)|] `shouldSolve`
+          (Forall ["a"] $ tynat |-> "a" |-> tynat .*. "a", QNow)
+
+      it "\\x y -> (x,y * 2) : a -> Nat -> a * Nat"  $ do
+        inferTerm' [term|\x y -> (x,y * 2)|] `shouldSolve`
+          (Forall ["a"] $ "a" |-> tynat |-> "a" .*. tynat, QNow)
 
     describe "let-generalization" $ do
       it "let f = (\\x -> x) in let g = (f True) in f 3" $ do
@@ -129,13 +168,47 @@ spec = do
     describe "delay-elim" $ do
       it "\\u x -> let delay(x') = x in delay(u,x')" $ do
         inferTerm' [term|\u x -> let delay(x') = x in delay(u,x')|] `shouldSolve`
-          (Forall ["c"] $ tyalloc |-> tylater "c" |-> tylater "c", QNow)
+          (Forall ["a"] $ tyalloc |-> tylater "a" |-> tylater "a", QNow)
 
     describe "cons-elim" $ do
       it "\\xs -> let cons(x, xs') = xs in x" $ do
-        inferTerm' [term|\xs -> let cons(x, xs') = xs in x|] `shouldSolve`
-          (Forall ["b"] $ tystream "b" |-> "b", QNow)
+        let trm = [term|\xs -> let cons(x, xs') = xs in x|]
+        inferTerm' trm `shouldSolve`
+          (Forall ["a"] $ tystream "a" |-> "a", QNow)
 
+      it "\\u xs -> let cons(x, delay(xs')) = xs in delay(u, xs')" $ do
+        let trm = [term|\u xs -> let cons(x, delay(xs')) = xs in delay(u,xs')|]
+        inferTerm' trm `shouldSolve`
+          (Forall ["a"] $ tyalloc |-> tystream "a" |-> tylater (tystream "a"), QNow)
+
+      it "fails \\xs -> let cons(x, delay(xs')) = xs in let y = x True in x 10" $ do
+        let trm = [term|\xs -> let cons(x, delay(xs')) = xs in let y = x True in x 10|]
+        shouldTyErr (inferTerm' trm )
+
+    describe "tuple-elim" $ do
+      it "\\c -> let (a,b) = c in a" $ do
+        let trm = [term|\c -> let (a,b) = c in a|]
+        inferTerm' trm `shouldSolve`
+          (Forall ["a", "b"] $ "a" .*. "b" |-> "a", QNow)
+
+      it "\\c -> let (a,b) = c in b" $ do
+        let trm = [term|\c -> let (a,b) = c in b|]
+        inferTerm' trm `shouldSolve`
+          (Forall ["a", "b"] $ "a" .*. "b" |-> "b", QNow)
+
+      it "\\c -> let (a,b) = c in a b" $ do
+        let trm = [term|\c -> let (a,b) = c in a b|]
+        inferTerm' trm `shouldSolve`
+          (Forall ["a", "b"] $ ("a" |-> "b") .*. "a" |-> "b", QNow)
+
+      it "\\c -> let (a,b) = c in let x = a 10 in a b" $ do
+        let trm = [term|\c -> let (a,b) = c in let x = a 10 in a b|]
+        inferTerm' trm `shouldSolve`
+          (Forall ["a"] $ (tynat |-> "a") .*. tynat |-> "a", QNow)
+
+      it "fails \\c -> let (a,b) = c in let x = a 10 in a True" $ do
+        let trm = [term|\c -> let (a,b) = c in let x = a 10 in a True|]
+        shouldTyErr (inferTerm' trm)
 
     describe "fixpoint" $ do
       it "fix f. 10 : Nat" $ do
@@ -144,11 +217,11 @@ spec = do
 
       it "fix f. \\x -> 10 : a -> Nat" $ do
         inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
-          (Forall ["b"] $ "b" |-> tynat, QNow)
+          (Forall ["a"] $ "a" |-> tynat, QNow)
 
       it "fix f. \\x y -> 10 : a -> Nat" $ do
         inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
-          (Forall ["b"] $ "b" |-> tynat, QNow)
+          (Forall ["a"] $ "a" |-> tynat, QNow)
 
       -- it "fix f. \\x y -> f x y : a -> b -> c" $ do
       --   inferTerm' [term|fix f. \x y -> f x y|] `shouldSolve`
@@ -157,7 +230,52 @@ spec = do
   describe "test functions" $ do
     it "works for const" $ do
       inferTerm' (_body frp_const) `shouldSolve`
-        (Forall ["h"] $ tystream tyalloc |-> "h" |-> tystream "h", QNow)
+        (Forall ["a"] $ tystream tyalloc |-> "a" |-> tystream "a", QNow)
+
+    it "works for const_fix" $ do
+      inferTerm' (_body frp_const_fix) `shouldSolve`
+        (Forall ["a"] $ tystream tyalloc |-> "a" |-> tystream "a", QNow)
+
+    it "works for nats" $ do
+      inferTerm' (_body frp_nats) `shouldSolve`
+        (Forall [] $ tystream tyalloc |-> tynat |-> tystream tynat, QNow)
+
+    it "works for map" $ do
+      inferTerm' (_body frp_map) `shouldSolve`
+        (Forall ["a","b"] $ tystream tyalloc
+                        |-> tystable ("a" |-> "b")
+                        |-> tystream "a"
+                        |-> tystream "b", QNow)
+
+    it "works for tails" $ do
+      inferTerm' (_body frp_tails) `shouldSolve`
+        (Forall ["a"] $ tystream tyalloc
+                        |-> tystream "a"
+                        |-> tystream (tystream "a"), QNow)
+
+    it "works for sum_acc" $ do
+      inferTerm' (_body frp_sum_acc) `shouldSolve`
+        (toScheme $ tystream tyalloc
+                  |-> tystream tynat
+                  |-> tynat
+                  |-> tystream tynat, QNow)
+
+    it "works for unfold" $ do
+      inferTerm' (_body frp_unfold) `shouldSolve`
+        (Forall ["a","b"]
+          $   tystream tyalloc
+          |-> tystable ("a" |-> "b" .*. tylater "a")
+          |-> "a"
+          |-> tystream "b", QNow)
+
+    it "works for swap" $ do
+      inferTerm' (_body frp_swap) `shouldSolve`
+        (Forall ["a"]
+          $   tystream tyalloc
+          |-> tynat
+          |-> tystream "a"
+          |-> tystream "a"
+          |-> tystream "a", QNow)
 
 
 

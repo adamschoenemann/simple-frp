@@ -23,6 +23,7 @@ import           FRP.AST
 import           FRP.AST.Construct (tmvar)
 import           Debug.Trace
 import           Data.Maybe (isJust)
+import           Data.List (nub)
 
 
 data Scheme a = Forall [TVar] (Type a)
@@ -86,7 +87,7 @@ data TyErr t
   | NotSyntax (Term t)
   | TypeAnnRequired (Term t)
   | NotStableTy (Type t)
-  | NotStableVar Name
+  | NotStable (Term t)
   | NotNow (Term t)
   | NotLater (Term t)
   deriving (Show, Eq)
@@ -114,9 +115,9 @@ instance Pretty (TyErr t) where
     NotSyntax trm           -> ppr 0 trm <+> "is not syntax"
     TypeAnnRequired trm     -> ppr 0 trm <+> text "requires a type annotation"
     NotStableTy ty          -> text "expected" <+> ppr n ty  <+> text "to be a stable type"
-    NotStableVar v          -> text "expected" <+> text v <+> text "to be stable"
     NotNow    trm           -> text "expected" <+> ppr n trm <+> text "to be now"
     NotLater  trm           -> text "expected" <+> ppr n trm <+> text "to be later"
+    NotStable trm           -> text "expected" <+> ppr n trm <+> text "to be stable"
 
 typeErr :: MonadError (TyExcept t) m
         => TyErr t -> Context t -> m a
@@ -146,19 +147,22 @@ freshName =
 -- runInferTerm ctx t = runInfer (checkTerm ctx t)
 -- runInferTerm' t = runInfer (checkTerm emptyCtx t)
 
+letters :: [String]
+letters = infiniteSupply alphabet where
+  infiniteSupply supply = supply ++ addSuffixes supply (1 :: Integer)
+  alphabet = map (:[]) ['a'..'z']
+  addSuffixes xs n = (map (\x -> addSuffix x n) xs) ++ (addSuffixes xs (n+1))
+  addSuffix x n = x ++ show n
+
 runInfer' :: Infer t a -> Either (TyExcept t) (a, [Constraint t])
 runInfer' = runInfer emptyCtx
 
 runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, [Constraint t])
 runInfer ctx inf =
-  let r = runExcept (runRWST inf ctx (infiniteSupply alphabet))
+  let r = runExcept (runRWST inf ctx letters)
   in  noSnd <$> r
   where
     noSnd (a,b,c) = (a,c)
-    alphabet = map (:[]) ['a'..'z']
-    infiniteSupply supply = supply ++ addSuffixes supply (1 :: Integer)
-    addSuffixes xs n = (map (\x -> addSuffix x n) xs) ++ (addSuffixes xs (n+1))
-    addSuffix x n = x ++ show n
 
 
 type TVar = Name
@@ -344,8 +348,9 @@ inferTerm ctx trm = case runInfer ctx (infer trm) of
     Left err -> Left err
     Right (subst, unies) -> Right $ (closeOver $ apply subst ty, q)
   where
-    closeOver = generalize emptyCtx
+    closeOver = normalize . generalize emptyCtx
     un cs = Unifier (nullSubst, cs)
+
 
 unifies :: Type t -> Type t -> Solve t (Unifier t)
 unifies t1 t2 | unitFunc t1 == unitFunc t2 = return emptyUnifier
@@ -403,14 +408,12 @@ stableCtx (Ctx c1) =
       QLater  -> Nothing
 
 inCtx :: (Name, QualSchm t) -> Infer t a -> Infer t a
-inCtx (x, sc) m = do
-  let scope e = (remove e x) `extend` (x, sc)
-  local scope m
+inCtx (x, sc) m = local scope m where
+  scope e = (remove e x) `extend` (x, sc)
 
 inStableCtx :: (Name, QualSchm t) -> Infer t a -> Infer t a
-inStableCtx (x, sc) m = do
-  let scope ctx = (stableCtx . remove ctx $ x) `extend` (x, sc)
-  local scope m
+inStableCtx (x, sc) m = local scope m where
+  scope ctx = (stableCtx . remove ctx $ x) `extend` (x, sc)
 
 inferNow :: Term t -> Infer t (Type t, Qualifier)
 inferNow expr = do
@@ -428,6 +431,14 @@ inferLater expr = do
     then return (t,q)
     else typeErr (NotLater expr) ctx0
 
+inferStable :: Term t -> Infer t (Type t, Qualifier)
+inferStable expr = do
+  ctx0 <- ask
+  (t, q) <- local stableCtx $ infer expr
+  if (q == QStable)
+    then return (t,q)
+    else typeErr (NotStable expr) ctx0
+
 -- Consideration: Move logic that enforces qualifiers to be now/stbl/whatever
 -- into the constraint solver? Could that be done? Is it better? Don't know yet
 infer :: Term t -> Infer t (Type t, Qualifier)
@@ -436,7 +447,27 @@ infer = \case
   TmLit a (LBool _) -> return (TyPrim a TyBool, QNow)
   TmAlloc a         -> return (TyAlloc a, QNow)
 
+  TmFst a e -> do
+    (t1, _) <- inferNow e
+    tv1 <- TyVar a <$> freshName
+    tv2 <- TyVar a <$> freshName
+    uni t1 (TyProd a tv1 tv2)
+    return (tv1, QNow)
+
+  TmSnd a e -> do
+    (t1, _) <- inferNow e
+    tv1 <- TyVar a <$> freshName
+    tv2 <- TyVar a <$> freshName
+    uni t1 (TyProd a tv1 tv2)
+    return (tv2, QNow)
+
+  TmTup a e1 e2 -> do
+    (t1, _) <- inferNow e1
+    (t2, _) <- inferNow e2
+    return (TyProd a t1 t2, QNow)
+
   TmVar a x -> lookupCtx x
+
 
   -- FIXME: for now, we ignore the maybe type signature on the lambda
   TmLam a x mty e -> do
@@ -495,15 +526,19 @@ infer = \case
     uni tv (TyStable a t1)
     return (tv, QNow)
 
+  TmStable a e -> do
+    (t1, _) <- inferStable e
+    tv <- TyVar a <$> freshName
+    uni tv (TyStable a t1)
+    return (tv, QNow)
+
   TmDelay a u e -> do
     (tu, _) <- inferNow u
-    -- traceM (ppshow tu)
     uni tu (TyAlloc a)
     (te, _) <- inferLater e
     tv <- TyVar a <$> freshName
     uni tv (TyLater a te)
     return (tv, QNow)
-
 
   where
     binOpTy :: a -> BinOp -> Type a -- (Type a, Type a, Type a)
@@ -526,68 +561,79 @@ infer = \case
         Eq   -> primArr (TyBool, TyNat , TyNat )
 
 -- "Type check" a pattern. Basically, it unfold the pattern, makes sure
--- it matches the term, and then adds the appropriate names to the input context
--- TODO: Finish this
+-- it matches the term, and then returns a context with all the bound names
+-- Let generalization makes this hard. It works right now, but I'm pretty
+-- sure it is not correct. Ask your supervisors!
 inferPtn :: Pattern -> Type t -> Infer t (Context t)
-inferPtn pattern typ = case (pattern, typ) of
+inferPtn pattern ty = case pattern of
 
-  (PBind nm, ty) -> do
+  PBind nm -> do
     ctx <- ask
-    -- let sc = Forall [] ty
     let sc = generalize ctx ty
     return $ Ctx $ M.singleton nm (sc, QNow)
 
-  (PDelay nm, ty) -> do
+  PDelay nm -> do
     ctx <- ask
     let ann = typeAnn ty
-    tv <- TyVar ann <$> freshName
+    fnm <- freshName
+    let tv = TyVar ann fnm
     uni ty (TyLater ann tv)
-    let sc = Forall [] tv
-    -- let sc = generalize ctx tv
-    return $ Ctx $ M.singleton nm (sc, QLater)
+    -- instantiate out the tv itself from the generalization
+    -- not sure if correct, just a hack that works for now
+    -- and perhaps it should simply not be generalized at all
+    let sc@(Forall vs _) = generalize ctx tv
+    let vs' = filter (/= fnm) vs
+    return $ Ctx $ M.singleton nm (Forall vs' tv, QLater)
 
-  (PCons hd tl, ty) -> do
+  PCons hd tl -> do
     let ann = typeAnn ty
-    htv <- TyVar ann <$> freshName
-    ttv <- TyVar ann <$> freshName
+    hnm <- freshName
+    tnm <- freshName
+    let htv = TyVar ann hnm
+    let ttv = TyVar ann tnm
     uni ty (TyStream ann htv)
     uni ttv (TyLater ann ty)
-    ctx1 <- inferPtn hd htv
-    ctx2 <- inferPtn tl ttv
+    ctx1 <- inCtx (hnm, (Forall [] htv, QNow)) (inferPtn hd htv)
+    ctx2 <- inCtx (tnm, (Forall [] ttv, QNow)) (inferPtn tl ttv)
     return (ctx1 `unionCtx` ctx2)
 
-  (PStable p, ty) -> do
+  PStable p -> do
     let ann = typeAnn ty
-    tv <- TyVar ann <$> freshName
+    nm <- freshName
+    let tv = TyVar ann nm
     uni ty (TyStable ann tv)
-    ctx1 <- inferPtn p tv
+    ctx1 <- inCtx (nm, (Forall [] tv, QNow)) $ inferPtn p tv
     return $ mapCtx (\(t,q) -> (t,QStable)) ctx1
 
-  (PTup p1 p2, TyProd a t1 t2) -> do
-    ctx1 <- inferPtn p1 t1
-    ctx2 <- local (const ctx1) $ inferPtn p2 t2
-    return ctx2
+  PTup p1 p2 -> do
+    let ann = typeAnn ty
+    nm1 <- freshName
+    nm2 <- freshName
+    let tv1 = TyVar ann nm1
+    let tv2 = TyVar ann nm2
+    uni ty (TyProd ann tv1 tv2)
+    ctx1 <- inCtx (nm1, (Forall [] tv1, QNow)) $ inferPtn p1 tv1
+    ctx2 <- inCtx (nm2, (Forall [] tv2, QNow)) $ inferPtn p2 tv2
+    return (ctx1 `unionCtx` ctx2)
 
+-- normalize a type-scheme in the sense that we rename all the
+-- type variables to be in alphabetical order of occurence
+normalize :: Scheme t -> Scheme t
+normalize (Forall _ body) = Forall (map snd ord) (normtype body)
+  where
+    ord = zip (nub $ S.toList $ ftv body) (letters)
 
--- inferPtn ptn sc = do
---   ctx <- ask
---   case ptn of
---     PBind nm  -> return $ ctx `extend` (nm, (sc, QNow))
---     PDelay nm -> do
---       let ann = typeAnn (unScheme sc)
---       tv <- TyVar ann <$> freshName
---       uni tv (TyLater a )
+    normtype ty = case ty of
+      TyProd   a l r    -> TyProd a (normtype l) (normtype r)
+      TySum    a l r    -> TySum a (normtype l) (normtype r)
+      TyArr    a l r    -> TyArr a (normtype l) (normtype r)
+      TyLater  a ty     -> TyLater a (normtype ty)
+      TyStable a ty     -> TyStable a (normtype ty)
+      TyStream a ty     -> TyStream a (normtype ty)
+      TyAlloc  a        -> ty
+      TyPrim{}          -> ty
 
-  -- go (PDelay nm) (TyLater a t, QNow) = return (extend nm (t, QLater) ctx)
-  -- go (PCons hd tl) (TyStream a x, QNow) = do
-  --   ctx1 <- inferPtn ctx hd (x, QNow)
-  --   ctx2 <- inferPtn ctx1 tl (TyLater a (TyStream a x), QNow)
-  --   return ctx2
-  -- go (PStable p) (TyStable a t, QNow) = do
-  --   ctx1 <- inferPtn ctx p (t, QStable)
-  --   return ctx1
-  -- go (PTup p1 p2) (TyProd a t1 t2, QNow) = do
-  --   ctx1 <- inferPtn ctx  p1 (t1, QNow)
-  --   ctx2 <- inferPtn ctx1 p2 (t2, QNow)
-  --   return ctx2
-  -- go p t = typeErr (CannotUnify undefined undefined undefined) ctx -- FIXME
+      TyVar    a name   ->
+        case Prelude.lookup name ord of
+          Just x -> TyVar a x
+          Nothing -> error "type variable not in signature"

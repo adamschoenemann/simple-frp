@@ -71,6 +71,11 @@ frp_map = unitFunc [decl|
     cons((f x), delay(u, (((map us') stable(f)) xs'))).
 |]
 
+-- this could be a way
+-- data FRPTy : * -> * where
+--   Simple : AST -> FRPTy [Nat]
+--   Trans  : AST -> FRPTy ([Nat] -> [Nat])
+
 frp_prog_1 = [prog|
 
   map : S alloc -> #(A -> B) -> S A -> S B
@@ -86,9 +91,11 @@ frp_prog_1 = [prog|
     let stable(x) = promote(n) in
     cons(x, delay(u, nats us' (x + 1))).
 
-  main : S alloc -> S Nat
-  main us = nats us.
+  main : S alloc -> S Int -> S Nat
+  main us xs = nats us 0.
+
 |]
+
 
 -- frp_unfold' :: Decl ()
 -- frp_unfold' = Decl () ty name body where
