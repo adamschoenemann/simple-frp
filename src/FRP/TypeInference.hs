@@ -570,9 +570,16 @@ infer term = case term of
     (ty, _) <- inferNow e
     alpha <- freshName
     tv <- TyVar a <$> freshName
-    uni tv (apply (M.singleton alpha (TyRec a alpha ty)) ty)
+    uni tv (apply (M.singleton alpha (TyLater a $ TyRec a alpha ty)) ty)
     return (tv, QNow)
 
+  TmOut a e -> do
+    (rty, _) <- inferNow e
+    alpha <- freshName
+    tv <- TyVar a <$> freshName
+    uni rty (TyRec a alpha tv)
+    let ty = apply (M.singleton alpha (TyLater a $ TyRec a alpha rty)) rty
+    return (ty, QNow)
 
   where
     binOpTy :: a -> BinOp -> Type a -- (Type a, Type a, Type a)
