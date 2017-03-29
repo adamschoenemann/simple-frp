@@ -358,10 +358,13 @@ unifies :: Type t -> Type t -> Solve t (Unifier t)
 unifies t1 t2 | unitFunc t1 == unitFunc t2 = return emptyUnifier
 unifies (TyVar _ v) t = v `bind` t
 unifies t (TyVar _ v) = v `bind` t
-unifies (TyArr _ t1 t2) (TyArr _ t3 t4) = unifyMany [t1,t2] [t3,t4]
-unifies (TyStable _ t1) (TyStable _ t2) = t1 `unifies` t2
-unifies (TyLater _ t1) (TyLater _ t2)   = t1 `unifies` t2
-unifies (TyStream _ t1) (TyStream _ t2) = t1 `unifies` t2
+unifies (TyArr _ t1 t2)  (TyArr _ t3 t4)  = unifyMany [t1,t2] [t3,t4]
+unifies (TyStable _ t1)  (TyStable _ t2)  = t1 `unifies` t2
+unifies (TyLater _ t1)   (TyLater _ t2)   = t1 `unifies` t2
+unifies (TyStream _ t1)  (TyStream _ t2)  = t1 `unifies` t2
+unifies (TyRec a af t1)  (TyRec _ bf t2)  = do
+  let fv = "ioasdoijaoij"
+  apply (M.singleton af (TyVar a fv)) t1 `unifies` apply (M.singleton bf (TyVar a fv)) t2
 unifies t1 t2 = do
   unif <- get
   typeErr (CannotUnify t1 t2 unif) emptyCtx
@@ -566,20 +569,18 @@ infer term = case term of
     uni t1 t2
     return (t1, QNow)
 
-  TmInto a e -> do
-    (ty, _) <- inferNow e
-    alpha <- freshName
-    tv <- TyVar a <$> freshName
-    uni tv (apply (M.singleton alpha (TyLater a $ TyRec a alpha ty)) ty)
-    return (tv, QNow)
+  -- TmInto a e -> do
+  --   (ty, _) <- inferNow e
+  --   alpha <- freshName
+  --   tv <- TyVar a <$> freshName
+  --   uni tv (apply (M.singleton alpha (TyLater a $ TyRec a alpha ty)) ty)
+  --   return (tv, QNow)
 
-  TmOut a e -> do
-    (rty, _) <- inferNow e
-    alpha <- freshName
-    tv <- TyVar a <$> freshName
-    uni rty (TyRec a alpha tv)
-    let ty = apply (M.singleton alpha (TyLater a $ TyRec a alpha rty)) rty
-    return (ty, QNow)
+  -- TmOut ann tyann@(TyRec _ alpha tau') e -> do
+  --   (tau, _) <- inferNow e
+  --   uni tyann tau
+  --   let tau'' = apply (M.singleton alpha (TyLater ann tau)) tau'
+  --   return (tau'', QNow)
 
   where
     binOpTy :: a -> BinOp -> Type a -- (Type a, Type a, Type a)
@@ -622,9 +623,10 @@ inferPtn pattern ty = case pattern of
     -- instantiate out the tv itself from the generalization
     -- not sure if correct, just a hack that works for now
     -- and perhaps it should simply not be generalized at all
-    let sc@(Forall vs _) = generalize ctx tv
-    let vs' = filter (/= fnm) vs
-    return $ Ctx $ M.singleton nm (Forall vs' tv, QLater)
+    -- let sc@(Forall vs _) = generalize ctx tv
+    -- let vs' = filter (/= fnm) vs
+    -- let vs' = vs
+    return $ Ctx $ M.singleton nm (Forall [] tv, QLater)
 
   PCons hd tl -> do
     let ann = typeAnn ty
@@ -679,3 +681,4 @@ normalize (Forall _ body) = Forall (map snd ord) (normtype body)
         case Prelude.lookup name ord of
           Just x -> TyVar a x
           Nothing -> error "type variable not in signature"
+

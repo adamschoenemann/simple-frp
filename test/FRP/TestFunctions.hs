@@ -168,6 +168,12 @@ frp_swap = unitFunc [decl|
            cons(x, delay(u, ((((swap us') (m - 1)) xs') ys'))).
 |]
 
+frp_test :: Decl ()
+frp_test = unitFunc [decl|
+  fn : Nat
+  fn = $(hskIntToNat 10)
+|]
+
 -- switch : S alloc -> S a -> E (S a) -> S a
 frp_switch :: Decl ()
 frp_switch = unitFunc [decl|

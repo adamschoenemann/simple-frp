@@ -267,9 +267,18 @@ spec = do
         inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
           (Forall ["a"] $ "a" |-> tynat, QNow)
 
-      -- it "fix f. \\x y -> f x y : a -> b -> c" $ do
-      --   inferTerm' [term|fix f. \x y -> f x y|] `shouldSolve`
-      --     (Forall ["b","c","e"] $ "b" |-> "c" |-> "e", QNow)
+    -- describe "out" $ do
+      -- S a = forall a. mu x. a * x
+      -- e : S a
+      -- out e : [a * @(S a)]
+      -- it "\\x -> let (y,z) = out x in y * z" $ do
+      --   inferTerm' [term|\x -> let (y,z) = out x in y * z|] `shouldSolve`
+      --     (toScheme $ (TyRec () "b" $ tynat .*. tynat) |-> tynat, QNow)
+
+      -- let trm = [term|\x -> let (y, z) = out x in z|]
+      -- it (ppshow trm) $ do
+      --   inferTerm' trm `shouldSolve`
+      --     (Forall ["a"] "a", QNow)
 
   describe "test functions" $ do
     it "works for const" $ do
@@ -321,13 +330,13 @@ spec = do
           |-> tystream "a"
           |-> tystream "a", QNow)
 
-    it "works for switch" $ do
-      inferTerm' (_body frp_switch) `shouldSolve`
-        (Forall ["a"]
-          $   tystream tyalloc
-          |-> tystream "a"
-          |-> tystream "a"
-          |-> tystream "a", QNow)
+    -- it "works for switch" $ do
+    --   inferTerm' (_body frp_switch) `shouldSolve`
+    --     (Forall ["a"]
+    --       $   tystream tyalloc
+    --       |-> tystream "a"
+    --       |-> tystream "a"
+    --       |-> tystream "a", QNow)
 
 
 
