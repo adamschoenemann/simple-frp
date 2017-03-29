@@ -47,6 +47,7 @@ data Type a
   | TyLater  a (Type a)
   | TyStable a (Type a)
   | TyStream a (Type a)
+  | TyRec    a Name (Type a)
   | TyAlloc  a
   | TyPrim   a TyPrim
   deriving (Show, Eq, Functor, Data, Typeable)
@@ -55,13 +56,14 @@ data TyPrim = TyBool | TyNat deriving (Show, Eq, Data, Typeable)
 
 instance Pretty (Type a) where
   ppr n type' = case type' of
-    TyVar  _a name   -> text name
+    TyVar  _a name     -> text name
     TyProd   _a ty ty' -> prns (ppr (n+1) ty <+> text "*" <+> ppr (n+1) ty')
     TySum    _a ty ty' -> prns (ppr (n+1) ty <+> text "+" <+> ppr (n+1) ty')
     TyArr    _a ty ty' -> prns $ ppr (n+1) ty <+> text "->" <+> ppr 0 ty'
     TyLater  _a ty     -> text "@" <> ppr (n+1) ty
     TyStable _a ty     -> text "#" <> ppr (n+1) ty
-    TyStream _a ty     -> prns $ text "S" <+> ppr (n+1) ty
+    TyStream _a ty     -> prns $ char 'S' <+> ppr (n+1) ty
+    TyRec    _a nm ty  -> prns $ text "mu" <+> text nm <> char '.' <+> ppr 0 ty
     TyAlloc  _a        -> text "alloc"
     TyPrim   _a TyNat  -> text "Nat"
     TyPrim   _a TyBool -> text "Bool"
@@ -79,6 +81,7 @@ typeAnn = \case
     TyLater  a _   -> a
     TyStable a _   -> a
     TyStream a _   -> a
+    TyRec    a _ _ -> a
     TyAlloc  a     -> a
     TyPrim   a _   -> a
 

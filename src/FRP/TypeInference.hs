@@ -193,17 +193,19 @@ instance Substitutable (Type a) a where
     TyLater  a ty     -> TyLater  a (apply st ty)
     TyStable a ty     -> TyStable a (apply st ty)
     TyStream a ty     -> TyStream a (apply st ty)
+    TyRec    a nm ty  -> TyRec    a nm (apply st ty) -- FIXME: Is this correct?
     TyAlloc  a        -> TyAlloc  a
     TyPrim{}          -> typ
 
   ftv = \case
     TyVar    _ name   -> S.singleton name
-    TyProd   _ l r    -> ftv l +++ ftv r
-    TySum    _ l r    -> ftv l +++ ftv r
+    TyProd   _ l r    -> ftv l  +++ ftv r
+    TySum    _ l r    -> ftv l  +++ ftv r
     TyArr    _ t1 t2  -> ftv t1 +++ ftv t2
     TyLater  _ ty     -> ftv ty
     TyStable _ ty     -> ftv ty
     TyStream _ ty     -> ftv ty
+    TyRec    _ nm ty  -> S.delete nm $ ftv ty
     TyAlloc  _        -> S.empty
     TyPrim{}          -> S.empty
 
@@ -442,10 +444,12 @@ inferStable expr = do
 -- Consideration: Move logic that enforces qualifiers to be now/stbl/whatever
 -- into the constraint solver? Could that be done? Is it better? Don't know yet
 infer :: Term t -> Infer t (Type t, Qualifier)
-infer = \case
+infer term = case term of
   TmLit a (LInt _)  -> return (TyPrim a TyNat, QNow)
   TmLit a (LBool _) -> return (TyPrim a TyBool, QNow)
   TmAlloc a         -> return (TyAlloc a, QNow)
+  TmPntr a l        -> typeErr' (NotSyntax term)
+  TmPntrDeref a l   -> typeErr' (NotSyntax term)
 
   TmFst a e -> do
     (t1, _) <- inferNow e
@@ -468,7 +472,6 @@ infer = \case
 
   TmVar a x -> lookupCtx x
 
-
   -- FIXME: for now, we ignore the maybe type signature on the lambda
   TmLam a x mty e -> do
     tv <- TyVar a <$> freshName
@@ -488,7 +491,6 @@ infer = \case
     local (`unionCtx` ctx2) (inferNow e2)
 
   -- FIXME: we ignore type signatures
-  -- first, we make it work as general recursion
   TmFix a x mty e -> do
     tv <- TyVar a <$> freshName
     (t, q) <- inStableCtx (x, (Forall [] tv, QLater)) (inferNow e)
@@ -563,6 +565,14 @@ infer = \case
     (t2, _) <- inCtx (nm2, (Forall [] tvr, QNow)) $ inferNow c2
     uni t1 t2
     return (t1, QNow)
+
+  TmInto a e -> do
+    (ty, _) <- inferNow e
+    alpha <- freshName
+    tv <- TyVar a <$> freshName
+    uni tv (apply (M.singleton alpha (TyRec a alpha ty)) ty)
+    return (tv, QNow)
+
 
   where
     binOpTy :: a -> BinOp -> Type a -- (Type a, Type a, Type a)
@@ -654,6 +664,7 @@ normalize (Forall _ body) = Forall (map snd ord) (normtype body)
       TyLater  a ty     -> TyLater a (normtype ty)
       TyStable a ty     -> TyStable a (normtype ty)
       TyStream a ty     -> TyStream a (normtype ty)
+      TyRec    a nm ty  -> TyRec a nm (normtype ty)
       TyAlloc  a        -> ty
       TyPrim{}          -> ty
 

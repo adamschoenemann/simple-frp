@@ -321,5 +321,13 @@ spec = do
           |-> tystream "a"
           |-> tystream "a", QNow)
 
+    it "works for switch" $ do
+      inferTerm' (_body frp_switch) `shouldSolve`
+        (Forall ["a"]
+          $   tystream tyalloc
+          |-> tystream "a"
+          |-> tystream "a"
+          |-> tystream "a", QNow)
+
 
 
