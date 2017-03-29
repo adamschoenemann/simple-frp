@@ -160,6 +160,10 @@ spec = do
         inferTerm' [term|\x y -> (x,y * 2)|] `shouldSolve`
           (Forall ["a"] $ "a" |-> tynat |-> "a" .*. tynat, QNow)
 
+      it "\\y f -> f y + f (10, 20)"  $ do
+        inferTerm' [term|\y f -> f y + f (10, 20)|] `shouldSolve`
+          (toScheme $ tynat .*. tynat |-> (tynat .*. tynat |-> tynat) |-> tynat, QNow)
+
     describe "let-generalization" $ do
       it "let f = (\\x -> x) in let g = (f True) in f 3" $ do
         inferTerm' [term|let f = (\x -> x) in let g = (f True) in f 3|] `shouldSolve`
@@ -330,13 +334,13 @@ spec = do
           |-> tystream "a"
           |-> tystream "a", QNow)
 
-    -- it "works for switch" $ do
-    --   inferTerm' (_body frp_switch) `shouldSolve`
-    --     (Forall ["a"]
-    --       $   tystream tyalloc
-    --       |-> tystream "a"
-    --       |-> tystream "a"
-    --       |-> tystream "a", QNow)
+    it "works for switch" $ do
+      inferTerm' (_body frp_switch) `shouldSolve`
+        (Forall ["a"]
+          $   tystream tyalloc
+          |-> tystream "a"
+          |-> tystream "a"
+          |-> tystream "a", QNow)
 
 
 

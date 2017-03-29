@@ -38,10 +38,10 @@ tmapp = TmApp <$> getPosition
 tmcons :: Parser (ParsedTerm -> ParsedTerm -> ParsedTerm)
 tmcons = TmCons <$> getPosition
 
-tmout :: Parser (ParsedTerm -> ParsedTerm)
+tmout :: Parser (Type SourcePos -> ParsedTerm -> ParsedTerm)
 tmout = TmOut <$> getPosition
 
-tminto :: Parser (ParsedTerm -> ParsedTerm)
+tminto :: Parser (Type SourcePos -> ParsedTerm -> ParsedTerm)
 tminto = TmInto <$> getPosition
 
 

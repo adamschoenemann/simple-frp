@@ -82,10 +82,18 @@ tminr :: Parser ParsedTerm
 tminr = C.tminr <*> (reserved "inr" *> tmexpr)
 
 tmout :: Parser ParsedTerm
-tmout = C.tmout <*> (reserved "out" *> tmexpr)
+tmout = do
+  _ <- reserved "out"
+  expr <- tmexpr
+  ty <- reservedOp ":" *> ty
+  C.tmout <*> return ty <*> return expr
 
 tminto :: Parser ParsedTerm
-tminto = C.tminto <*> (reserved "into" *> tmexpr)
+tminto = do
+  _ <- reserved "into"
+  expr <- tmexpr
+  ty <- reservedOp ":" *> ty
+  C.tminto <*> return ty <*> return expr
 
 tmcase :: Parser ParsedTerm
 tmcase =

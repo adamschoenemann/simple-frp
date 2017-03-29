@@ -36,10 +36,10 @@ tmapp = TmApp ()
 tmcons :: EvalTerm -> EvalTerm -> EvalTerm
 tmcons = TmCons ()
 
-tmout :: EvalTerm -> EvalTerm
+tmout :: Type () -> EvalTerm -> EvalTerm
 tmout = TmOut ()
 
-tminto :: EvalTerm -> EvalTerm
+tminto :: Type () -> EvalTerm -> EvalTerm
 tminto = TmInto ()
 
 
@@ -113,6 +113,7 @@ tyarr = TyArr ()
 tylater = TyLater ()
 tystable = TyStable ()
 tystream = TyStream ()
+tyrec = TyRec ()
 tyalloc = TyAlloc ()
 tynat  = TyPrim () TyNat
 tybool = TyPrim () TyBool

@@ -94,12 +94,12 @@ data Term a
   | TmCase a (Term a) (Name, (Term a)) (Name, (Term a))
   | TmLam a Name (Maybe (Type a)) (Term a)
   | TmVar a Name
-  | TmApp a (Term a) (Term a)
+  | TmApp  a (Term a) (Term a)
   | TmCons a (Term a) (Term a)
-  | TmOut a (Term a)
-  | TmInto a (Term a)
+  | TmOut  a (Type a) (Term a)
+  | TmInto a (Type a) (Term a)
   | TmStable a (Term a)
-  | TmDelay a (Term a) (Term a)
+  | TmDelay  a (Term a) (Term a)
   | TmPromote a (Term a)
   | TmLet a Pattern (Term a) (Term a)
   | TmLit a Lit
@@ -125,8 +125,8 @@ freeVars = S.toList . go where
     TmVar a nm                   -> S.singleton nm
     TmApp a  t1 t2               -> go t1 +++ go t2
     TmCons a t1 t2               -> go t1 +++ go t2
-    TmOut a t                    -> go t
-    TmInto a t                   -> go t
+    TmOut a  _ t                 -> go t
+    TmInto a _ t                 -> go t
     TmStable a t                 -> go t
     TmDelay a t1 t2              -> go t1 +++ go t2
     TmPromote a t                -> go t
@@ -172,14 +172,17 @@ instance Pretty (Term a) where
     TmTup _a trm trm'       -> parens $ ppr (n+1) trm <> comma <+> ppr (n+1) trm'
     TmInl _a trm            -> text "inl" <+> prns (ppr (n+1) trm)
     TmInr _a trm            -> text "inr" <+> prns (ppr (n+1) trm)
+
     TmCase _a trm (vl, trml) (vr, trmr) ->
       text "case" <+> ppr 0 trm <+> text "of"
         $$ nest (2) (text "| inl" <+> text vl <+> text "->" <+> ppr (0) trml)
         $$ nest (2) (text "| inr" <+> text vr <+> text "->" <+> ppr (0) trmr)
+
     TmLam _a b mty trm      ->
       let pty = maybe mempty (\t -> char ':' <> ppr 0 t) mty
           maybePrns = maybe id (const parens) mty
       in  prns (text "\\" <> maybePrns (text b <> pty) <+> text "->" <+> ppr (n) trm)
+
     TmFix _a b ty trm       -> prns (text "fix" <+> text b <> char '.' <+> ppr (n+1) trm)
     TmVar _a v              -> text v
     TmApp _a trm trm'       -> prns (ppr 0 trm <+> ppr (n+1) trm')
@@ -187,19 +190,26 @@ instance Pretty (Term a) where
     TmDelay _a alloc trm    -> text "delay" <> parens (ppr 0 alloc <> comma <+> ppr 0 trm)
     TmStable _a trm         -> text "stable" <> parens (ppr 0 trm)
     TmPromote _a trm        -> text "promote" <> parens (ppr 0 trm)
+
     TmLet _a ptn trm trm'   -> text "let" <+> ppr (0) ptn <+> text "="
                               <+> ppr (n) trm <+> text "in" $$ ppr (0) trm'
+
     TmLit _a l              -> ppr n l
     TmBinOp _a op l r       -> prns (ppr (n+1) l <+> ppr n op <+> ppr (n+1) r)
+
     TmITE _a b trmt trmf    ->
       text "if" <+> ppr n b
         $$ nest 2 (text "then" <+> ppr (n+1) trmt)
         $$ nest 2 (text "else" <+> ppr (n+1) trmf)
+
     TmPntr _a pntr          -> text "&[" <> int pntr <> text "]"
     TmPntrDeref _a pntr     -> text "*[" <> int pntr <> text "]"
     TmAlloc _a              -> text "¤"
-    TmOut _a trm            -> text "out"  <+> prns (ppr (n) trm)
-    TmInto _a trm           -> text "into" <+> prns (ppr (n) trm)
+
+    TmOut  _a ty trm        -> text "out"  <+> prns (ppr (n) trm)
+                               <+> char ':' <+> ppr 0 ty
+    TmInto _a ty trm        -> text "into" <+> prns (ppr (n) trm)
+                               <+> char ':' <+> ppr 0 ty
     where
       prns = if (n > 0)
              then parens
@@ -235,7 +245,7 @@ valToTerm = \case
   VPntr l          -> TmPntr () l
   VAlloc           -> TmAlloc ()
   VStable v        -> TmStable () (valToTerm v)
-  VInto v          -> TmInto () (valToTerm v)
+  VInto v          -> TmInto () undefined (valToTerm v)
   VCons hd tl      -> TmCons () (valToTerm hd) (valToTerm tl)
   VLit l           -> TmLit () l
 

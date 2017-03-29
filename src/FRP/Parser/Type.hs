@@ -7,8 +7,8 @@ import FRP.Parser.Lang
 import Text.Parsec.Pos
 
 ty :: Parser (Type SourcePos)
-ty =  buildExpressionParser tytable tyexpr
-  <?> "type"
+ty =  tyrec <|> buildExpressionParser tytable tyexpr
+            <?> "type"
 
 withPos :: (SourcePos -> a) -> Parser a
 withPos fn = do
@@ -24,14 +24,20 @@ tytable = [ [ prefix' "S"  (withPos TyStream)
           , [binary' "->" (withPos TyArr)  AssocRight]
           ]
 
-tyexpr = parens ty
-     <|> tynat
+tyexpr = tynat
      <|> tybool
      <|> tyalloc
      <|> tyvar
+     <|> parens ty
 
 tynat = reserved "Nat"   >> withPos (\p -> TyPrim p TyNat)
 tybool = reserved "Bool" >> withPos (\p -> TyPrim p TyBool)
 tyalloc = reserved "alloc" >> withPos TyAlloc
 tyvar = withPos TyVar <*> identifier
+tyrec = do
+  _ <- reserved "mu"
+  v <- identifier
+  _ <- symbol "."
+  withPos TyRec <*> return v <*> ty
+
 

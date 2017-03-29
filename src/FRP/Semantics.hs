@@ -113,6 +113,7 @@ eval term = case term of
   TmVar _a x -> useVar x
   TmLit _a x -> return $ VLit x
   TmLam _a x _ty e -> VClosure x e <$> ask
+
   TmApp _a e1 e2 -> do
     e3 <- eval e1
     case e3 of
@@ -121,19 +122,23 @@ eval term = case term of
         let env'' = M.insert x (Right v2) env'
         local (M.union env'') $ eval e1'
       _ -> crash $ "expected closure, got " ++ (ppshow e3)
+
   TmBinOp _a op el er -> evalBinOp op el er
+
   TmFst _a trm -> do
     VTup x y <- eval trm
     return x
+
   TmSnd _a trm -> do
     VTup x y <- eval trm
     return y
+
   TmTup _a trm1 trm2 -> VTup <$> eval trm1 <*> eval trm2
-  TmInl _a trm -> VInl <$> eval trm
-  TmInr _a trm -> VInr <$> eval trm
-  TmCons _a hd tl -> VCons <$> eval hd <*> eval tl
-  TmFix _a x ty e ->
-    local (M.insert x (Left $ term)) $ eval e
+  TmInl _a trm       -> VInl <$> eval trm
+  TmInr _a trm       -> VInr <$> eval trm
+  TmCons _a hd tl    -> VCons <$> eval hd <*> eval tl
+  TmFix _a x ty e    -> local (M.insert x (Left $ term)) $ eval e
+
   TmDelay _a e' e -> do
     v <- eval e'
     case v of
@@ -142,85 +147,92 @@ eval term = case term of
         label <- allocVal (SVLater e env')
         return $ VPntr label
       _ -> crash $ "expected VAlloc, got" ++ (ppshow v)
+
   TmPntrDeref _a label -> do
     v <- lookupPntr label
     case v of
       SVNow v' -> return v'
       -- _             -> return $ VPntr label -- this is debatable if correct
       er       -> crash $ "illegal pntr deref " ++ ppshow (tmpntrderef label) ++ ".\n" ++ (ppshow er)
-  TmStable _a e ->
-    VStable <$> eval e
-  TmPromote _a e ->
-    VStable <$> eval e
+
+  TmStable _a e -> VStable <$> eval e
+  TmPromote _a e -> VStable <$> eval e
+
   TmCase _a trm (nml, trml) (nmr, trmr) -> do
     res <- eval trm
     case res of
       VInl vl -> local (M.insert nml (Right vl)) $ eval trml
       VInr vr -> local (M.insert nmr (Right vr)) $ eval trmr
       _       -> error "not well-typed"
+
   TmLet _a pat e e' -> do
     v <- eval e
     env' <- matchPat pat v
     local (M.union env') $ eval e'
+
   TmAlloc _a -> return VAlloc
   TmPntr _a l -> return $ VPntr l
+
   TmITE _a b et ef -> do
     VLit (LBool b') <- eval b
     case b' of
       True  -> eval et
       False -> eval ef
-  TmOut _a e -> do
+
+  TmOut _a _ty e -> do
     VInto v <- eval e
     return v
-  TmInto _a e -> do
+
+  TmInto _a _ty e -> do
     v <- eval e
     return $ VInto v
-  where
-  matchPat :: Pattern -> Value -> EvalM Env
-  matchPat (PBind x) v   = return $ M.singleton x (Right v)
-  matchPat (PDelay x) (VPntr l) =
-    return $ M.singleton x (Left $ tmpntrderef l)
-  matchPat (PStable pat) (VStable v) =
-    matchPat pat v
-  matchPat (PCons hdp tlp) (VCons hd tl) =
-    M.union <$> matchPat hdp hd <*> matchPat tlp tl
-  matchPat (PTup p1 p2) (VTup v1 v2) =
-    M.union <$> matchPat p1 v1 <*> matchPat p2 v2
-  matchPat pat v = do
-    env <- ask
-    store <- get
-    error $ ppshow pat ++ " cannot match " ++ ppshow v
-          ++ "\nenv: " ++ (ppshow env) ++ "\nstore: " ++ ppshow store
 
-  evalBinOp op el er = case op of
-      Add  -> intOp    (+)
-      Sub  -> intOp    (-)
-      Mult -> intOp    (*)
-      Div  -> intOp    div
-      And  -> boolOp   (&&)
-      Or   -> boolOp   (||)
-      Leq  -> intCmpOp (<=)
-      Lt   -> intCmpOp (<)
-      Geq  -> intCmpOp (>=)
-      Gt   -> intCmpOp (>)
-      Eq   -> eqOp
-      where
-        intOp fn = do
-          VLit (LInt x)  <- eval el
-          VLit (LInt y)  <- eval er
-          return $ VLit (LInt $ fn x y)
-        boolOp fn = do
-          VLit (LBool x) <- eval el
-          VLit (LBool y) <- eval er
-          return $ VLit (LBool $ fn x y)
-        intCmpOp fn = do
-          VLit (LInt x)  <- eval el
-          VLit (LInt y)  <- eval er
-          return $ VLit (LBool $ fn x y)
-        eqOp = do
-          VLit x <- eval el
-          VLit y <- eval er
-          return $ VLit (LBool (x == y))
+  where
+    matchPat :: Pattern -> Value -> EvalM Env
+    matchPat (PBind x) v   = return $ M.singleton x (Right v)
+    matchPat (PDelay x) (VPntr l) =
+      return $ M.singleton x (Left $ tmpntrderef l)
+    matchPat (PStable pat) (VStable v) =
+      matchPat pat v
+    matchPat (PCons hdp tlp) (VCons hd tl) =
+      M.union <$> matchPat hdp hd <*> matchPat tlp tl
+    matchPat (PTup p1 p2) (VTup v1 v2) =
+      M.union <$> matchPat p1 v1 <*> matchPat p2 v2
+    matchPat pat v = do
+      env <- ask
+      store <- get
+      error $ ppshow pat ++ " cannot match " ++ ppshow v
+            ++ "\nenv: " ++ (ppshow env) ++ "\nstore: " ++ ppshow store
+
+    evalBinOp op el er = case op of
+        Add  -> intOp    (+)
+        Sub  -> intOp    (-)
+        Mult -> intOp    (*)
+        Div  -> intOp    div
+        And  -> boolOp   (&&)
+        Or   -> boolOp   (||)
+        Leq  -> intCmpOp (<=)
+        Lt   -> intCmpOp (<)
+        Geq  -> intCmpOp (>=)
+        Gt   -> intCmpOp (>)
+        Eq   -> eqOp
+        where
+          intOp fn = do
+            VLit (LInt x)  <- eval el
+            VLit (LInt y)  <- eval er
+            return $ VLit (LInt $ fn x y)
+          boolOp fn = do
+            VLit (LBool x) <- eval el
+            VLit (LBool y) <- eval er
+            return $ VLit (LBool $ fn x y)
+          intCmpOp fn = do
+            VLit (LInt x)  <- eval el
+            VLit (LInt y)  <- eval er
+            return $ VLit (LBool $ fn x y)
+          eqOp = do
+            VLit x <- eval el
+            VLit y <- eval er
+            return $ VLit (LBool (x == y))
 
 
 tick :: EvalState -> EvalState

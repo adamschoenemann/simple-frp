@@ -82,7 +82,7 @@ newtype TyExcept t = TyExcept (TyErr t, Context t)
 data TyErr t
   = CannotUnify (Type t) (Type t) (Unifier t)
   | UnificationMismatch [Type t] [Type t]
-  | OccursCheckFailed Name (Type t)
+  | OccursCheckFailed Name (Type t) (Unifier t)
   | UnknownIdentifier Name
   | NotSyntax (Term t)
   | TypeAnnRequired (Term t)
@@ -110,7 +110,10 @@ instance Pretty (TyErr t) where
             <+> text "with"
             <+> hcat (punctuate (char ',') $ map (ppr 0) t2)
 
-    OccursCheckFailed nm ty -> text nm <+> "occurs in" <+> (ppr 0 ty)
+    OccursCheckFailed nm ty unif ->
+      text nm <+> "occurs in" <+> (ppr 0 ty)
+              <+> text "at" $$ ppr 0 unif
+
     UnknownIdentifier nm    -> text "unkown identifier" <+> text nm
     NotSyntax trm           -> ppr 0 trm <+> "is not syntax"
     TypeAnnRequired trm     -> ppr 0 trm <+> text "requires a type annotation"
@@ -238,7 +241,9 @@ occursCheck a t = a `S.member` ftv t
 
 bind :: TVar -> Type a -> Solve a (Unifier a)
 bind a t | unitFunc t == TyVar () a = return emptyUnifier
-         | occursCheck a t = typeErr (OccursCheckFailed a t) emptyCtx
+         | occursCheck a t = do
+              unif <- get
+              typeErr (OccursCheckFailed a t unif) emptyCtx
          | otherwise       = return $ Unifier (M.singleton a t, [])
 
 -- unify :: Type a -> Type a -> Infer a (Subst a)
@@ -359,6 +364,8 @@ unifies t1 t2 | unitFunc t1 == unitFunc t2 = return emptyUnifier
 unifies (TyVar _ v) t = v `bind` t
 unifies t (TyVar _ v) = v `bind` t
 unifies (TyArr _ t1 t2)  (TyArr _ t3 t4)  = unifyMany [t1,t2] [t3,t4]
+unifies (TyProd _ t1 t2) (TyProd _ t3 t4) = unifyMany [t1,t2] [t3,t4]
+unifies (TySum _ t1 t2)  (TySum _ t3 t4)  = unifyMany [t1,t2] [t3,t4]
 unifies (TyStable _ t1)  (TyStable _ t2)  = t1 `unifies` t2
 unifies (TyLater _ t1)   (TyLater _ t2)   = t1 `unifies` t2
 unifies (TyStream _ t1)  (TyStream _ t2)  = t1 `unifies` t2
@@ -576,11 +583,19 @@ infer term = case term of
   --   uni tv (apply (M.singleton alpha (TyLater a $ TyRec a alpha ty)) ty)
   --   return (tv, QNow)
 
-  -- TmOut ann tyann@(TyRec _ alpha tau') e -> do
-  --   (tau, _) <- inferNow e
-  --   uni tyann tau
-  --   let tau'' = apply (M.singleton alpha (TyLater ann tau)) tau'
-  --   return (tau'', QNow)
+  TmOut ann tyann e ->
+    case tyann of
+      TyRec a alpha tau' -> do
+        (tau, _) <- inferNow e
+        uni tyann tau
+        let tau'' = apply (M.singleton alpha (TyLater ann tau)) tau'
+        return (tau'', QNow)
+
+      _ -> do
+        alpha <- freshName
+        tau'  <- TyVar ann <$> freshName
+        typeErr' (UnificationMismatch [tyann] [TyRec ann alpha tau'])
+
 
   where
     binOpTy :: a -> BinOp -> Type a -- (Type a, Type a, Type a)

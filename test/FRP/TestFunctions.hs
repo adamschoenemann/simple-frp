@@ -168,12 +168,6 @@ frp_swap = unitFunc [decl|
            cons(x, delay(u, ((((swap us') (m - 1)) xs') ys'))).
 |]
 
-frp_test :: Decl ()
-frp_test = unitFunc [decl|
-  fn : Nat
-  fn = $(hskIntToNat 10)
-|]
-
 -- switch : S alloc -> S a -> E (S a) -> S a
 frp_switch :: Decl ()
 frp_switch = unitFunc [decl|
@@ -181,7 +175,7 @@ frp_switch = unitFunc [decl|
   switch us xs e =
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
-    case out e of
+    case out e : mu b. (S a) + b of
       | inl ys -> ys
       | inr t  -> let delay(e') = t in
                   cons(x, delay (u, switch us' xs' e')).

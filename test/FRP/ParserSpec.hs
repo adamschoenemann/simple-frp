@@ -80,7 +80,7 @@ txt_frp_switch =
   \us xs e ->
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
-    case out e of
+    case out e : Nat of
       | inl ys -> ys
       | inr t  -> let delay(e') = t in
                   cons(x, delay (u, switch us' xs' e')))
@@ -91,10 +91,10 @@ txt_frp_bind =
   \us -> \h -> \e ->
     let cons(u, delay(us')) = us in
     let stable(f)           = h  in
-    case out e of
+    case out e : Nat of
       | inl a -> f a
       | inr t -> let delay(e') = t in
-                 into (inr (delay (u, bind us' stable(f) e')))
+                 into (inr (delay (u, bind us' stable(f) e'))) : Nat.
   |]
 
 main :: IO ()
@@ -304,7 +304,7 @@ spec = do
             "us" --> "xs" --> "e" -->
               tmlet (PCons "u" (PDelay "us'")) "us" $
               tmlet (PCons "x" (PDelay "xs'")) "xs" $
-              tmcase (tmout "e")
+              tmcase (tmout tynat "e")
                 ("ys", "ys")
                 ("t", tmlet (PDelay "e'") "t" $
                  tmcons "x"
@@ -319,10 +319,10 @@ spec = do
             "us" --> "h" --> "e" -->
               tmlet (PCons "u" (PDelay "us'")) "us" $
               tmlet (PStable "f") "h" $
-              tmcase (tmout "e")
+              tmcase (tmout tynat "e")
                 ("a", "f" <| "a")
                 ("t", tmlet (PDelay "e'") "t" $
-                      tminto (tminr $ tmdelay "u" $
+                      tminto tynat (tminr $ tmdelay "u" $
                              "bind" <| "us'" <| tmstable "f" <| "e'"
                              )
                 )
@@ -404,6 +404,17 @@ spec = do
         (tystable (tynat |-> tynat))
       parse P.ty "stable Nat * Nat" "#(Nat * Nat)" `shouldParse`
         (tystable $ typrod tynat tynat)
+    it "parses recursive types" $ do
+      parse P.ty "mu a. Nat" "mu a. Nat" `shouldParse`
+        (tyrec "a" tynat)
+      parse P.ty "mu a. Nat * a" "mu a. Nat * a" `shouldParse`
+        (tyrec "a" (tynat .*. "a"))
+      parse P.ty "mu b. a * b" "mu b. a * b" `shouldParse`
+        (tyrec "b" ("a" .*. "b"))
+      parse P.ty "mu b. a + b" "mu b. a + b" `shouldParse`
+        (tyrec "b" ("a" .+. "b"))
+      parse P.ty "mu b. a -> b" "mu b. a -> b" `shouldParse`
+        (tyrec "b" ("a" |-> "b"))
     it "parses compund types" $ do
       parse P.ty "c1" "S Nat -> #(S A) -> X" `shouldParse`
         (tystream tynat |-> tystable (tystream "A") |-> "X")
@@ -418,6 +429,8 @@ spec = do
                "X" |->
                tystream "A"
               )
+      parse P.ty "" "Nat -> (mu b. a -> b) -> @b" `shouldParse`
+        (tynat |-> tyrec "b" ("a" |-> "b") |-> tylater "b")
   describe "parsing declarations" $ do
     it "should parse simple decls1" $ do
       let tc1 = [text|
