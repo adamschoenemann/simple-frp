@@ -165,6 +165,50 @@ spec = do
         inferTerm' [term|let f = (\x -> x) in let g = (f True) in f 3|] `shouldSolve`
           (toScheme tynat, QNow)
 
+    describe "sum-types" $ do
+
+      describe "inl" $ do
+        it "\\x -> inl x" $ do
+          inferTerm' [term|\x -> inl x|] `shouldSolve`
+            (Forall ["a", "b"] $ "a" |-> "a" .+. "b", QNow)
+
+        it "inl 10" $ do
+          inferTerm' [term|inl 10|] `shouldSolve`
+            (Forall ["a"] $ tynat .+. "a", QNow)
+
+        it "\\f -> f (inl 10) && False" $ do
+          inferTerm' [term|\f -> f (inl 10) && False|] `shouldSolve`
+            (Forall ["a"] $ (tynat .+. "a" |-> tybool) |-> tybool, QNow)
+
+      describe "inr" $ do
+        it "\\x -> inr x" $ do
+          inferTerm' [term|\x -> inr x|] `shouldSolve`
+            (Forall ["a", "b"] $ "a" |-> "b" .+. "a", QNow)
+
+        it "inr 10" $ do
+          inferTerm' [term|inr 10|] `shouldSolve`
+            (Forall ["a"] $ "a" .+. tynat, QNow)
+
+        it "\\f -> f (inr 10) && False" $ do
+          inferTerm' [term|\f -> f (inr 10) && False|] `shouldSolve`
+            (Forall ["a"] $ ("a" .+. tynat |-> tybool) |-> tybool, QNow)
+
+      describe "case" $ do
+        let t1 = [term|\x -> case x of | inl y -> y < 20 | inr z -> z && False|]
+        it (ppshow t1) $ do
+          inferTerm' t1 `shouldSolve`
+            (Forall [] $ tynat .+. tybool |-> tybool, QNow)
+
+        let t2 = [term|\x xx -> case x of | inl y -> xx | inr z -> xx|]
+        it (ppshow t2) $ do
+          inferTerm' t2 `shouldSolve`
+            (Forall ["a","b","c"] $ "b" .+. "c" |-> "a" |-> "a", QNow)
+
+        let t3 = [term|\x -> case x of | inl y -> y | inr z -> z|]
+        it (ppshow t3) $ do
+          inferTerm' t3 `shouldSolve`
+            (Forall ["a"] $ "a" .+. "a" |-> "a", QNow)
+
     describe "delay-elim" $ do
       it "\\u x -> let delay(x') = x in delay(u,x')" $ do
         inferTerm' [term|\u x -> let delay(x') = x in delay(u,x')|] `shouldSolve`

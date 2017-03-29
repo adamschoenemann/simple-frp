@@ -120,6 +120,9 @@ tybool = TyPrim () TyBool
 (.*.) :: Type () -> Type () -> Type ()
 (.*.) = TyProd ()
 
+(.+.) :: Type () -> Type () -> Type ()
+(.+.) = TySum ()
+
 infixr 1 |->
 (|->) :: Type () -> Type () -> Type ()
 (|->) = TyArr ()

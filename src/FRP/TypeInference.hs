@@ -540,6 +540,30 @@ infer = \case
     uni tv (TyLater a te)
     return (tv, QNow)
 
+  TmInl a e -> do
+    (ty, _) <- inferNow e
+    tv <- TyVar a <$> freshName
+    tvr <- TyVar a <$> freshName
+    uni tv (TySum a ty tvr)
+    return (tv, QNow)
+
+  TmInr a e -> do
+    (ty, _) <- inferNow e
+    tv <- TyVar a <$> freshName
+    tvl <- TyVar a <$> freshName
+    uni tv (TySum a tvl ty)
+    return (tv, QNow)
+
+  TmCase a e (nm1, c1) (nm2, c2) -> do
+    (ty, _) <- inferNow e
+    tvl <- TyVar a <$> freshName
+    tvr <- TyVar a <$> freshName
+    uni ty (TySum a tvl tvr)
+    (t1, _) <- inCtx (nm1, (Forall [] tvl, QNow)) $ inferNow c1
+    (t2, _) <- inCtx (nm2, (Forall [] tvr, QNow)) $ inferNow c2
+    uni t1 t2
+    return (t1, QNow)
+
   where
     binOpTy :: a -> BinOp -> Type a -- (Type a, Type a, Type a)
     binOpTy a =
