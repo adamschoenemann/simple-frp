@@ -152,10 +152,10 @@ freshName =
 
 letters :: [String]
 letters = infiniteSupply alphabet where
-  infiniteSupply supply = supply ++ addSuffixes supply (1 :: Integer)
+  infiniteSupply supply = addPrefixes supply (0 :: Integer)
   alphabet = map (:[]) ['a'..'z']
-  addSuffixes xs n = (map (\x -> addSuffix x n) xs) ++ (addSuffixes xs (n+1))
-  addSuffix x n = x ++ show n
+  addPrefixes xs n = (map (\x -> addPrefix x n) xs) ++ (addPrefixes xs (n+1))
+  addPrefix x n = show n ++ x
 
 runInfer' :: Infer t a -> Either (TyExcept t) (a, [Constraint t])
 runInfer' = runInfer emptyCtx

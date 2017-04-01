@@ -54,40 +54,40 @@ spec = do
     describe "simple terms" $ do
       it "should infer \\x -> x" $ do
        runInfer' (infer [term|\x -> x|]) `shouldInfer`
-        ("a" |-> "a", QNow, [])
+        ("0a" |-> "0a", QNow, [])
       it "should infer \\x -> 10" $ do
        runInfer' (infer [term|\x -> 10|]) `shouldInfer`
-        ("a" |-> tynat, QNow, [])
+        ("0a" |-> tynat, QNow, [])
       it "should infer \\x -> True" $ do
        runInfer' (infer [term|\x -> True|]) `shouldInfer`
-        ("a" |-> tybool, QNow, [])
+        ("0a" |-> tybool, QNow, [])
       it "should infer \\x y -> y" $ do
        runInfer' (infer [term|\x y -> y|]) `shouldInfer`
-        ("a" |-> "b" |-> "b", QNow, [])
+        ("0a" |-> "0b" |-> "0b", QNow, [])
       it "should infer \\x y -> x" $ do
        runInfer' (infer [term|\x y -> x|]) `shouldInfer`
-        ("a" |-> "b" |-> "a", QNow, [])
+        ("0a" |-> "0b" |-> "0a", QNow, [])
       it "should infer \\x y -> x" $ do
        runInfer' (infer [term|\x y -> x|]) `shouldInfer`
-        ("a" |-> "b" |-> "a", QNow, [])
+        ("0a" |-> "0b" |-> "0a", QNow, [])
       it "should infer \\f x -> f x" $ do
        runInfer' (infer [term|\f x -> f x|]) `shouldInfer`
-        ("a" |-> "b" |-> "c", QNow, [("a" .=. "b" |-> "c")])
+        ("0a" |-> "0b" |-> "0c", QNow, [("0a" .=. "0b" |-> "0c")])
       it "should infer \\f g x -> f (g x)" $ do
        runInfer' (infer [term|\f g x -> f (g x)|]) `shouldInfer`
-        ("a" |-> "b" |-> "c" |-> "e", QNow,
-          [("b" .=. "c" |-> "d"), ("a" .=. "d" |-> "e")]
+        ("0a" |-> "0b" |-> "0c" |-> "0e", QNow,
+          [("0b" .=. "0c" |-> "0d"), ("0a" .=. "0d" |-> "0e")]
         )
     describe "binary ops" $ do
       it "should infer 10 + 10" $ do
        runInfer' (infer [term|10 + 10|]) `shouldInfer`
-        ("a", QNow, [tynat |-> tynat |-> "a" .=. tynat |-> tynat |-> tynat])
+        ("0a", QNow, [tynat |-> tynat |-> "0a" .=. tynat |-> tynat |-> tynat])
       it "should infer \\x y z -> x + y == z : Nat -> Nat -> Nat -> Bool" $ do
         runInfer' (infer [term|\x y z -> x + y == z|]) `shouldInfer`
-          ( "a" |-> "b" |-> "c" |-> "e"
+          ( "0a" |-> "0b" |-> "0c" |-> "0e"
           , QNow
-          , [ "a" |-> "b" |-> "d" .=. tynat |-> tynat |-> tynat
-            , "d" |-> "c" |-> "e" .=. tynat |-> tynat |-> tybool
+          , [ "0a" |-> "0b" |-> "0d" .=. tynat |-> tynat |-> tynat
+            , "0d" |-> "0c" |-> "0e" .=. tynat |-> tynat |-> tybool
             ]
           )
 
@@ -113,52 +113,52 @@ spec = do
     describe "cons" $ do
       it "\\x xs -> cons(x,xs) : a -> @(S a) -> S a" $ do
         inferTerm' [term|\x xs -> cons(x,xs) |] `shouldSolve`
-          (Forall ["a"] ("a" |-> tylater (tystream "a") |-> tystream "a"), QNow)
+          (Forall ["0a"] ("0a" |-> tylater (tystream "0a") |-> tystream "0a"), QNow)
 
       it "\\f x xs -> cons(f x, xs) : (a -> b) -> a -> @(S b) -> S b" $ do
         inferTerm' [term|\f x xs -> cons(f x,xs) |] `shouldSolve`
-          (Forall ["a", "b"]
-             (("a" |-> "b") |-> "a" |-> tylater (tystream "b") |-> tystream "b")
+          (Forall ["0a", "0b"]
+             (("0a" |-> "0b") |-> "0a" |-> tylater (tystream "0b") |-> tystream "0b")
           , QNow)
 
     describe "fst" $ do
       it "\\x -> fst x"  $ do
         inferTerm' [term|\x -> fst x|] `shouldSolve`
-          (Forall ["a", "b"] $ "a" .*. "b" |-> "a", QNow)
+          (Forall ["0a", "0b"] $ "0a" .*. "0b" |-> "0a", QNow)
 
       it "\\x -> (fst x) * 2"  $ do
         inferTerm' [term|\x -> (fst x) * 2|] `shouldSolve`
-          (Forall ["a"] $ tynat .*. "a" |-> tynat, QNow)
+          (Forall ["0a"] $ tynat .*. "0a" |-> tynat, QNow)
 
       it "\\x -> fst x * 2"  $ do
         inferTerm' [term|\x -> fst x * 2|] `shouldSolve`
-          (Forall ["a"] $ tynat .*. "a" |-> tynat, QNow)
+          (Forall ["0a"] $ tynat .*. "0a" |-> tynat, QNow)
 
     describe "snd" $ do
       it "\\x -> snd x"  $ do
         inferTerm' [term|\x -> snd x|] `shouldSolve`
-          (Forall ["a", "b"] $ "a" .*. "b" |-> "b", QNow)
+          (Forall ["0a", "0b"] $ "0a" .*. "0b" |-> "0b", QNow)
 
       it "\\x -> (snd x) * 2"  $ do
         inferTerm' [term|\x -> (snd x) * 2|] `shouldSolve`
-          (Forall ["a"] $ "a" .*. tynat |-> tynat, QNow)
+          (Forall ["0a"] $ "0a" .*. tynat |-> tynat, QNow)
 
       it "\\x -> snd x * 2"  $ do
         inferTerm' [term|\x -> snd x * 2|] `shouldSolve`
-          (Forall ["a"] $ "a" .*. tynat |-> tynat, QNow)
+          (Forall ["0a"] $ "0a" .*. tynat |-> tynat, QNow)
 
     describe "tuples" $ do
       it "\\x y -> (x,y) : a -> b -> a * b"  $ do
         inferTerm' [term|\x y -> (x,y)|] `shouldSolve`
-          (Forall ["a","b"] $ "a" |-> "b" |-> "a" .*. "b", QNow)
+          (Forall ["0a","0b"] $ "0a" |-> "0b" |-> "0a" .*. "0b", QNow)
 
       it "\\x y -> (x * 2,y) : Nat -> a -> a * b"  $ do
         inferTerm' [term|\x y -> (x * 2,y)|] `shouldSolve`
-          (Forall ["a"] $ tynat |-> "a" |-> tynat .*. "a", QNow)
+          (Forall ["0a"] $ tynat |-> "0a" |-> tynat .*. "0a", QNow)
 
       it "\\x y -> (x,y * 2) : a -> Nat -> a * Nat"  $ do
         inferTerm' [term|\x y -> (x,y * 2)|] `shouldSolve`
-          (Forall ["a"] $ "a" |-> tynat |-> "a" .*. tynat, QNow)
+          (Forall ["0a"] $ "0a" |-> tynat |-> "0a" .*. tynat, QNow)
 
       it "\\y f -> f y + f (10, 20)"  $ do
         inferTerm' [term|\y f -> f y + f (10, 20)|] `shouldSolve`
@@ -174,28 +174,28 @@ spec = do
       describe "inl" $ do
         it "\\x -> inl x" $ do
           inferTerm' [term|\x -> inl x|] `shouldSolve`
-            (Forall ["a", "b"] $ "a" |-> "a" .+. "b", QNow)
+            (Forall ["0a", "0b"] $ "0a" |-> "0a" .+. "0b", QNow)
 
         it "inl 10" $ do
           inferTerm' [term|inl 10|] `shouldSolve`
-            (Forall ["a"] $ tynat .+. "a", QNow)
+            (Forall ["0a"] $ tynat .+. "0a", QNow)
 
         it "\\f -> f (inl 10) && False" $ do
           inferTerm' [term|\f -> f (inl 10) && False|] `shouldSolve`
-            (Forall ["a"] $ (tynat .+. "a" |-> tybool) |-> tybool, QNow)
+            (Forall ["0a"] $ (tynat .+. "0a" |-> tybool) |-> tybool, QNow)
 
       describe "inr" $ do
         it "\\x -> inr x" $ do
           inferTerm' [term|\x -> inr x|] `shouldSolve`
-            (Forall ["a", "b"] $ "a" |-> "b" .+. "a", QNow)
+            (Forall ["0a", "0b"] $ "0a" |-> "0b" .+. "0a", QNow)
 
         it "inr 10" $ do
           inferTerm' [term|inr 10|] `shouldSolve`
-            (Forall ["a"] $ "a" .+. tynat, QNow)
+            (Forall ["0a"] $ "0a" .+. tynat, QNow)
 
         it "\\f -> f (inr 10) && False" $ do
           inferTerm' [term|\f -> f (inr 10) && False|] `shouldSolve`
-            (Forall ["a"] $ ("a" .+. tynat |-> tybool) |-> tybool, QNow)
+            (Forall ["0a"] $ ("0a" .+. tynat |-> tybool) |-> tybool, QNow)
 
       describe "case" $ do
         let t1 = [term|\x -> case x of | inl y -> y < 20 | inr z -> z && False|]
@@ -206,28 +206,28 @@ spec = do
         let t2 = [term|\x xx -> case x of | inl y -> xx | inr z -> xx|]
         it (ppshow t2) $ do
           inferTerm' t2 `shouldSolve`
-            (Forall ["a","b","c"] $ "b" .+. "c" |-> "a" |-> "a", QNow)
+            (Forall ["0a","0b","0c"] $ "0b" .+. "0c" |-> "0a" |-> "0a", QNow)
 
         let t3 = [term|\x -> case x of | inl y -> y | inr z -> z|]
         it (ppshow t3) $ do
           inferTerm' t3 `shouldSolve`
-            (Forall ["a"] $ "a" .+. "a" |-> "a", QNow)
+            (Forall ["0a"] $ "0a" .+. "0a" |-> "0a", QNow)
 
     describe "delay-elim" $ do
       it "\\u x -> let delay(x') = x in delay(u,x')" $ do
         inferTerm' [term|\u x -> let delay(x') = x in delay(u,x')|] `shouldSolve`
-          (Forall ["a"] $ tyalloc |-> tylater "a" |-> tylater "a", QNow)
+          (Forall ["0a"] $ tyalloc |-> tylater "0a" |-> tylater "0a", QNow)
 
     describe "cons-elim" $ do
       it "\\xs -> let cons(x, xs') = xs in x" $ do
         let trm = [term|\xs -> let cons(x, xs') = xs in x|]
         inferTerm' trm `shouldSolve`
-          (Forall ["a"] $ tystream "a" |-> "a", QNow)
+          (Forall ["0a"] $ tystream "0a" |-> "0a", QNow)
 
       it "\\u xs -> let cons(x, delay(xs')) = xs in delay(u, xs')" $ do
         let trm = [term|\u xs -> let cons(x, delay(xs')) = xs in delay(u,xs')|]
         inferTerm' trm `shouldSolve`
-          (Forall ["a"] $ tyalloc |-> tystream "a" |-> tylater (tystream "a"), QNow)
+          (Forall ["0a"] $ tyalloc |-> tystream "0a" |-> tylater (tystream "0a"), QNow)
 
       it "fails \\xs -> let cons(x, delay(xs')) = xs in let y = x True in x 10" $ do
         let trm = [term|\xs -> let cons(x, delay(xs')) = xs in let y = x True in x 10|]
@@ -237,22 +237,22 @@ spec = do
       it "\\c -> let (a,b) = c in a" $ do
         let trm = [term|\c -> let (a,b) = c in a|]
         inferTerm' trm `shouldSolve`
-          (Forall ["a", "b"] $ "a" .*. "b" |-> "a", QNow)
+          (Forall ["0a", "0b"] $ "0a" .*. "0b" |-> "0a", QNow)
 
       it "\\c -> let (a,b) = c in b" $ do
         let trm = [term|\c -> let (a,b) = c in b|]
         inferTerm' trm `shouldSolve`
-          (Forall ["a", "b"] $ "a" .*. "b" |-> "b", QNow)
+          (Forall ["0a", "0b"] $ "0a" .*. "0b" |-> "0b", QNow)
 
       it "\\c -> let (a,b) = c in a b" $ do
         let trm = [term|\c -> let (a,b) = c in a b|]
         inferTerm' trm `shouldSolve`
-          (Forall ["a", "b"] $ ("a" |-> "b") .*. "a" |-> "b", QNow)
+          (Forall ["0a", "0b"] $ ("0a" |-> "0b") .*. "0a" |-> "0b", QNow)
 
       it "\\c -> let (a,b) = c in let x = a 10 in a b" $ do
         let trm = [term|\c -> let (a,b) = c in let x = a 10 in a b|]
         inferTerm' trm `shouldSolve`
-          (Forall ["a"] $ (tynat |-> "a") .*. tynat |-> "a", QNow)
+          (Forall ["0a"] $ (tynat |-> "0a") .*. tynat |-> "0a", QNow)
 
       it "fails \\c -> let (a,b) = c in let x = a 10 in a True" $ do
         let trm = [term|\c -> let (a,b) = c in let x = a 10 in a True|]
@@ -265,11 +265,11 @@ spec = do
 
       it "fix f. \\x -> 10 : a -> Nat" $ do
         inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
-          (Forall ["a"] $ "a" |-> tynat, QNow)
+          (Forall ["0a"] $ "0a" |-> tynat, QNow)
 
       it "fix f. \\x y -> 10 : a -> Nat" $ do
         inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
-          (Forall ["a"] $ "a" |-> tynat, QNow)
+          (Forall ["0a"] $ "0a" |-> tynat, QNow)
 
     describe "out" $ do
       -- S a = forall a. mu x. a * x
@@ -277,7 +277,7 @@ spec = do
       -- out e : [a * @(S a)]
       -- it "\\x -> let (y,z) = out (mu A. Nat * A) x in y * z" $ do
       --   inferTerm' [term|\x -> let (y,z) = out (mu b. Nat * b) x in y * z|] `shouldSolve`
-      --     (toScheme $ (TyRec () "b" $ tynat .*. tynat) |-> tynat, QNow)
+      --     (toScheme $ (TyRec () "0b" $ tynat .*. tynat) |-> tynat, QNow)
 
       let trm = [term|\x -> let y = out (mu a. Nat * a) x in y|]
       let typ = tyrec "a" (tynat .*. "a")
@@ -294,26 +294,26 @@ spec = do
           (toScheme $ typ, QNow)
 
       let trm = [term|\x -> let (y,z) = out (mu a. b * a) x in y|]
-      let typ = tyrec "a" ("b" .*. "a")
-            |-> "b"
+      let typ = Forall ["0a"] $   tyrec "a" ("0a" .*. "a")
+                          |-> "0a"
       it (ppshow trm) $
         inferTerm' trm `shouldSolve`
-          (toScheme $ typ, QNow)
+          (typ, QNow)
 
 
       -- let trm = [term|\x -> let (y, z) = out x in z|]
       -- it (ppshow trm) $ do
       --   inferTerm' trm `shouldSolve`
-      --     (Forall ["a"] "a", QNow)
+      --     (Forall ["0a"] "0a", QNow)
 
   describe "test functions" $ do
     it "works for const" $ do
       inferTerm' (_body frp_const) `shouldSolve`
-        (Forall ["a"] $ tystream tyalloc |-> "a" |-> tystream "a", QNow)
+        (Forall ["0a"] $ tystream tyalloc |-> "0a" |-> tystream "0a", QNow)
 
     it "works for const_fix" $ do
       inferTerm' (_body frp_const_fix) `shouldSolve`
-        (Forall ["a"] $ tystream tyalloc |-> "a" |-> tystream "a", QNow)
+        (Forall ["0a"] $ tystream tyalloc |-> "0a" |-> tystream "0a", QNow)
 
     it "works for nats" $ do
       inferTerm' (_body frp_nats) `shouldSolve`
@@ -321,16 +321,16 @@ spec = do
 
     it "works for map" $ do
       inferTerm' (_body frp_map) `shouldSolve`
-        (Forall ["a","b"] $ tystream tyalloc
-                        |-> tystable ("a" |-> "b")
-                        |-> tystream "a"
-                        |-> tystream "b", QNow)
+        (Forall ["0a","0b"] $ tystream tyalloc
+                        |-> tystable ("0a" |-> "0b")
+                        |-> tystream "0a"
+                        |-> tystream "0b", QNow)
 
     it "works for tails" $ do
       inferTerm' (_body frp_tails) `shouldSolve`
-        (Forall ["a"] $ tystream tyalloc
-                        |-> tystream "a"
-                        |-> tystream (tystream "a"), QNow)
+        (Forall ["0a"] $ tystream tyalloc
+                        |-> tystream "0a"
+                        |-> tystream (tystream "0a"), QNow)
 
     it "works for sum_acc" $ do
       inferTerm' (_body frp_sum_acc) `shouldSolve`
@@ -341,28 +341,28 @@ spec = do
 
     it "works for unfold" $ do
       inferTerm' (_body frp_unfold) `shouldSolve`
-        (Forall ["a","b"]
+        (Forall ["0a","0b"]
           $   tystream tyalloc
-          |-> tystable ("a" |-> "b" .*. tylater "a")
-          |-> "a"
-          |-> tystream "b", QNow)
+          |-> tystable ("0a" |-> "0b" .*. tylater "0a")
+          |-> "0a"
+          |-> tystream "0b", QNow)
 
     it "works for swap" $ do
       inferTerm' (_body frp_swap) `shouldSolve`
-        (Forall ["a"]
+        (Forall ["0a"]
           $   tystream tyalloc
           |-> tynat
-          |-> tystream "a"
-          |-> tystream "a"
-          |-> tystream "a", QNow)
+          |-> tystream "0a"
+          |-> tystream "0a"
+          |-> tystream "0a", QNow)
 
-    -- it "works for switch" $ do
-    --   inferTerm' (_body frp_switch) `shouldSolve`
-    --     (Forall ["a"]
-    --       $   tystream tyalloc
-    --       |-> tystream "a"
-    --       |-> tystream "a"
-    --       |-> tystream "a", QNow)
+    it "works for switch" $ do
+      inferTerm' (_body frp_switch) `shouldSolve`
+        (Forall ["0a"]
+          $   tystream tyalloc
+          |-> tystream "0a"
+          |-> (tyrec "b" (tystream "0a" .+. "b"))
+          |-> tystream "0a", QNow)
 
 
 
