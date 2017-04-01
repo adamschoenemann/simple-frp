@@ -588,7 +588,8 @@ infer term = case term of
       TyRec a alpha tau' -> do
         (tau, _) <- inferNow e
         uni tyann tau
-        let tau'' = apply (M.singleton alpha (TyLater ann tau)) tau'
+        let substwith = (TyLater ann tau)
+        let tau'' = apply (M.singleton alpha substwith) tau'
         return (tau'', QNow)
 
       _ -> do
@@ -677,23 +678,23 @@ inferPtn pattern ty = case pattern of
 -- normalize a type-scheme in the sense that we rename all the
 -- type variables to be in alphabetical order of occurence
 normalize :: Scheme t -> Scheme t
-normalize (Forall _ body) = Forall (map snd ord) (normtype body)
+normalize (Forall _ body) = Forall (map snd ord) (normtype ord body)
   where
     ord = zip (nub $ S.toList $ ftv body) (letters)
 
-    normtype ty = case ty of
-      TyProd   a l r    -> TyProd a (normtype l) (normtype r)
-      TySum    a l r    -> TySum a (normtype l) (normtype r)
-      TyArr    a l r    -> TyArr a (normtype l) (normtype r)
-      TyLater  a ty     -> TyLater a (normtype ty)
-      TyStable a ty     -> TyStable a (normtype ty)
-      TyStream a ty     -> TyStream a (normtype ty)
-      TyRec    a nm ty  -> TyRec a nm (normtype ty)
+    normtype ord ty = case ty of
+      TyProd   a l r    -> TyProd a   (normtype ord l) (normtype ord r)
+      TySum    a l r    -> TySum a    (normtype ord l) (normtype ord r)
+      TyArr    a l r    -> TyArr a    (normtype ord l) (normtype ord r)
+      TyLater  a ty     -> TyLater a  (normtype ord ty)
+      TyStable a ty     -> TyStable a (normtype ord ty)
+      TyStream a ty     -> TyStream a (normtype ord ty)
+      TyRec    a nm ty  -> TyRec a nm (normtype ((nm,nm):ord) ty)
       TyAlloc  a        -> ty
       TyPrim{}          -> ty
 
       TyVar    a name   ->
         case Prelude.lookup name ord of
           Just x -> TyVar a x
-          Nothing -> error "type variable not in signature"
+          Nothing -> error $ "type variable " ++ name ++ " not in signature"
 

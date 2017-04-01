@@ -84,8 +84,8 @@ tminr = C.tminr <*> (reserved "inr" *> tmexpr)
 tmout :: Parser ParsedTerm
 tmout = do
   _ <- reserved "out"
+  ty <- parens ty
   expr <- tmexpr
-  ty <- reservedOp ":" *> ty
   C.tmout <*> return ty <*> return expr
 
 tminto :: Parser ParsedTerm

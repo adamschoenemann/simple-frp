@@ -150,6 +150,51 @@ freeVars = S.toList . go where
     PStable pat     -> bindings pat
     PTup pat1 pat2  -> bindings pat1 +++ bindings pat2
 
+boundTyVarsTm :: Term a -> [Name]
+boundTyVarsTm = S.toList . go where
+  go = \case
+    TmFst a t                    -> go t
+    TmSnd a t                    -> go t
+    TmTup a t1 t2                -> go t1 +++ go t2
+    TmInl a t                    -> go t
+    TmInr a t                    -> go t
+    TmCase a t (ln, lt) (rn, rt) -> (go lt) +++ (go rt)
+    TmLam a nm mty t             -> go t
+    TmVar a nm                   -> S.empty
+    TmApp a  t1 t2               -> go t1 +++ go t2
+    TmCons a t1 t2               -> go t1 +++ go t2
+    TmOut a  ty t                -> S.fromList $ boundTyVarsTy ty
+    TmInto a _ t                 -> go t
+    TmStable a t                 -> go t
+    TmDelay a t1 t2              -> go t1 +++ go t2
+    TmPromote a t                -> go t
+    TmLet a pat t1 t2            -> go t1 +++ go t2
+    TmLit a l                    -> S.empty
+    TmBinOp a op t1 t2           -> go t1 +++ go t2
+    TmITE a b tt tf              -> go b +++ go tt +++ go tf
+    TmPntr a lbl                 -> S.empty
+    TmPntrDeref a lbl            -> S.empty
+    TmAlloc a                    -> S.empty
+    TmFix a nm mty t             -> go t
+
+  (+++) = S.union
+
+boundTyVarsTy :: Type a -> [Name]
+boundTyVarsTy = S.toList . go where
+  go = \case
+    TyVar    _ name   -> S.empty
+    TyProd   _ l r    -> go l  +++ go r
+    TySum    _ l r    -> go l  +++ go r
+    TyArr    _ t1 t2  -> go t1 +++ go t2
+    TyLater  _ ty     -> go ty
+    TyStable _ ty     -> go ty
+    TyStream _ ty     -> go ty
+    TyRec    _ nm ty  -> S.singleton nm
+    TyAlloc  _        -> S.empty
+    TyPrim{}          -> S.empty
+
+  (+++) = S.union
+
 
 instance Pretty (Map String (Either (Term a) Value)) where
   ppr n env = char '[' $+$ nest 2 body $+$ char ']' where
@@ -206,8 +251,8 @@ instance Pretty (Term a) where
     TmPntrDeref _a pntr     -> text "*[" <> int pntr <> text "]"
     TmAlloc _a              -> text "¤"
 
-    TmOut  _a ty trm        -> text "out"  <+> prns (ppr (n) trm)
-                               <+> char ':' <+> ppr 0 ty
+    TmOut  _a ty trm        -> text "out" <+> parens (ppr 0 ty)
+                               <+> prns (ppr (n) trm)
     TmInto _a ty trm        -> text "into" <+> prns (ppr (n) trm)
                                <+> char ':' <+> ppr 0 ty
     where

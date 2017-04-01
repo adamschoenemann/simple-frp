@@ -271,13 +271,35 @@ spec = do
         inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
           (Forall ["a"] $ "a" |-> tynat, QNow)
 
-    -- describe "out" $ do
+    describe "out" $ do
       -- S a = forall a. mu x. a * x
       -- e : S a
       -- out e : [a * @(S a)]
-      -- it "\\x -> let (y,z) = out x in y * z" $ do
-      --   inferTerm' [term|\x -> let (y,z) = out x in y * z|] `shouldSolve`
+      -- it "\\x -> let (y,z) = out (mu A. Nat * A) x in y * z" $ do
+      --   inferTerm' [term|\x -> let (y,z) = out (mu b. Nat * b) x in y * z|] `shouldSolve`
       --     (toScheme $ (TyRec () "b" $ tynat .*. tynat) |-> tynat, QNow)
+
+      let trm = [term|\x -> let y = out (mu a. Nat * a) x in y|]
+      let typ = tyrec "a" (tynat .*. "a")
+            |-> tynat .*. tylater (tyrec "a" (tynat .*. "a"))
+      it (ppshow trm) $
+        inferTerm' trm `shouldSolve`
+          (toScheme $ typ, QNow)
+
+      let trm = [term|\x -> let (y,z) = out (mu a. Nat * a) x in y|]
+      let typ = tyrec "a" (tynat .*. "a")
+            |-> tynat
+      it (ppshow trm) $
+        inferTerm' trm `shouldSolve`
+          (toScheme $ typ, QNow)
+
+      let trm = [term|\x -> let (y,z) = out (mu a. b * a) x in y|]
+      let typ = tyrec "a" ("b" .*. "a")
+            |-> "b"
+      it (ppshow trm) $
+        inferTerm' trm `shouldSolve`
+          (toScheme $ typ, QNow)
+
 
       -- let trm = [term|\x -> let (y, z) = out x in z|]
       -- it (ppshow trm) $ do
@@ -334,13 +356,13 @@ spec = do
           |-> tystream "a"
           |-> tystream "a", QNow)
 
-    it "works for switch" $ do
-      inferTerm' (_body frp_switch) `shouldSolve`
-        (Forall ["a"]
-          $   tystream tyalloc
-          |-> tystream "a"
-          |-> tystream "a"
-          |-> tystream "a", QNow)
+    -- it "works for switch" $ do
+    --   inferTerm' (_body frp_switch) `shouldSolve`
+    --     (Forall ["a"]
+    --       $   tystream tyalloc
+    --       |-> tystream "a"
+    --       |-> tystream "a"
+    --       |-> tystream "a", QNow)
 
 
 

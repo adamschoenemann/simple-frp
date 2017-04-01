@@ -171,11 +171,11 @@ frp_swap = unitFunc [decl|
 -- switch : S alloc -> S a -> E (S a) -> S a
 frp_switch :: Decl ()
 frp_switch = unitFunc [decl|
-  switch : S alloc -> S a -> S a -> S a
+  switch : S alloc -> S a -> (mu b. a + b) -> S a
   switch us xs e =
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
-    case out e : mu b. (S a) + b of
+    case out (mu b. (S a) + b) e of
       | inl ys -> ys
       | inr t  -> let delay(e') = t in
                   cons(x, delay (u, switch us' xs' e')).
