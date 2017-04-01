@@ -91,8 +91,8 @@ tmout = do
 tminto :: Parser ParsedTerm
 tminto = do
   _ <- reserved "into"
+  ty <- parens ty
   expr <- tmexpr
-  ty <- reservedOp ":" *> ty
   C.tminto <*> return ty <*> return expr
 
 tmcase :: Parser ParsedTerm

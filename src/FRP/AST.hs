@@ -150,6 +150,7 @@ freeVars = S.toList . go where
     PStable pat     -> bindings pat
     PTup pat1 pat2  -> bindings pat1 +++ bindings pat2
 
+-- not used right now, but useful later maybe
 boundTyVarsTm :: Term a -> [Name]
 boundTyVarsTm = S.toList . go where
   go = \case
@@ -179,6 +180,7 @@ boundTyVarsTm = S.toList . go where
 
   (+++) = S.union
 
+-- not used right now, but useful later maybe
 boundTyVarsTy :: Type a -> [Name]
 boundTyVarsTy = S.toList . go where
   go = \case
@@ -253,8 +255,8 @@ instance Pretty (Term a) where
 
     TmOut  _a ty trm        -> text "out" <+> parens (ppr 0 ty)
                                <+> prns (ppr (n) trm)
-    TmInto _a ty trm        -> text "into" <+> prns (ppr (n) trm)
-                               <+> char ':' <+> ppr 0 ty
+    TmInto _a ty trm        -> text "into" <+> parens (ppr 0 ty)
+                               <+> prns (ppr (n) trm)
     where
       prns = if (n > 0)
              then parens

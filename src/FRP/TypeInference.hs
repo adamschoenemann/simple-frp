@@ -576,12 +576,18 @@ infer term = case term of
     uni t1 t2
     return (t1, QNow)
 
-  -- TmInto a e -> do
-  --   (ty, _) <- inferNow e
-  --   alpha <- freshName
-  --   tv <- TyVar a <$> freshName
-  --   uni tv (apply (M.singleton alpha (TyLater a $ TyRec a alpha ty)) ty)
-  --   return (tv, QNow)
+  TmInto ann tyann e -> do
+    case tyann of
+      TyRec a alpha tau -> do
+        (ty, _) <- inferNow e
+        let substwith = (TyLater a $ TyRec a alpha ty)
+        uni ty (apply (M.singleton alpha substwith) tau)
+        return (tau, QNow)
+
+      _ -> do
+        alpha <- freshName
+        tau'  <- TyVar ann <$> freshName
+        typeErr' (UnificationMismatch [tyann] [TyRec ann alpha tau'])
 
   TmOut ann tyann e ->
     case tyann of
