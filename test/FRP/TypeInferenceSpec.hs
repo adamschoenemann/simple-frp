@@ -364,5 +364,13 @@ spec = do
           |-> (tyrec "b" (tystream "0a" .+. "b"))
           |-> tystream "0a", QNow)
 
+    it "works for bind" $ do
+      inferTerm' (_body frp_bind) `shouldSolve`
+        (Forall ["0a", "0b"]
+          $   (tystream tyalloc)
+          |-> tystable (tystream "0a" |-> (tyrec "af" ("0b" .+. "af")))
+          |-> tyrec "af" ((tystream "0a") .+. "af")
+          |-> tyrec "af" ("0b" .+. "af"), QNow)
+
 
 

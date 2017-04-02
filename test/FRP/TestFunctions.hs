@@ -181,6 +181,17 @@ frp_switch = unitFunc [decl|
                   cons(x, delay (u, switch us' xs' e')).
 |]
 
+frp_bind :: Decl ()
+frp_bind = unitFunc [decl|
+  bind : S alloc -> #(a -> (mu af. a + af)) -> (mu af. b + af) -> (mu af. b + af)
+  bind us h e =
+    let cons(u,delay(us')) = us in
+    let stable(f) = h in
+    case out (mu af. (S l) + af) e of
+      | inl a -> f a
+      | inr t -> let delay(e') = t in
+                 into (mu af. s + af) (inr delay(u, bind us' stable(f) e')).
+|]
 
 frp_main :: EvalTerm -> Type () -> Decl ()
 frp_main bd retTy = Decl () ty "main" bd where

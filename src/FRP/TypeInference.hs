@@ -580,9 +580,9 @@ infer term = case term of
     case tyann of
       TyRec a alpha tau -> do
         (ty, _) <- inferNow e
-        let substwith = (TyLater a $ TyRec a alpha ty)
+        let substwith = (TyLater a $ TyRec a alpha tau)
         uni ty (apply (M.singleton alpha substwith) tau)
-        return (tau, QNow)
+        return (TyRec a alpha tau, QNow)
 
       _ -> do
         alpha <- freshName
