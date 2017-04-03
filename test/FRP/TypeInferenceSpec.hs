@@ -21,7 +21,6 @@ import           Text.Parsec         (ParseError, parse)
 import           Data.Either         (isRight)
 import           FRP.TestFunctions
 import           Data.List            (intercalate)
-import           FRP.Parser.Decl
 import           Text.Parsec
 import           FRP.AST.QuasiQuoter
 
@@ -272,12 +271,6 @@ spec = do
           (Forall ["0a"] $ "0a" |-> tynat, QNow)
 
     describe "out" $ do
-      -- S a = forall a. mu x. a * x
-      -- e : S a
-      -- out e : [a * @(S a)]
-      -- it "\\x -> let (y,z) = out (mu A. Nat * A) x in y * z" $ do
-      --   inferTerm' [term|\x -> let (y,z) = out (mu b. Nat * b) x in y * z|] `shouldSolve`
-      --     (toScheme $ (TyRec () "0b" $ tynat .*. tynat) |-> tynat, QNow)
 
       let trm = [term|\x -> let y = out (mu a. Nat * a) x in y|]
       let typ = tyrec "a" (tynat .*. "a")
@@ -300,11 +293,65 @@ spec = do
         inferTerm' trm `shouldSolve`
           (typ, QNow)
 
+    describe "into" $ do
+      let trm = [term|\x -> into (mu af. Nat) x|]
+      it (ppshow trm) $ do
+        inferTerm' trm `shouldSolve`
+          (toScheme $ tynat |-> tyrec "af" tynat, QNow)
 
-      -- let trm = [term|\x -> let (y, z) = out x in z|]
-      -- it (ppshow trm) $ do
-      --   inferTerm' trm `shouldSolve`
-      --     (Forall ["0a"] "0a", QNow)
+      let trm = [term|into (mu af. Nat) 10|]
+      it (ppshow trm) $ do
+        inferTerm' trm `shouldSolve`
+          (toScheme $ tyrec "af" tynat, QNow)
+
+      let trm = [term|\x -> into (mu af. Nat * af) (10, x)|]
+      it (ppshow trm) $ do
+        inferTerm' trm `shouldSolve`
+          (toScheme $  tylater (tyrec "af" (tynat .*. "af"))
+                   |-> tyrec "af" (tynat .*. "af"), QNow)
+
+      let trm = [decl|
+        nats : (mu af. alloc * af) -> Nat -> (mu af. Nat * af)
+        nats us n =
+          let (u, delay(us')) = out (mu af. alloc * af) us in
+          let stable(x) = promote(n) in
+          into (mu af. Nat * af) (x, delay(u, nats us' (x + 1))).
+      |]
+      it "nats with rec types" $ do
+        inferTerm' (_body trm) `shouldSolve`
+          (toScheme $  (tyrec "af" (tyalloc .*. "af"))
+                   |-> tynat
+                   |-> tyrec "af" (tynat .*. "af"), QNow)
+
+      let trm = [decl|
+        const : (mu af. alloc * af) -> a -> (mu af. a * af)
+        const us n =
+          let (u, delay(us')) = out (mu af. alloc * af) us in
+          let stable(x) = promote(n) in
+          into (mu af. a * af) (x, delay(u, const us' x)).
+      |]
+      it "const with rec types" $ do
+        inferTerm' (_body trm) `shouldSolve`
+          (Forall ["0a"] $
+                  (tyrec "af" (tyalloc .*. "af"))
+              |-> "0a"
+              |-> tyrec "af" ("0a" .*. "af"), QNow)
+
+      let trm = [decl|
+        tails : (mu af. alloc * af) -> (mu af. a * af) -> (mu af. a * (mu bf. a * bf))
+        tails us xs =
+          let (u, delay(us')) = out (mu af. alloc * af) us in
+          let (x, delay(xs')) = out (mu af. a * af) xs in
+          into (mu af. (mu bf. a * bf) * af) (xs, delay(u, ((tails us') xs'))).
+      |]
+      it "tails with rec types" $ do
+        inferTerm' (_body trm) `shouldSolve`
+          (Forall ["0a"] $
+                  (tyrec "af" (tyalloc .*. "af"))
+              |-> tyrec "af" ("0a" .*. "af")
+              |-> tyrec "af" ((tyrec "bf" $ "0a" .*. "bf") .*. "af"), QNow)
+
+
 
   describe "test functions" $ do
     it "works for const" $ do
@@ -371,6 +418,15 @@ spec = do
           |-> tystable (tystream "0a" |-> (tyrec "af" ("0b" .+. "af")))
           |-> tyrec "af" ((tystream "0a") .+. "af")
           |-> tyrec "af" ("0b" .+. "af"), QNow)
+
+  -- describe "type annotations" $ do
+
+
+  describe "negative cases" $ do
+    let trm = [term|\x -> x + 10 < (x && True)|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
 
 
 

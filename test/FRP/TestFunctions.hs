@@ -187,10 +187,11 @@ frp_bind = unitFunc [decl|
   bind us h e =
     let cons(u,delay(us')) = us in
     let stable(f) = h in
-    case out (mu af. (S l) + af) e of
+    case out (mu af. (S a) + af) e of
       | inl a -> f a
-      | inr t -> let delay(e') = t in
-                 into (mu af. s + af) (inr delay(u, bind us' stable(f) e')).
+      | inr t ->
+          let delay(e') = t in
+          into (mu af. b + af) (inr delay(u, bind us' stable(f) e')).
 |]
 
 frp_main :: EvalTerm -> Type () -> Decl ()
