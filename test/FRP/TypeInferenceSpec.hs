@@ -309,6 +309,14 @@ spec = do
         inferTerm' trm `shouldSolve`
           (toScheme $  tylater (tyrec "af" (tynat .*. "af"))
                    |-> tyrec "af" (tynat .*. "af"), QNow)
+      let trm = [term|
+        \x -> let (y,z) = out (mu af. Nat * af) x in
+              into (mu af. Nat * af) (y, z)
+      |]
+      it (ppshow trm) $
+        inferTerm' trm `shouldSolve`
+          (toScheme $
+            tyrec "af" (tynat .*. "af") |-> tyrec "af" (tynat .*. "af"), QNow)
 
       let trm = [decl|
         nats : (mu af. alloc * af) -> Nat -> (mu af. Nat * af)
@@ -424,6 +432,31 @@ spec = do
 
   describe "negative cases" $ do
     let trm = [term|\x -> x + 10 < (x && True)|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
+    let trm = [term|\x -> x x|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
+    let trm = [term|\x -> x + 10 - (x x)|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
+    let trm = [term|\x -> let (y,z) = x in x + 10|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
+    let trm = [term|\x -> let (y,z) = out (Nat * Nat) x in z + 10|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
+    let trm = [term|
+      \x -> let (y,z) = out (mu af. Nat * af) x in
+            into (mu af. Bool * af) (y, z)
+    |]
+
+    let trm = [term|\x -> let cons(y,cons(y',ys)) = x in cons(y,ys)|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
