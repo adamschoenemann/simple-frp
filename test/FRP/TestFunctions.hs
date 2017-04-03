@@ -11,7 +11,7 @@ frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
        ]
 
 frp_const = unitFunc [decl|
-  const : S alloc -> Nat -> S Nat
+  const : S alloc -> a -> S a
   const us n =
     let cons(u, delay(us')) = us in
     let stable(x) = promote(n) in
@@ -54,7 +54,7 @@ frp_sum = unitFunc [decl|
 
 frp_tails :: Decl ()
 frp_tails = unitFunc [decl|
-  tails : S alloc -> S A -> S (S A)
+  tails : S alloc -> S a -> S (S a)
   tails us xs =
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
@@ -171,7 +171,7 @@ frp_swap = unitFunc [decl|
 -- switch : S alloc -> S a -> E (S a) -> S a
 frp_switch :: Decl ()
 frp_switch = unitFunc [decl|
-  switch : S alloc -> S a -> (mu b. a + b) -> S a
+  switch : S alloc -> S a -> (mu b. (S a) + b) -> S a
   switch us xs e =
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
@@ -183,11 +183,11 @@ frp_switch = unitFunc [decl|
 
 frp_bind :: Decl ()
 frp_bind = unitFunc [decl|
-  bind : S alloc -> #(a -> (mu af. a + af)) -> (mu af. b + af) -> (mu af. b + af)
+  bind : S alloc -> #(a -> (mu af. b + af)) -> (mu af. a + af) -> (mu af. b + af)
   bind us h e =
     let cons(u,delay(us')) = us in
     let stable(f) = h in
-    case out (mu af. (S a) + af) e of
+    case out (mu af. a + af) e of
       | inl a -> f a
       | inr t ->
           let delay(e') = t in

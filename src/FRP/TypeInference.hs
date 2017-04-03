@@ -482,10 +482,10 @@ infer term = case term of
 
   TmVar a x -> lookupCtx x
 
-  -- FIXME: for now, we ignore the maybe type signature on the lambda
   TmLam a x mty e -> do
     tv <- TyVar a <$> freshName
     (t, q) <- inCtx (x, (Forall [] tv, QNow)) (inferNow e)
+    maybe (return ()) (uni tv) mty -- unify with type ann
     return (TyArr a tv t, q)
 
   TmApp a e1 e2 -> do
@@ -500,11 +500,11 @@ infer term = case term of
     ctx2 <- inferPtn p t1
     local (`unionCtx` ctx2) (inferNow e2)
 
-  -- FIXME: we ignore type signatures
   TmFix a x mty e -> do
     tv <- TyVar a <$> freshName
     (t, q) <- inStableCtx (x, (Forall [] tv, QLater)) (inferNow e)
     uni tv t
+    maybe (return ()) (uni tv) mty -- unify with type ann
     return (tv, QNow)
 
   TmBinOp a op e1 e2 -> do
@@ -512,7 +512,7 @@ infer term = case term of
     (t2, q2) <- inferNow e2
     tv <- TyVar a <$> freshName
     let u1 = TyArr a t1 (TyArr a t2 tv)
-        u2 = binOpTy a op
+    u2 <- binOpTy a op
     uni u1 u2
     return (tv, QNow)
 
@@ -605,24 +605,27 @@ infer term = case term of
 
 
   where
-    binOpTy :: a -> BinOp -> Type a -- (Type a, Type a, Type a)
+    binOpTy :: a -> BinOp -> Infer a (Type a) -- (Type a, Type a, Type a)
     binOpTy a =
       let fromPrim (x,y,z) = (TyPrim a x, TyPrim a y, TyPrim a z)
           toArr (x,y,z)    = TyArr a y (TyArr a z x)
           primArr = toArr . fromPrim
       in  \case
         --               ret     left    right
-        Add  -> primArr (TyNat , TyNat , TyNat )
-        Sub  -> primArr (TyNat , TyNat , TyNat )
-        Mult -> primArr (TyNat , TyNat , TyNat )
-        Div  -> primArr (TyNat , TyNat , TyNat )
-        And  -> primArr (TyBool, TyBool, TyBool)
-        Or   -> primArr (TyBool, TyBool, TyBool)
-        Leq  -> primArr (TyBool, TyNat , TyNat )
-        Lt   -> primArr (TyBool, TyNat , TyNat )
-        Geq  -> primArr (TyBool, TyNat , TyNat )
-        Gt   -> primArr (TyBool, TyNat , TyNat )
-        Eq   -> primArr (TyBool, TyNat , TyNat )
+        Add  -> return $ primArr (TyNat , TyNat , TyNat )
+        Sub  -> return $ primArr (TyNat , TyNat , TyNat )
+        Mult -> return $ primArr (TyNat , TyNat , TyNat )
+        Div  -> return $ primArr (TyNat , TyNat , TyNat )
+        And  -> return $ primArr (TyBool, TyBool, TyBool)
+        Or   -> return $ primArr (TyBool, TyBool, TyBool)
+        Leq  -> return $ primArr (TyBool, TyNat , TyNat )
+        Lt   -> return $ primArr (TyBool, TyNat , TyNat )
+        Geq  -> return $ primArr (TyBool, TyNat , TyNat )
+        Gt   -> return $ primArr (TyBool, TyNat , TyNat )
+        Eq   -> do
+          tv <- TyVar a <$> freshName
+          let (|->) = TyArr a
+          return (tv |-> (tv |-> TyPrim a TyBool))
 
 -- "Type check" a pattern. Basically, it unfold the pattern, makes sure
 -- it matches the term, and then returns a context with all the bound names

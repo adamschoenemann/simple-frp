@@ -81,14 +81,10 @@ spec = do
       it "should infer 10 + 10" $ do
        runInfer' (infer [term|10 + 10|]) `shouldInfer`
         ("0a", QNow, [tynat |-> tynat |-> "0a" .=. tynat |-> tynat |-> tynat])
+
       it "should infer \\x y z -> x + y == z : Nat -> Nat -> Nat -> Bool" $ do
-        runInfer' (infer [term|\x y z -> x + y == z|]) `shouldInfer`
-          ( "0a" |-> "0b" |-> "0c" |-> "0e"
-          , QNow
-          , [ "0a" |-> "0b" |-> "0d" .=. tynat |-> tynat |-> tynat
-            , "0d" |-> "0c" |-> "0e" .=. tynat |-> tynat |-> tybool
-            ]
-          )
+        inferTerm' [term|\x y z -> x + y == z|] `shouldSolve`
+          (toScheme $ tynat |-> tynat |-> tynat |-> tybool, QNow)
 
         inferTerm' [term|\x y z -> x + y == z|] `shouldSolve`
           (toScheme $ tynat |-> tynat |-> tynat |-> tybool, QNow)
@@ -309,6 +305,7 @@ spec = do
         inferTerm' trm `shouldSolve`
           (toScheme $  tylater (tyrec "af" (tynat .*. "af"))
                    |-> tyrec "af" (tynat .*. "af"), QNow)
+
       let trm = [term|
         \x -> let (y,z) = out (mu af. Nat * af) x in
               into (mu af. Nat * af) (y, z)
@@ -317,6 +314,16 @@ spec = do
         inferTerm' trm `shouldSolve`
           (toScheme $
             tyrec "af" (tynat .*. "af") |-> tyrec "af" (tynat .*. "af"), QNow)
+
+      let trm = [term|
+        fix f. \us ->
+          let (u, delay(us')) = out (mu af. tyalloc * af) us
+          in into (mu af. tynat * af) (10, delay(u, f us'))
+      |]
+      it (ppshow trm) $
+        inferTerm' trm `shouldSolve`
+          (toScheme $ tyrec "af" (tyalloc .*. "af")
+                  |-> tyrec "af" (tynat .*. "af"), QNow)
 
       let trm = [decl|
         nats : (mu af. alloc * af) -> Nat -> (mu af. Nat * af)
@@ -346,7 +353,7 @@ spec = do
               |-> tyrec "af" ("0a" .*. "af"), QNow)
 
       let trm = [decl|
-        tails : (mu af. alloc * af) -> (mu af. a * af) -> (mu af. a * (mu bf. a * bf))
+        tails : (mu af. alloc * af) -> (mu af. a * af) -> (mu af. (mu bf. a * bf) * af)
         tails us xs =
           let (u, delay(us')) = out (mu af. alloc * af) us in
           let (x, delay(xs')) = out (mu af. a * af) xs in
@@ -359,7 +366,48 @@ spec = do
               |-> tyrec "af" ("0a" .*. "af")
               |-> tyrec "af" ((tyrec "bf" $ "0a" .*. "bf") .*. "af"), QNow)
 
+    describe "type annotations" $ do
+      describe "lambdas" $ do
+        let trm = [term|\(x:Nat) -> x * 10|]
+        it (ppshow trm) $
+          inferTerm' trm `shouldSolve`
+            (toScheme $ tynat |-> tynat, QNow)
 
+        let trm = [term|\(x:a) -> x * 10|]
+        it (ppshow trm) $
+          inferTerm' trm `shouldSolve`
+            (toScheme $ tynat |-> tynat, QNow)
+
+        let trm = [term|\(x:Bool) (y:Nat) -> y < 10 && x|]
+        it (ppshow trm) $
+          inferTerm' trm `shouldSolve`
+            (toScheme $ tybool |-> tynat |-> tybool, QNow)
+
+        let trm = [term|\(x : @(S Nat)) (y:Nat) -> cons(y, x)|]
+        it (ppshow trm) $
+          inferTerm' trm `shouldSolve`
+            (toScheme $ tylater (tystream tynat) |-> tynat |-> tystream (tynat), QNow)
+
+      describe "fixpoints" $ do
+
+        let trm = [term|
+          fix (f : S alloc -> S Nat). \us ->
+            let cons(u,delay(us')) = us in
+            cons(10, delay(u, f us'))
+        |]
+        it (ppshow trm) $
+          inferTerm' trm `shouldSolve`
+            (toScheme $ tystream tyalloc |-> tystream tynat, QNow)
+
+        let trm = [term|
+          fix (f : S alloc -> #a -> S a). \us x ->
+            let cons(u,delay(us')) = us in
+            let stable(x') = x in
+            cons(x', delay(u, f us' stable(x')))
+        |]
+        it (ppshow trm) $
+          inferTerm' trm `shouldSolve`
+            (Forall ["0a"] $ tystream tyalloc |-> tystable "0a" |-> tystream "0a", QNow)
 
   describe "test functions" $ do
     it "works for const" $ do
@@ -398,9 +446,9 @@ spec = do
       inferTerm' (_body frp_unfold) `shouldSolve`
         (Forall ["0a","0b"]
           $   tystream tyalloc
-          |-> tystable ("0a" |-> "0b" .*. tylater "0a")
-          |-> "0a"
-          |-> tystream "0b", QNow)
+          |-> tystable ("0b" |-> "0a" .*. tylater "0b")
+          |-> "0b"
+          |-> tystream "0a", QNow)
 
     it "works for swap" $ do
       inferTerm' (_body frp_swap) `shouldSolve`
@@ -423,11 +471,9 @@ spec = do
       inferTerm' (_body frp_bind) `shouldSolve`
         (Forall ["0a", "0b"]
           $   (tystream tyalloc)
-          |-> tystable (tystream "0a" |-> (tyrec "af" ("0b" .+. "af")))
-          |-> tyrec "af" ((tystream "0a") .+. "af")
+          |-> tystable ("0a" |-> (tyrec "af" ("0b" .+. "af")))
+          |-> tyrec "af" ("0a" .+. "af")
           |-> tyrec "af" ("0b" .+. "af"), QNow)
-
-  -- describe "type annotations" $ do
 
 
   describe "negative cases" $ do
@@ -457,6 +503,14 @@ spec = do
     |]
 
     let trm = [term|\x -> let cons(y,cons(y',ys)) = x in cons(y,ys)|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
+    let trm = [term|\(x:Nat) -> x && False|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
+    let trm = [term|\(x:Nat -> Bool) -> x 10 + 10|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
