@@ -197,3 +197,19 @@ frp_bind = unitFunc [decl|
 frp_main :: EvalTerm -> Type () -> Decl ()
 frp_main bd retTy = Decl () ty "main" bd where
   ty = tystream tyalloc |-> retTy
+
+declTy_01 = [declTy|
+  ex01 : Nat
+  ex01 = 10.
+|]
+
+declTy_02 = [declTy|
+  ex02 : Nat -> Nat
+  ex02 x = x * 10.
+|]
+
+declTy_03 = [declTy|
+  ex03 : (Nat * Bool) -> Nat
+  ex03 x =
+    let (n, b) = x in if b then n * 2 else n + 2.
+|]

@@ -1,14 +1,20 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DataKinds #-}
 
 module FRP.AST.QuasiQuoter where
 
 import qualified FRP.Parser.Program as P
 import qualified FRP.Parser.Decl    as P
 import qualified FRP.Parser.Term    as P
+
 import Text.Parsec.String
 
 import FRP.AST
+import FRP.TypeInference
+import FRP.AST.Reflect
 import Text.Parsec
 import Language.Haskell.TH.Quote
+import Language.Haskell.TH
 
 prog :: QuasiQuoter
 prog = QuasiQuoter
@@ -26,6 +32,15 @@ decl = QuasiQuoter
   , quoteType = undefined
   }
 
+declTy :: QuasiQuoter
+declTy = QuasiQuoter
+  { quoteExp = quoteFRPDeclTy
+  , quotePat = undefined
+  , quoteDec = undefined
+  , quoteType = undefined
+  }
+
+
 term :: QuasiQuoter
 term = QuasiQuoter
   { quoteExp = quoteFRPTerm
@@ -42,6 +57,14 @@ quoteFRPParser p s = do
   dataToExpQ (const Nothing) ast
 
 quoteFRPDecl = quoteFRPParser P.decl
+
+quoteFRPDeclTy s = do
+  dcl <- quoteParseFRP P.decl s
+  let sing = typeToSingExp (_type dcl)
+  let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
+  runQ [| FRP $(trm) $(sing)|]
+  -- dataToExpQ (const Nothing) (FRP (unitFunc $ _body dcl) (undefined :: Sing TNat))
+
 quoteFRPTerm = quoteFRPParser P.term
 quoteFRPProg = quoteFRPParser P.prog
 

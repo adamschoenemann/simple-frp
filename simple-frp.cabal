@@ -19,7 +19,7 @@ library
                      , FRP.Parser.Term, FRP.Parser.Program, FRP.Parser.Type
                      , FRP.Parser.Decl, FRP.AST.Construct, Utils
                      , FRP.Parser.Construct, FRP.TypeChecker, FRP.AST.QuasiQuoter
-                     , FRP.TypeInference
+                     , FRP.TypeInference, FRP.AST.Reflect
   build-depends:       base >= 4.7 && < 5, pretty, containers, mtl, parsec
                      , neat-interpolation, template-haskell, text, QuickCheck
   ghc-options:         -Wincomplete-patterns

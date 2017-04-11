@@ -80,7 +80,7 @@ txt_frp_switch =
   \us xs e ->
     let cons(u, delay(us')) = us in
     let cons(x, delay(xs')) = xs in
-    case out e : Nat of
+    case out (Nat) e of
       | inl ys -> ys
       | inr t  -> let delay(e') = t in
                   cons(x, delay (u, switch us' xs' e')))
@@ -91,10 +91,10 @@ txt_frp_bind =
   \us -> \h -> \e ->
     let cons(u, delay(us')) = us in
     let stable(f)           = h  in
-    case out e : Nat of
+    case out (Nat) e of
       | inl a -> f a
       | inr t -> let delay(e') = t in
-                 into (inr (delay (u, bind us' stable(f) e'))) : Nat.
+                 into (Nat) (inr (delay (u, bind us' stable(f) e'))).
   |]
 
 main :: IO ()

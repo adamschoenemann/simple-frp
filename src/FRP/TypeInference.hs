@@ -246,42 +246,6 @@ bind a t | unitFunc t == TyVar () a = return emptyUnifier
               typeErr (OccursCheckFailed a t unif) emptyCtx
          | otherwise       = return $ Unifier (M.singleton a t, [])
 
--- unify :: Type a -> Type a -> Infer a (Subst a)
--- unify type1 type2 = case (type1, type2) of
-
---   (TyArr _ l1 r1, TyArr _ l2 r2) -> do
---     s1 <- unify l1 l2
---     s2 <- unify (apply s1 r1) (apply s1 r2)
---     return (s2 `compose` s1)
-
---   (TyVar _ a, t) -> bind a t
-
---   (t, TyVar _ a) -> bind a t
-
---   (TyPrim _ p1, TyPrim _ p2) | p1 == p2 -> return nullSubst
-
---   (TyProd _a ll lr, TyProd _b rl rr) -> do
---     s1 <- unify ll rl
---     s2 <- unify rl rr
---     return (s2 `compose` s1)
-
---   (TySum  _a ll lr, TySum  _b rl rr) -> do
---     s1 <- unify ll rl
---     s2 <- unify rl rr
---     return (s2 `compose` s1)
-
---   (TyLater  _ lt, TyLater  _ rt) -> unify lt rt
---   (TyStable _ lt, TyStable _ rt) -> unify lt rt
---   (TyStream _ lt, TyStream _ rt) -> unify lt rt
-
---   (TyAlloc{}, TyAlloc{}) -> return nullSubst
-
---   (ty1, ty2) ->
---     let noterm = error "no term in function unify"
---         sig = Forall []
---     in  typeErr (CannotUnify (sig ty1, QNow) (sig ty2, QNow) noterm) emptyCtx
-
-
 instantiate :: Scheme a -> Infer a (Type a)
 instantiate (Forall as t) = do
   let ann = typeAnn t
@@ -294,7 +258,6 @@ generalize ctx t = Forall as t
   where as = S.toList $ ftv t `S.difference` ftv ctx
 
 -- monad to do inference by constraint generation first and the solving
-
 type InferState = [String]
 
 type Infer t a =
@@ -645,12 +608,6 @@ inferPtn pattern ty = case pattern of
     fnm <- freshName
     let tv = TyVar ann fnm
     uni ty (TyLater ann tv)
-    -- instantiate out the tv itself from the generalization
-    -- not sure if correct, just a hack that works for now
-    -- and perhaps it should simply not be generalized at all
-    -- let sc@(Forall vs _) = generalize ctx tv
-    -- let vs' = filter (/= fnm) vs
-    -- let vs' = vs
     return $ Ctx $ M.singleton nm (Forall [] tv, QLater)
 
   PCons hd tl -> do
