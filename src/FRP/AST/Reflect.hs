@@ -45,23 +45,11 @@ deriving instance Eq (Sing a)
 deriving instance Show (Sing a)
 deriving instance Typeable (Sing a)
 
-instance Typeable a => Data (Sing a) where
-  gunfold uf cr s = undefined
-  toConstr a = undefined
-  dataTypeOf a = undefined
-
-
 data FRP :: Ty -> * where
   FRP :: Term () -> Sing t -> FRP t
 
 deriving instance Typeable (FRP t)
 deriving instance Show (FRP t)
-
-instance Typeable t => Data (FRP t) where
-  gunfold uf cr s = undefined
-  toConstr a = undefined
-  dataTypeOf a = undefined
-
 
 
 typeToSingExp :: Type a -> ExpQ

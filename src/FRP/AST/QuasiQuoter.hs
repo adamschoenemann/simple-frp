@@ -63,7 +63,6 @@ quoteFRPDeclTy s = do
   let sing = typeToSingExp (_type dcl)
   let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
   runQ [| FRP $(trm) $(sing)|]
-  -- dataToExpQ (const Nothing) (FRP (unitFunc $ _body dcl) (undefined :: Sing TNat))
 
 quoteFRPTerm = quoteFRPParser P.term
 quoteFRPProg = quoteFRPParser P.prog

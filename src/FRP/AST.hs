@@ -25,6 +25,9 @@ type Label = Int
 type EvalTerm = Term ()
 type Env = Map String (Either EvalTerm Value)
 
+initEnv :: Env
+initEnv = M.empty
+
 data Qualifier
   = QNow
   | QStable
