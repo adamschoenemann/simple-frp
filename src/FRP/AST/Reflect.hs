@@ -32,6 +32,11 @@ data Ty
   | TStream Ty
   deriving (Show, Eq, Typeable, Data)
 
+
+infixr 0 :->:
+infixr 6 :*:
+infixr 5 :+:
+
 data Sing :: Ty -> * where
   SNat    :: Sing TNat
   SBool   :: Sing TBool

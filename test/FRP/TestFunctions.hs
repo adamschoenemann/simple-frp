@@ -1,8 +1,11 @@
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds #-}
 
 module FRP.TestFunctions where
 
 import FRP.AST
+import FRP.AST.Reflect
 import FRP.AST.Construct
 import FRP.AST.QuasiQuoter
 
@@ -71,10 +74,6 @@ frp_map = unitFunc [decl|
     cons((f x), delay(u, (((map us') stable(f)) xs'))).
 |]
 
--- this could be a way
--- data FRPTy : * -> * where
---   Simple : AST -> FRPTy [Nat]
---   Trans  : AST -> FRPTy ([Nat] -> [Nat])
 
 frp_prog_1 = [prog|
 
@@ -212,4 +211,16 @@ declTy_03 = [declTy|
   ex03 : (Nat * Bool) -> Nat
   ex03 x =
     let (n, b) = x in if b then n * 2 else n + 2.
+|]
+
+frp_incr :: FRP (TStream TAlloc :->: TStream TNat :->: TStream TNat)
+frp_incr = [declTy|
+  main : S alloc -> S Nat -> S Nat
+  main us xs =
+    let map = \us h xs ->
+        let cons(u, delay(us')) = us in
+        let cons(x, delay(xs')) = xs in
+        let stable(f) = h in
+        cons((f x), delay(u, (((map us') stable(f)) xs')))
+    in  map us stable(\x -> x + 1) xs.
 |]
