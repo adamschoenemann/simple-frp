@@ -19,6 +19,9 @@ import FRP.AST.Construct
 import FRP.AST.Reflect
 import FRP.Semantics
 
+import FRP.Pretty
+import Debug.Trace
+
 
 haskErr :: String -> Sing t -> Value -> a
 haskErr msg sing v =
@@ -68,26 +71,27 @@ instance FRPHask t1 a => FRPHask (TStream t1) [a] where
   toFRP (SStream s) (x : xs) = VCons (toFRP s x) (toFRP (SStream s) xs)
 
 
--- fix this
+-- lazy evaluation allows us to do this, where we construct the possibly infinite
+-- term of conses from the input list that is not fully evaluated until
+-- the ith iteration
 transform :: (FRPHask t1 a, FRPHask t2 b)
           => FRP (TStream TAlloc :->: TStream t1 :->: TStream t2)
-          -> [a] -> [(Value, EvalState)]
+          -> [a] -> [b]
 transform frp@(FRP trm (SArr us (SArr (SStream s1) (SStream s2)))) as =
-  help initialState trm as
+  help initialState (mkExpr trm s1 as) as
   where
     help st tm = \case
       [] -> []
       (x : xs) ->
-          let r@((VCons v (VPntr l)), st1) = runExpr st initEnv (mkExpr tm s1 x)
-          in  [r]
-          -- in  toHask s2 v : help (tick st1) trm xs
-    mkExpr :: (FRPHask t a) => Term () -> Sing t -> a -> Term ()
-    mkExpr tm s x =
-        let v = toFRP s x
-        in  tm <| fixed tmalloc <| fixed (valToTerm v)
+          let r@((VCons v (VPntr l)), st1) = runExpr st initEnv tm
+          in  trace (ppshow st1) $ toHask s2 v : help (tick st1) (tmpntrderef l) xs
+    mkExpr :: (FRPHask t a) => Term () -> Sing t -> [a] -> Term ()
+    mkExpr tm s xs = tm <| fixed tmalloc <| streamed s xs
 
+    streamed s [] = undefined -- will never happen since "help" guards this
+    streamed s (x : xs) = tmcons (valToTerm . toFRP s $ x) (tmdelay tmalloc $ streamed s xs)
     uncons ((VCons x l), s') = x
 
     fixed :: Term () -> Term ()
-    fixed e = tmfix "_xs" undefined
+    fixed e = tmfix "_xs" (tystream $ tyalloc)
               $ tmcons e (tmdelay tmalloc "_xs")

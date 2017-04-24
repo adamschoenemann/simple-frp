@@ -1,8 +1,5 @@
 {-# LANGUAGE DeriveFunctor             #-}
-{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleInstances         #-}
-{-# LANGUAGE ScopedTypeVariables       #-}
-{-# LANGUAGE StandaloneDeriving        #-}
 {-# LANGUAGE DeriveDataTypeable        #-}
 {-# LANGUAGE NamedFieldPuns            #-}
 
@@ -254,7 +251,7 @@ instance Pretty (Term a) where
 
     TmPntr _a pntr          -> text "&[" <> int pntr <> text "]"
     TmPntrDeref _a pntr     -> text "*[" <> int pntr <> text "]"
-    TmAlloc _a              -> text "¤"
+    TmAlloc _a              -> text "<>"
 
     TmOut  _a ty trm        -> text "out" <+> parens (ppr 0 ty)
                                <+> prns (ppr (n) trm)
