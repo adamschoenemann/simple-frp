@@ -7,11 +7,12 @@ import qualified FRP.Parser.Program as P
 import qualified FRP.Parser.Decl    as P
 import qualified FRP.Parser.Term    as P
 
-import Text.Parsec.String
-
 import FRP.AST
 import FRP.TypeInference
 import FRP.AST.Reflect
+import FRP.Pretty
+
+import Text.Parsec.String
 import Text.Parsec
 import Language.Haskell.TH.Quote
 import Language.Haskell.TH
@@ -60,9 +61,12 @@ quoteFRPDecl = quoteFRPParser P.decl
 
 quoteFRPDeclTy s = do
   dcl <- quoteParseFRP P.decl s
+  _ <- either (fail . ppshow) return (inferDecl' dcl)
   let sing = typeToSingExp (_type dcl)
   let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
   runQ [| FRP $(trm) $(sing)|]
+
+
 
 quoteFRPTerm = quoteFRPParser P.term
 quoteFRPProg = quoteFRPParser P.prog

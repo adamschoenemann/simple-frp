@@ -68,21 +68,25 @@ instance FRPHask t1 a => FRPHask (TStream t1) [a] where
   toFRP (SStream s) (x : xs) = VCons (toFRP s x) (toFRP (SStream s) xs)
 
 
+-- fix this
 transform :: (FRPHask t1 a, FRPHask t2 b)
           => FRP (TStream TAlloc :->: TStream t1 :->: TStream t2)
-          -> [a] -> [b]
+          -> [a] -> [(Value, EvalState)]
 transform frp@(FRP trm (SArr us (SArr (SStream s1) (SStream s2)))) as =
-  case as of
-    [] -> []
-    (x : xs) -> (toHask s2 $ uncons $ evalExpr initEnv (mkExpr s1 x))
-                  : transform frp xs
+  help initialState trm as
   where
-    mkExpr :: (FRPHask t a) => Sing t -> a -> Term ()
-    mkExpr s x =
+    help st tm = \case
+      [] -> []
+      (x : xs) ->
+          let r@((VCons v (VPntr l)), st1) = runExpr st initEnv (mkExpr tm s1 x)
+          in  [r]
+          -- in  toHask s2 v : help (tick st1) trm xs
+    mkExpr :: (FRPHask t a) => Term () -> Sing t -> a -> Term ()
+    mkExpr tm s x =
         let v = toFRP s x
-        in  trm <| fixed tmalloc <| fixed (valToTerm v)
+        in  tm <| fixed tmalloc <| fixed (valToTerm v)
 
-    uncons (VCons x _) = x
+    uncons ((VCons x l), s') = x
 
     fixed :: Term () -> Term ()
     fixed e = tmfix "_xs" undefined

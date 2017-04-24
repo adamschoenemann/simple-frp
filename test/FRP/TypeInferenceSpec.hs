@@ -366,6 +366,17 @@ spec = do
               |-> tyrec "af" ("0a" .*. "af")
               |-> tyrec "af" ((tyrec "bf" $ "0a" .*. "bf") .*. "af"), QNow)
 
+    describe "stable" $ do
+      let trm = [term|
+                \(fn : #(Nat -> Nat) -> Nat -> Nat) ->
+                    let f = stable(\x -> x + 1) in
+                    fn f 0
+                |]
+
+      it (ppshow trm) $ do
+        inferTerm' trm `shouldSolve`
+          (toScheme $ (tystable (tynat |-> tynat) |-> tynat |-> tynat) |-> tynat, QNow)
+
     describe "type annotations" $ do
       describe "lambdas" $ do
         let trm = [term|\(x:Nat) -> x * 10|]

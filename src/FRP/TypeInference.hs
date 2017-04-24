@@ -57,12 +57,13 @@ extend c (n, t) = Ctx $ M.insert n t $ unCtx c
 remove :: Context t -> Name -> Context t
 remove (Ctx m) x = Ctx $ M.delete x m
 
-lookupCtx :: Name -> Infer t (Type t, Qualifier)
+lookupCtx :: Name -> Infer t (Type t)
 lookupCtx nm = do
   Ctx m <- ask
   case M.lookup nm m of
-    Just (sc, q) -> do t <- instantiate sc
-                       return (t, q)
+    Just (sc, q) | q == QNow || q == QStable ->
+      do t <- instantiate sc
+         return t
     Nothing -> typeErr (UnknownIdentifier nm) (Ctx m)
 
 isStable :: Type t -> Bool
@@ -312,7 +313,20 @@ inferTerm' :: Term t -> Either (TyExcept t) (QualSchm t)
 inferTerm' = inferTerm emptyCtx
 
 inferTerm :: Context t -> Term t -> Either (TyExcept t) (QualSchm t)
-inferTerm ctx trm = case runInfer ctx (infer trm) of
+inferTerm ctx trm = solveInfer ctx (infer trm)
+
+inferDecl' :: Decl t -> Either (TyExcept t) (QualSchm t)
+inferDecl' = inferDecl emptyCtx
+
+inferDecl :: Context t -> Decl t -> Either (TyExcept t) (QualSchm t)
+inferDecl ctx decl = solveInfer ctx declInfer where
+  declInfer =
+    do tv <- TyVar (_ann decl) <$> freshName
+       uni tv (_type decl)
+       infer (_body decl)
+
+solveInfer :: Context t -> Infer t (Type t, Qualifier) -> Either (TyExcept t) (QualSchm t)
+solveInfer ctx inf = case runInfer ctx inf of
   Left err -> Left err
   Right ((ty,q), cs) -> case runSolve (un cs) of
     Left err -> Left err
@@ -406,13 +420,12 @@ inferLater expr = do
     then return (t,q)
     else typeErr (NotLater expr) ctx0
 
-inferStable :: Term t -> Infer t (Type t, Qualifier)
+inferStable :: Term t -> Infer t (Type t)
 inferStable expr = do
-  ctx0 <- ask
   (t, q) <- local stableCtx $ infer expr
-  if (q == QStable)
-    then return (t,q)
-    else typeErr (NotStable expr) ctx0
+  if (q == QNow )
+    then return t
+    else typeErr' (NotStable expr)
 
 -- Consideration: Move logic that enforces qualifiers to be now/stbl/whatever
 -- into the constraint solver? Could that be done? Is it better? Don't know yet
@@ -443,7 +456,9 @@ infer term = case term of
     (t2, _) <- inferNow e2
     return (TyProd a t1 t2, QNow)
 
-  TmVar a x -> lookupCtx x
+  TmVar a x -> do
+    t <- lookupCtx x
+    return (t, QNow)
 
   TmLam a x mty e -> do
     tv <- TyVar a <$> freshName
@@ -502,7 +517,7 @@ infer term = case term of
     return (tv, QNow)
 
   TmStable a e -> do
-    (t1, _) <- inferStable e
+    t1 <- inferStable e
     tv <- TyVar a <$> freshName
     uni tv (TyStable a t1)
     return (tv, QNow)

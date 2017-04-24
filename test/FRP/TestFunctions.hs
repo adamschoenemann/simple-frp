@@ -217,10 +217,10 @@ frp_incr :: FRP (TStream TAlloc :->: TStream TNat :->: TStream TNat)
 frp_incr = [declTy|
   main : S alloc -> S Nat -> S Nat
   main us xs =
-    let map = \us h xs ->
+    let map = fix map. \us h xs ->
         let cons(u, delay(us')) = us in
         let cons(x, delay(xs')) = xs in
         let stable(f) = h in
-        cons((f x), delay(u, (((map us') stable(f)) xs')))
-    in  map us stable(\x -> x + 1) xs.
+        cons((f x), delay(u, (((map us') stable(f)) xs'))) in
+    map us stable(\x -> x + 1) xs.
 |]
