@@ -255,13 +255,12 @@ evalProgram (Program decls) =
   where
     globals    = globalEnv decls
 
-runProgram :: Program a -> Value
-runProgram (Program decls) = keepRunning initialState startMain
+runTermInEnv :: Env -> Term () -> Value
+runTermInEnv env trm =
+  keepRunning initialState trm
   where
-    main = maybe (error "no main function") id
-           $ find (\d -> _name d == "main") decls
     keepRunning s e  =
-      let (p, s') = runExpr s globals e
+      let (p, s') = runExpr s env e
           s'' = tick s'
       in case p of
         VCons v (VPntr l) -> VCons (deepRunning s'' v) (keepRunning s'' (tmpntrderef l))
@@ -271,10 +270,17 @@ runProgram (Program decls) = keepRunning initialState startMain
       VCons x (VPntr l) -> keepRunning s (tmpntrderef l)
       v                 -> v
 
+runProgram :: Program a -> Value
+runProgram (Program decls) = runTermInEnv globals startMain
+  where
+    main = maybe (error "no main function") id
+           $ find (\d -> _name d == "main") decls
+
     globals   = globalEnv decls
 
     startMain = case main of
       Decl _a _ty _nm body -> mainEvalTerm $ unitFunc body
+
 
 interpProgram :: Program a -> [Value]
 interpProgram = toHaskList . runProgram

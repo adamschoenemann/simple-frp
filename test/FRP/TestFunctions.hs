@@ -236,3 +236,12 @@ frp_incr_fails = unitFunc [decl|
         cons(f x, delay(u, (((map us') stable(f)) xs'))) in
     map allocs (\x -> x + 1) lst.
 |]
+
+frp_tails_ty :: FRP (TStream TAlloc :->: TStream TNat :->: TStream (TStream TNat))
+frp_tails_ty = [declTy|
+  tails : S alloc -> S Nat -> S (S Nat)
+  tails us xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    cons(xs, delay(u, ((tails us') xs'))).
+|]

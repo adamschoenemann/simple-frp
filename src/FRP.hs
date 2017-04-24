@@ -19,8 +19,6 @@ import FRP.AST.Construct
 import FRP.AST.Reflect
 import FRP.Semantics
 
-import FRP.Pretty
-import Debug.Trace
 
 
 haskErr :: String -> Sing t -> Value -> a
@@ -65,7 +63,7 @@ instance (FRPHask t1 a, FRPHask t2 b) => FRPHask (t1 :+: t2) (Either a b) where
     in  VInr v
 
 instance FRPHask t1 a => FRPHask (TStream t1) [a] where
-  toHask (SStream s) (VCons x l) = [toHask s x]
+  toHask sing@(SStream s) (VCons x l) = toHask s x : toHask sing l
   toHask sing v = haskErr "expected stream value" sing v
 
   toFRP (SStream s) (x : xs) = VCons (toFRP s x) (toFRP (SStream s) xs)
@@ -77,14 +75,15 @@ instance FRPHask t1 a => FRPHask (TStream t1) [a] where
 transform :: (FRPHask t1 a, FRPHask t2 b)
           => FRP (TStream TAlloc :->: TStream t1 :->: TStream t2)
           -> [a] -> [b]
-transform frp@(FRP trm (SArr us (SArr (SStream s1) (SStream s2)))) as =
-  help initialState (mkExpr trm s1 as) as
+transform frp@(FRP trm sing@(SArr us (SArr (SStream s1) (SStream s2)))) as =
+  map (toHask s2) $ toHaskList $ runTermInEnv initEnv $ mkExpr trm s1 as
   where
+    -- unused right now
     help st tm = \case
       [] -> []
       (x : xs) ->
           let r@((VCons v (VPntr l)), st1) = runExpr st initEnv tm
-          in  trace (ppshow st1) $ toHask s2 v : help (tick st1) (tmpntrderef l) xs
+          in  toHask s2 v : help (tick st1) (tmpntrderef l) xs
     mkExpr :: (FRPHask t a) => Term () -> Sing t -> [a] -> Term ()
     mkExpr tm s xs = tm <| fixed tmalloc <| streamed s xs
 

@@ -18,6 +18,7 @@ import Language.Haskell.TH ( runQ, Q, Exp(..), Pat(..), mkName, Lit(..)
                            )
 
 import FRP.AST
+import FRP.AST.Construct
 import qualified Language.Haskell.TH as T
 
 import           Data.Data
@@ -49,6 +50,18 @@ data Sing :: Ty -> * where
 deriving instance Eq (Sing a)
 deriving instance Show (Sing a)
 deriving instance Typeable (Sing a)
+
+
+reify :: Sing t -> Type ()
+reify = \case
+  SNat    -> tynat
+  SBool   -> tybool
+  SAlloc  -> tyalloc
+
+  SProd   t1 t2 -> reify t1 .*. reify t2
+  SSum    t1 t2 -> reify t1 .+. reify t2
+  SArr    t1 t2 -> reify t1 |-> reify t2
+  SStream t -> reify t
 
 data FRP :: Ty -> * where
   FRP :: Term () -> Sing t -> FRP t
