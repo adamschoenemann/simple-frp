@@ -61,10 +61,12 @@ quoteFRPDecl = quoteFRPParser P.decl
 
 quoteFRPDeclTy s = do
   dcl <- quoteParseFRP P.decl s
-  _ <- either (fail . ppshow) return (inferDecl' dcl)
-  let sing = typeToSingExp (_type dcl)
-  let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
-  runQ [| FRP $(trm) $(sing)|]
+  case inferDecl' dcl of
+    Left err -> fail . show $ err
+    Right ty -> do
+          let sing = typeToSingExp (_type dcl)
+          let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
+          runQ [| FRP $(trm) $(sing) |]
 
 
 

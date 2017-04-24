@@ -159,10 +159,10 @@ spec = do
         inferTerm' [term|\y f -> f y + f (10, 20)|] `shouldSolve`
           (toScheme $ tynat .*. tynat |-> (tynat .*. tynat |-> tynat) |-> tynat, QNow)
 
-    describe "let-generalization" $ do
-      it "let f = (\\x -> x) in let g = (f True) in f 3" $ do
-        inferTerm' [term|let f = (\x -> x) in let g = (f True) in f 3|] `shouldSolve`
-          (toScheme tynat, QNow)
+    -- describe "let-generalization" $ do
+    --   it "let f = (\\x -> x) in let g = (f True) in f 3" $ do
+    --     inferTerm' [term|let f = (\x -> x) in let g = (f True) in f 3|] `shouldSolve`
+    --       (toScheme tynat, QNow)
 
     describe "sum-types" $ do
 
@@ -376,6 +376,18 @@ spec = do
       it (ppshow trm) $ do
         inferTerm' trm `shouldSolve`
           (toScheme $ (tystable (tynat |-> tynat) |-> tynat |-> tynat) |-> tynat, QNow)
+
+      let trm = [term|
+                \(fn : #(Nat -> Nat) -> Nat -> Nat) ->
+                    let f = \x -> x + 1 in
+                    fn f 0
+                |]
+      it ("fails " ++ ppshow trm) $ do
+        shouldTyErr (inferTerm' trm)
+
+      it ("fails " ++ ppshow frp_incr_fails) $ do
+        shouldTyErr (inferTerm' $ _body frp_incr_fails)
+        -- shouldTyErr (inferDecl (Ctx $ M.singleton "map" (mapTy, QNow)) frp_incr')
 
     describe "type annotations" $ do
       describe "lambdas" $ do

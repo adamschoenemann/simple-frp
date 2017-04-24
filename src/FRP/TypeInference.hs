@@ -78,7 +78,10 @@ instance Pretty (Context t) where
     mapper (k, v) = text k <+> char ':' <+> ppr 0 v
 
 newtype TyExcept t = TyExcept (TyErr t, Context t)
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show (TyExcept t) where
+  show = ppshow
 
 data TyErr t
   = CannotUnify (Type t) (Type t) (Unifier t)
@@ -321,9 +324,9 @@ inferDecl' = inferDecl emptyCtx
 inferDecl :: Context t -> Decl t -> Either (TyExcept t) (QualSchm t)
 inferDecl ctx decl = solveInfer ctx declInfer where
   declInfer =
-    do tv <- TyVar (_ann decl) <$> freshName
-       uni tv (_type decl)
-       infer (_body decl)
+    do (t,q) <- infer (_body decl)
+       uni t (_type decl)
+       return (t,q)
 
 solveInfer :: Context t -> Infer t (Type t, Qualifier) -> Either (TyExcept t) (QualSchm t)
 solveInfer ctx inf = case runInfer ctx inf of
@@ -347,7 +350,7 @@ unifies (TyStable _ t1)  (TyStable _ t2)  = t1 `unifies` t2
 unifies (TyLater _ t1)   (TyLater _ t2)   = t1 `unifies` t2
 unifies (TyStream _ t1)  (TyStream _ t2)  = t1 `unifies` t2
 unifies (TyRec a af t1)  (TyRec _ bf t2)  = do
-  let fv = "ioasdoijaoij"
+  let fv = "ioasdoijaoij" -- FIXME: Get an actual free variable
   apply (M.singleton af (TyVar a fv)) t1 `unifies` apply (M.singleton bf (TyVar a fv)) t2
 unifies t1 t2 = do
   unif <- get
@@ -614,8 +617,11 @@ inferPtn pattern ty = case pattern of
 
   PBind nm -> do
     ctx <- ask
-    let sc = generalize ctx ty
-    return $ Ctx $ M.singleton nm (sc, QNow)
+    -- generalizing is not so easy with type inference since we cannot
+    -- simply get the free variables of a constrained type variable
+    -- let sc = generalize ctx ty
+    let sc = Forall [] ty
+    return . Ctx $ M.singleton nm (sc, QNow)
 
   PDelay nm -> do
     ctx <- ask
