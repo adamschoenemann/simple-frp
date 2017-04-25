@@ -336,8 +336,10 @@ inferProg ctx (Program decls) =
   where
     fun ctx decl@(Decl { _name, _ann, _type, _body }) =
       do ctx0 <- ctx
-         qs <- inferDecl ctx0 decl
-         return $ extend ctx0 (_name, qs)
+         (t, q) <- inferDecl ctx0 decl
+         -- top-level definitions are inherently stable, since they cannot
+         -- capture any non-stable values
+         return $ extend ctx0 (_name, (t, QStable))
 
 
 solveInfer :: Context t -> Infer t (Type t, Qualifier) -> Either (TyExcept t) (QualSchm t)

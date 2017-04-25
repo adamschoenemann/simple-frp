@@ -11,11 +11,15 @@ import           FRP.AST
 import           FRP.AST.Reflect
 import           FRP.Pretty
 import           FRP.TypeInference
+import           FRP.Semantics
 
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Quote
-import           Text.Parsec
+import           Control.Applicative
+import           Text.Parsec hiding ((<|>))
+import           Data.List (find)
 import           Text.Parsec.String
+import           Utils (safeLast)
 
 prog :: QuasiQuoter
 prog = QuasiQuoter
@@ -36,6 +40,14 @@ decl = QuasiQuoter
 declTy :: QuasiQuoter
 declTy = QuasiQuoter
   { quoteExp = quoteFRPDeclTy
+  , quotePat = undefined
+  , quoteDec = undefined
+  , quoteType = undefined
+  }
+
+progTy :: QuasiQuoter
+progTy = QuasiQuoter
+  { quoteExp = quoteFRPProgTy
   , quotePat = undefined
   , quoteDec = undefined
   , quoteType = undefined
@@ -68,18 +80,23 @@ quoteFRPDeclTy s = do
           let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
           runQ [| FRP initEnv $(trm) $(sing) |]
 
+-- quotes an FRP program
+-- the resulting type reflects the type of the definition named "main" or,
+-- if there is no such definition, the last definition in the quasiquote
 quoteFRPProgTy s = do
   prog <- quoteParseFRP P.prog s
-  case inferProg initEnv prog of
+  let Program decls = prog
+  mainDecl <-
+        maybe (fail "empty programs are not allowed") return $
+          find (\d -> _name d == "main") decls <|> safeLast decls
+  case inferProg emptyCtx prog of
     Left err -> fail . show $ err
-    Right (Ctx ctx) -> do
-      case M.lookup "main" ctx of
-        Just main -> _type main
-        Nothing -> _type 
-      
-          let sing = typeToSingExp (_type dcl)
-          let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
-          runQ [| FRP initEnv $(trm) $(sing) |]
+    Right (Ctx ctx) ->
+      let ty = _type mainDecl
+          sing = typeToSingExp ty
+          trm = dataToExpQ (const Nothing) (unitFunc $ _body mainDecl)
+          globals = dataToExpQ (const Nothing) (globalEnv decls)
+      in  runQ [| FRP $(globals) $(trm) $(sing) |]
 
 
 

@@ -387,7 +387,6 @@ spec = do
 
       it ("fails " ++ ppshow frp_incr_fails) $ do
         shouldTyErr (inferTerm' $ _body frp_incr_fails)
-        -- shouldTyErr (inferDecl (Ctx $ M.singleton "map" (mapTy, QNow)) frp_incr')
 
     describe "type annotations" $ do
       describe "lambdas" $ do
@@ -536,6 +535,10 @@ spec = do
     let trm = [term|\(x:Nat -> Bool) -> x 10 + 10|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
+
+    it "scary_const_fails" $ do
+      shouldTyErr (inferDecl' frp_scary_const_fails)
+
 
 
 

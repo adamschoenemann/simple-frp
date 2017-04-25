@@ -292,6 +292,7 @@ toHaskList = \case
 
 mainEvalTerm body = tmapp body (tmfix "xs" undefined $ tmcons tmalloc (tmdelay tmalloc (tmvar "xs")))
 
+globalEnv :: [Decl a] -> Env
 globalEnv decls = foldl go M.empty decls
   where
     go env (Decl _a t n b) = M.insert n (Right $ evalExpr env $ unitFunc b) env

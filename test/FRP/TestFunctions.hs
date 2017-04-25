@@ -245,3 +245,59 @@ frp_tails_ty = [declTy|
     let cons(x, delay(xs')) = xs in
     cons(xs, delay(u, ((tails us') xs'))).
 |]
+
+frp_incr_prog_ty :: FRP (TStream TAlloc :->: TStream TNat :->: TStream TNat)
+frp_incr_prog_ty = [progTy|
+  map : S alloc -> #(a -> b) -> S a -> S b
+  map us h xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    let stable(f) = h in
+    cons(f x, delay(u, (((map us') stable(f)) xs'))).
+
+
+  main : S alloc -> S Nat -> S Nat
+  main allocs lst =
+    map allocs stable(\x -> x + 1) lst.
+|]
+
+frp_scary_const_fails :: Decl ()
+frp_scary_const_fails = unitFunc [decl|
+  scary_const : S alloc -> S Nat -> S (S Nat)
+  scary_const us ns =
+    let cons(u, delay(us')) = us in
+    let stable(xs) = promote(nxs) in
+    cons(xs, delay(u, scary_const us' xs)).
+|]
+
+frp_scary_const :: FRP (TStream TAlloc :->: TStream (TStream TNat))
+frp_scary_const = [progTy|
+  buffer : S alloc -> Nat -> S Nat -> S Nat
+  buffer us n xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    let stable(x') = promote(x) in
+    cons(n, delay(u, buffer us' x' xs')).
+
+  forward : S alloc -> S Nat -> @(S Nat)
+  forward us xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    let stable(x') = promote(x) in
+    delay(u, buffer us' x' xs').
+
+  scary_const : S alloc -> S Nat -> S (S Nat)
+  scary_const us xs =
+    let cons(u, delay(us')) = us in
+    let delay(xs') = forward us xs in
+    cons(xs, delay(u, scary_const us' xs')).
+
+  nats : S alloc -> Nat -> S Nat
+  nats us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats us' (x + 1))).
+
+  main : S alloc -> S (S Nat)
+  main us = scary_const us (nats us 0).
+|]

@@ -10,7 +10,9 @@
 module FRP
   ( module FRP.AST
   , module FRP.Semantics
-  , module FRP
+  , transform
+  , execute
+  , FRPHask
   )
   where
 
@@ -76,7 +78,7 @@ transform :: (FRPHask t1 a, FRPHask t2 b)
           => FRP (TStream TAlloc :->: TStream t1 :->: TStream t2)
           -> [a] -> [b]
 transform frp@(FRP env trm sing@(SArr us (SArr (SStream s1) (SStream s2)))) as =
-  map (toHask s2) $ toHaskList $ runTermInEnv initEnv $ mkExpr trm s1 as
+  map (toHask s2) $ toHaskList $ runTermInEnv env $ mkExpr trm s1 as
   where
     -- unused right now
     help st tm = \case
@@ -87,10 +89,18 @@ transform frp@(FRP env trm sing@(SArr us (SArr (SStream s1) (SStream s2)))) as =
     mkExpr :: (FRPHask t a) => Term () -> Sing t -> [a] -> Term ()
     mkExpr tm s xs = tm <| fixed tmalloc <| streamed s xs
 
-    streamed s [] = undefined -- will never happen since "help" guards this
+    streamed s [] = error "input stream terminated"
     streamed s (x : xs) = tmcons (valToTerm . toFRP s $ x) (tmdelay tmalloc $ streamed s xs)
     uncons ((VCons x l), s') = x
 
-    fixed :: Term () -> Term ()
-    fixed e = tmfix "_xs" (tystream $ tyalloc)
-              $ tmcons e (tmdelay tmalloc "_xs")
+
+execute :: (FRPHask t a) => FRP (TStream TAlloc :->: TStream t) -> [a]
+execute frp@(FRP env trm sing@(SArr us (SStream s))) =
+  map (toHask s) $ toHaskList $ runTermInEnv env $ mkExpr trm
+  where
+    mkExpr tm = tm <| fixed tmalloc
+
+
+fixed :: Term () -> Term ()
+fixed e = tmfix "_xs" (tystream $ tyalloc)
+          $ tmcons e (tmdelay tmalloc "_xs")

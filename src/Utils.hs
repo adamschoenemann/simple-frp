@@ -24,3 +24,8 @@ uncapitalize s = maybe "" id $ (\(x,xs) -> toLower x : xs) <$> uncons s
 
 trimHead :: String -> String
 trimHead = dropWhile isSpace
+
+safeLast :: [a] -> Maybe a
+safeLast [] = Nothing
+safeLast [x] = Just x
+safeLast (x : xs) = safeLast xs
