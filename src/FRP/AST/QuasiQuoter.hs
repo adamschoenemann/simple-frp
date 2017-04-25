@@ -85,16 +85,16 @@ quoteFRPDeclTy s = do
 -- if there is no such definition, the last definition in the quasiquote
 quoteFRPProgTy s = do
   prog <- quoteParseFRP P.prog s
-  let Program decls = prog
+  let decls = _decls prog
   mainDecl <-
         maybe (fail "empty programs are not allowed") return $
           find (\d -> _name d == "main") decls <|> safeLast decls
   case inferProg emptyCtx prog of
     Left err -> fail . show $ err
     Right (Ctx ctx) ->
-      let ty = _type mainDecl
-          sing = typeToSingExp ty
-          trm = dataToExpQ (const Nothing) (unitFunc $ _body mainDecl)
+      let ty      = _type mainDecl
+          sing    = typeToSingExp ty
+          trm     = dataToExpQ (const Nothing) (unitFunc $ _body mainDecl)
           globals = dataToExpQ (const Nothing) (globalEnv decls)
       in  runQ [| FRP $(globals) $(trm) $(sing) |]
 

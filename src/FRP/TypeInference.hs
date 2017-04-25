@@ -331,7 +331,7 @@ inferDecl ctx decl = solveInfer ctx declInfer where
        return (t,q)
 
 inferProg :: Context t -> Program t -> Either (TyExcept t) (Context t)
-inferProg ctx (Program decls) =
+inferProg ctx (Program {_decls = decls}) =
   foldl fun (return ctx) decls
   where
     fun ctx decl@(Decl { _name, _ann, _type, _body }) =

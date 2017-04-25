@@ -247,7 +247,7 @@ tick st
       tock acc k (SVNow _)  = acc { _store = M.delete k (_store acc) }
 
 evalProgram :: Program a -> (Value, EvalState)
-evalProgram (Program decls) =
+evalProgram (Program {_decls = decls}) =
   let main = maybe (error "no main function") id
            $ find (\d -> _name d == "main") decls
   in  case main of
@@ -271,7 +271,7 @@ runTermInEnv env trm =
       v                 -> v
 
 runProgram :: Program a -> Value
-runProgram (Program decls) = runTermInEnv globals startMain
+runProgram (Program {_decls = decls}) = runTermInEnv globals startMain
   where
     main = maybe (error "no main function") id
            $ find (\d -> _name d == "main") decls

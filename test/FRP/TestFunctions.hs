@@ -1,6 +1,8 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds       #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module FRP.TestFunctions where
 
@@ -65,7 +67,10 @@ frp_tails = unitFunc [decl|
 |]
 
 frp_map :: Decl ()
-frp_map = unitFunc [decl|
+frp_map = unitFunc frp_map_sp
+
+-- frp_map_sp :: Decl ()
+frp_map_sp = [decl|
   map : S alloc -> #(A -> B) -> S A -> S B
   map us h xs =
     let cons(u, delay(us')) = us in

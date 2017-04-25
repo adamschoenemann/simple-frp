@@ -12,4 +12,4 @@ prog :: Parser (Program SourcePos)
 prog = do
   decls <- many decl
   _ <- eof
-  return $ Program decls
+  return $ Program [] decls
