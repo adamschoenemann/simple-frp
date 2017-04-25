@@ -1,11 +1,11 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 module FRP
   ( module FRP.AST
@@ -14,10 +14,10 @@ module FRP
   )
   where
 
-import FRP.AST
-import FRP.AST.Construct
-import FRP.AST.Reflect
-import FRP.Semantics
+import           FRP.AST
+import           FRP.AST.Construct
+import           FRP.AST.Reflect
+import           FRP.Semantics
 
 
 
@@ -31,19 +31,19 @@ class FRPHask (t :: Ty) (a :: *) | t -> a where
 
 instance FRPHask TNat Int where
   toHask sing (VLit (LInt x)) = x
-  toHask sing v = haskErr "expected nat value" sing v
+  toHask sing v               = haskErr "expected nat value" sing v
 
   toFRP _ x = VLit . LInt $ x
 
 instance FRPHask TBool Bool where
   toHask sing (VLit (LBool x)) = x
-  toHask sing v = haskErr "expected bool value" sing v
+  toHask sing v                = haskErr "expected bool value" sing v
 
   toFRP s x = VLit . LBool $ x
 
 instance (FRPHask t1 a, FRPHask t2 b) => FRPHask (t1 :*: t2) (a,b) where
   toHask (SProd t1 t2) (VTup x y) = (toHask t1 x, toHask t2 y)
-  toHask sing v = haskErr "expected tuple value" sing v
+  toHask sing v                   = haskErr "expected tuple value" sing v
 
   toFRP (SProd s1 s2) (x,y) =
     let t1 = toFRP s1 x
@@ -53,7 +53,7 @@ instance (FRPHask t1 a, FRPHask t2 b) => FRPHask (t1 :*: t2) (a,b) where
 instance (FRPHask t1 a, FRPHask t2 b) => FRPHask (t1 :+: t2) (Either a b) where
   toHask (SSum t1 t2) (VInl x) = Left (toHask t1 x)
   toHask (SSum t1 t2) (VInr x) = Right (toHask t2 x)
-  toHask sing v = haskErr "expected tuple value" sing v
+  toHask sing v                = haskErr "expected tuple value" sing v
 
   toFRP (SSum s1 _) (Left x) =
     let v = toFRP s1 x
@@ -64,7 +64,7 @@ instance (FRPHask t1 a, FRPHask t2 b) => FRPHask (t1 :+: t2) (Either a b) where
 
 instance FRPHask t1 a => FRPHask (TStream t1) [a] where
   toHask sing@(SStream s) (VCons x l) = toHask s x : toHask sing l
-  toHask sing v = haskErr "expected stream value" sing v
+  toHask sing v                       = haskErr "expected stream value" sing v
 
   toFRP (SStream s) (x : xs) = VCons (toFRP s x) (toFRP (SStream s) xs)
 
@@ -75,7 +75,7 @@ instance FRPHask t1 a => FRPHask (TStream t1) [a] where
 transform :: (FRPHask t1 a, FRPHask t2 b)
           => FRP (TStream TAlloc :->: TStream t1 :->: TStream t2)
           -> [a] -> [b]
-transform frp@(FRP trm sing@(SArr us (SArr (SStream s1) (SStream s2)))) as =
+transform frp@(FRP env trm sing@(SArr us (SArr (SStream s1) (SStream s2)))) as =
   map (toHask s2) $ toHaskList $ runTermInEnv initEnv $ mkExpr trm s1 as
   where
     -- unused right now

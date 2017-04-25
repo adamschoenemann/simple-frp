@@ -1,29 +1,31 @@
+{-# LANGUAGE NamedFieldPuns             #-}
 
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TupleSections              #-}
 
 module FRP.TypeInference where
 
 import           Control.Monad.Except
-import           Control.Monad.State
-import           Control.Monad.RWS (RWST, tell, local, ask, runRWST, MonadReader)
 import           Control.Monad.Identity
-import           FRP.Pretty
-import           Data.Map.Strict                (Map)
-import qualified Data.Map.Strict                as M
-import           Data.Set                       (Set)
-import qualified Data.Set                       as S
-import           FRP.AST
-import           FRP.AST.Construct (tmvar)
+import           Control.Monad.RWS      (MonadReader, RWST, ask, local, runRWST,
+                                         tell)
+import           Control.Monad.State
+import           Data.List              (nub)
+import           Data.Map.Strict        (Map)
+import qualified Data.Map.Strict        as M
+import           Data.Maybe             (isJust)
+import           Data.Set               (Set)
+import qualified Data.Set               as S
 import           Debug.Trace
-import           Data.Maybe (isJust)
-import           Data.List (nub)
+import           FRP.AST
+import           FRP.AST.Construct      (tmvar)
+import           FRP.Pretty
 
 
 data Scheme a = Forall [TVar] (Type a)
@@ -193,16 +195,16 @@ s1 `compose` s2 = M.map (apply s1) s2 `M.union` s1
 
 instance Substitutable (Type a) a where
   apply st typ = case typ of
-    TyVar    a name   -> M.findWithDefault typ name st
-    TyProd   a l r    -> TyProd   a (apply st l) (apply st r)
-    TySum    a l r    -> TySum    a (apply st l) (apply st r)
-    TyArr    a t1 t2  -> TyArr    a (apply st t1) (apply st t2)
-    TyLater  a ty     -> TyLater  a (apply st ty)
-    TyStable a ty     -> TyStable a (apply st ty)
-    TyStream a ty     -> TyStream a (apply st ty)
-    TyRec    a nm ty  -> TyRec    a nm (apply st ty) -- FIXME: Is this correct?
-    TyAlloc  a        -> TyAlloc  a
-    TyPrim{}          -> typ
+    TyVar    a name  -> M.findWithDefault typ name st
+    TyProd   a l r   -> TyProd   a (apply st l) (apply st r)
+    TySum    a l r   -> TySum    a (apply st l) (apply st r)
+    TyArr    a t1 t2 -> TyArr    a (apply st t1) (apply st t2)
+    TyLater  a ty    -> TyLater  a (apply st ty)
+    TyStable a ty    -> TyStable a (apply st ty)
+    TyStream a ty    -> TyStream a (apply st ty)
+    TyRec    a nm ty -> TyRec    a nm (apply st ty) -- FIXME: Is this correct?
+    TyAlloc  a       -> TyAlloc  a
+    TyPrim{}         -> typ
 
   ftv = \case
     TyVar    _ name   -> S.singleton name
@@ -328,11 +330,21 @@ inferDecl ctx decl = solveInfer ctx declInfer where
        uni t (_type decl)
        return (t,q)
 
+inferProg :: Context t -> Program t -> Either (TyExcept t) (Context t)
+inferProg ctx (Program decls) =
+  foldl fun (return ctx) decls
+  where
+    fun ctx decl@(Decl { _name, _ann, _type, _body }) =
+      do ctx0 <- ctx
+         qs <- inferDecl ctx0 decl
+         return $ extend ctx0 (_name, qs)
+
+
 solveInfer :: Context t -> Infer t (Type t, Qualifier) -> Either (TyExcept t) (QualSchm t)
 solveInfer ctx inf = case runInfer ctx inf of
   Left err -> Left err
   Right ((ty,q), cs) -> case runSolve (un cs) of
-    Left err -> Left err
+    Left err             -> Left err
     Right (subst, unies) -> Right $ (closeOver $ apply subst ty, q)
   where
     closeOver = normalize . generalize emptyCtx
@@ -387,7 +399,7 @@ laterCtx :: Context t -> Context t
 laterCtx (Ctx c1) =
   Ctx $ M.map (maybe (error "laterCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
     mapper (t,q) = case q of
-      QNow -> Nothing
+      QNow    -> Nothing
       QStable -> Just (t, QStable)
       QLater  -> Just (t, QNow)
 
@@ -395,7 +407,7 @@ stableCtx :: Context t -> Context t
 stableCtx (Ctx c1) =
   Ctx $ M.map (maybe (error "laterCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
     mapper (t,q) = case q of
-      QNow -> Nothing
+      QNow    -> Nothing
       QStable -> Just (t, QStable)
       QLater  -> Nothing
 
@@ -682,6 +694,6 @@ normalize (Forall _ body) = Forall (map snd ord) (normtype ord body)
 
       TyVar    a name   ->
         case Prelude.lookup name ord of
-          Just x -> TyVar a x
+          Just x  -> TyVar a x
           Nothing -> error $ "type variable " ++ name ++ " not in signature"
 

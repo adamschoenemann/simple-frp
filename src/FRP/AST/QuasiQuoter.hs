@@ -1,21 +1,21 @@
+{-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DataKinds #-}
 
 module FRP.AST.QuasiQuoter where
 
-import qualified FRP.Parser.Program as P
-import qualified FRP.Parser.Decl    as P
-import qualified FRP.Parser.Term    as P
+import qualified FRP.Parser.Decl           as P
+import qualified FRP.Parser.Program        as P
+import qualified FRP.Parser.Term           as P
 
-import FRP.AST
-import FRP.TypeInference
-import FRP.AST.Reflect
-import FRP.Pretty
+import           FRP.AST
+import           FRP.AST.Reflect
+import           FRP.Pretty
+import           FRP.TypeInference
 
-import Text.Parsec.String
-import Text.Parsec
-import Language.Haskell.TH.Quote
-import Language.Haskell.TH
+import           Language.Haskell.TH
+import           Language.Haskell.TH.Quote
+import           Text.Parsec
+import           Text.Parsec.String
 
 prog :: QuasiQuoter
 prog = QuasiQuoter
@@ -66,7 +66,20 @@ quoteFRPDeclTy s = do
     Right ty -> do
           let sing = typeToSingExp (_type dcl)
           let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
-          runQ [| FRP $(trm) $(sing) |]
+          runQ [| FRP initEnv $(trm) $(sing) |]
+
+quoteFRPProgTy s = do
+  prog <- quoteParseFRP P.prog s
+  case inferProg initEnv prog of
+    Left err -> fail . show $ err
+    Right (Ctx ctx) -> do
+      case M.lookup "main" ctx of
+        Just main -> _type main
+        Nothing -> _type 
+      
+          let sing = typeToSingExp (_type dcl)
+          let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
+          runQ [| FRP initEnv $(trm) $(sing) |]
 
 
 

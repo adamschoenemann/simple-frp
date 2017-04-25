@@ -1,24 +1,23 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE AutoDeriveTypeable  #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE PolyKinds           #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE AutoDeriveTypeable #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeOperators       #-}
 
 module FRP.AST.Reflect where
 
-import Language.Haskell.TH ( runQ, Q, Exp(..), Pat(..), mkName, Lit(..)
-                           , ExpQ
-                           )
+import           Language.Haskell.TH (Exp (..), ExpQ, Lit (..), Pat (..), Q,
+                                      mkName, runQ)
 
-import FRP.AST
-import FRP.AST.Construct
+import           FRP.AST
+import           FRP.AST.Construct
 import qualified Language.Haskell.TH as T
 
 import           Data.Data
@@ -64,7 +63,7 @@ reify = \case
   SStream t -> reify t
 
 data FRP :: Ty -> * where
-  FRP :: Term () -> Sing t -> FRP t
+  FRP :: Env -> Term () -> Sing t -> FRP t
 
 deriving instance Typeable (FRP t)
 deriving instance Show (FRP t)
