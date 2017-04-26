@@ -28,12 +28,12 @@ main :: IO ()
 main = hspec spec
 
 shouldInfer :: (Eq (f ()), Show (f ()), Functor f, Show t, Eq t)
-            => Either (TyExcept t) ((f a, Qualifier), [Constraint t])
+            => Either (TyExcept t) ((f a, Qualifier), InferWrite t)
             -> (f (), Qualifier, [Constraint ()])
             -> Expectation
 shouldInfer eith expect = case eith of
   Left err  -> expectationFailure (ppshow err)
-  Right ((t,q), cs) -> (unitFunc t, q, fmap unitFunc cs) `shouldBe` expect
+  Right ((t,q), (cs, stbls)) -> (unitFunc t, q, fmap unitFunc cs) `shouldBe` expect
 
 shouldTyErr :: Show t => Either e (QualSchm t) -> Expectation
 shouldTyErr = \case

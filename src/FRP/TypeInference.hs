@@ -163,10 +163,10 @@ letters = infiniteSupply alphabet where
   addPrefixes xs n = (map (\x -> addPrefix x n) xs) ++ (addPrefixes xs (n+1))
   addPrefix x n = show n ++ x
 
-runInfer' :: Infer t a -> Either (TyExcept t) (a, [Constraint t])
+runInfer' :: Infer t a -> Either (TyExcept t) (a, InferWrite t)
 runInfer' = runInfer emptyCtx
 
-runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, [Constraint t])
+runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, InferWrite t)
 runInfer ctx inf =
   let r = runExcept (runRWST inf ctx letters)
   in  noSnd <$> r
@@ -241,6 +241,10 @@ instance Substitutable (Constraint a) a where
    apply s (Constraint (t1, t2)) = Constraint (apply s t1, apply s t2)
    ftv (Constraint (t1, t2)) = ftv t1 +++ ftv t2
 
+instance Substitutable (StableTy a) a where
+   apply s (StableTy t) = StableTy (apply s t)
+   ftv (StableTy t) = ftv t
+
 occursCheck :: Substitutable a b => TVar -> a -> Bool
 occursCheck a t = a `S.member` ftv t
 
@@ -265,10 +269,11 @@ generalize ctx t = Forall as t
 
 -- monad to do inference by constraint generation first and the solving
 type InferState = [String]
+type InferWrite t = ([Constraint t], [StableTy t])
 
 type Infer t a =
   (RWST (Context t)
-        [Constraint t]
+        (InferWrite t)
         InferState
         (Except (TyExcept t))
         a
@@ -289,6 +294,21 @@ instance Pretty [Constraint a] where
 instance Show (Constraint a) where
   show = ppshow
 
+newtype StableTy t = StableTy (Type t)
+  deriving (Eq)
+
+instance Functor StableTy where
+  fmap f (StableTy t) = StableTy (fmap f t)
+
+instance Pretty (StableTy a) where
+  ppr n (StableTy t) = ppr n t <+> "should be stable"
+
+instance Pretty [StableTy a] where
+  ppr n cs = vcat $ map (ppr 0) cs
+
+instance Show (StableTy a) where
+  show = ppshow
+
 
 infixr 0 .=.
 (.=.) :: Type t -> Type t -> Constraint t
@@ -300,7 +320,7 @@ newtype Unifier t = Unifier (Subst t, [Constraint t])
 instance Pretty (Unifier t) where
   ppr n (Unifier (st, cs)) =
     text "subst:" <+> ppr 0 st $$
-    text "constraints:" $$ nest 2 (ppr 0 cs)
+    text "constraints:"  $$ nest 2 (ppr 0 cs)
 
 emptyUnifier :: Unifier t
 emptyUnifier = Unifier (nullSubst, [])
@@ -345,9 +365,10 @@ inferProg ctx (Program {_decls = decls}) =
 solveInfer :: Context t -> Infer t (Type t, Qualifier) -> Either (TyExcept t) (QualSchm t)
 solveInfer ctx inf = case runInfer ctx inf of
   Left err -> Left err
-  Right ((ty,q), cs) -> case runSolve (un cs) of
+  Right ((ty,q), (cs, sts)) -> case runSolve (un cs) of
     Left err             -> Left err
-    Right (subst, unies) -> Right $ (closeOver $ apply subst ty, q)
+    Right (subst, unies) ->
+      trace (ppshow $ apply subst sts) (Right $ (closeOver $ apply subst ty, q))
   where
     closeOver = normalize . generalize emptyCtx
     un cs = Unifier (nullSubst, cs)
@@ -378,18 +399,28 @@ unifyMany (t1 : ts1) (t2 : ts2) =
      return $ Unifier (su2 `compose` su1, cs1 ++ cs2)
 unifyMany t1 t2 = typeErr (UnificationMismatch t1 t2) emptyCtx
 
+
 solver :: Solve t (Subst t)
 solver = do
+  subst <- solveConstraints
+  -- traceM (ppshow subst)
+  return subst
+
+solveConstraints :: Solve t (Subst t)
+solveConstraints = do
   Unifier (su, cs) <- get
   case cs of
     [] -> return su
     (Constraint (t1,t2) : cs0) -> do
       Unifier (su1, cs1) <- unifies t1 t2
       put $ Unifier (su1 `compose` su, cs1 ++ (apply su1 cs0))
-      solver
+      solveConstraints
 
 uni :: Type t -> Type t -> Infer t ()
-uni t1 t2 = tell [Constraint (t1, t2)]
+uni t1 t2 = tell ([Constraint (t1, t2)], [])
+
+stable :: Type t -> Infer t ()
+stable t = tell ([], [StableTy t])
 
 unionCtx :: Context t -> Context t -> Context t
 unionCtx (Ctx c1) (Ctx c2) = Ctx (c1 `M.union` c2)
@@ -529,9 +560,10 @@ infer term = case term of
 
   TmPromote a e -> do
     (t1, _) <- inferNow e
-    tv <- TyVar a <$> freshName
-    uni tv (TyStable a t1)
-    return (tv, QNow)
+    stable t1
+    -- tv <- TyVar a <$> freshName
+    -- uni tv (TyStable a t1)
+    return (TyStable a t1, QNow)
 
   TmStable a e -> do
     t1 <- inferStable e
