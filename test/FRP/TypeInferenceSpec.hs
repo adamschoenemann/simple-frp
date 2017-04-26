@@ -339,18 +339,18 @@ spec = do
                    |-> tyrec "af" (tynat .*. "af"), QNow)
 
       let trm = [decl|
-        const : (mu af. alloc * af) -> a -> (mu af. a * af)
+        const : (mu af. alloc * af) -> Nat -> (mu af. Nat * af)
         const us n =
           let (u, delay(us')) = out (mu af. alloc * af) us in
           let stable(x) = promote(n) in
-          into (mu af. a * af) (x, delay(u, const us' x)).
+          into (mu af. Nat * af) (x, delay(u, const us' x)).
       |]
       it "const with rec types" $ do
         inferTerm' (_body trm) `shouldSolve`
-          (Forall ["0a"] $
+          (toScheme $
                   (tyrec "af" (tyalloc .*. "af"))
-              |-> "0a"
-              |-> tyrec "af" ("0a" .*. "af"), QNow)
+              |-> tynat
+              |-> tyrec "af" (tynat .*. "af"), QNow)
 
       let trm = [decl|
         tails : (mu af. alloc * af) -> (mu af. a * af) -> (mu af. (mu bf. a * bf) * af)
@@ -433,12 +433,12 @@ spec = do
 
   describe "test functions" $ do
     it "works for const" $ do
-      inferTerm' (_body frp_const) `shouldSolve`
-        (Forall ["0a"] $ tystream tyalloc |-> "0a" |-> tystream "0a", QNow)
+      inferDecl' (frp_const) `shouldSolve`
+        (toScheme $ tystream tyalloc |-> tynat |-> tystream tynat, QNow)
 
     it "works for const_fix" $ do
-      inferTerm' (_body frp_const_fix) `shouldSolve`
-        (Forall ["0a"] $ tystream tyalloc |-> "0a" |-> tystream "0a", QNow)
+      inferDecl' (frp_const_fix) `shouldSolve`
+        (toScheme $ tystream tyalloc |-> tynat |-> tystream tynat, QNow)
 
     it "works for nats" $ do
       inferTerm' (_body frp_nats) `shouldSolve`

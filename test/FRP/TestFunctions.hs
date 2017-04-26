@@ -15,7 +15,7 @@ frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
        ]
 
 frp_const = unitFunc [decl|
-  const : S alloc -> a -> S a
+  const : S alloc -> Nat -> S Nat
   const us n =
     let cons(u, delay(us')) = us in
     let stable(x) = promote(n) in

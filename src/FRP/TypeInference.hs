@@ -16,7 +16,7 @@ import           Control.Monad.Identity
 import           Control.Monad.RWS      (MonadReader, RWST, ask, local, runRWST,
                                          tell)
 import           Control.Monad.State
-import           Data.List              (nub)
+import           Data.List              (nub, find)
 import           Data.Map.Strict        (Map)
 import qualified Data.Map.Strict        as M
 import           Data.Maybe             (isJust)
@@ -294,7 +294,7 @@ instance Pretty [Constraint a] where
 instance Show (Constraint a) where
   show = ppshow
 
-newtype StableTy t = StableTy (Type t)
+newtype StableTy t = StableTy { unStableTy :: (Type t) }
   deriving (Eq)
 
 instance Functor StableTy where
@@ -368,7 +368,9 @@ solveInfer ctx inf = case runInfer ctx inf of
   Right ((ty,q), (cs, sts)) -> case runSolve (un cs) of
     Left err             -> Left err
     Right (subst, unies) ->
-      trace (ppshow $ apply subst sts) (Right $ (closeOver $ apply subst ty, q))
+      case find (not . isStable) $ map unStableTy $ apply subst sts of
+        Nothing -> Right $ (closeOver $ apply subst ty, q)
+        Just notStable -> Left $ TyExcept (NotStableTy notStable, emptyCtx)
   where
     closeOver = normalize . generalize emptyCtx
     un cs = Unifier (nullSubst, cs)
