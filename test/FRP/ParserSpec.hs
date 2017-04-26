@@ -509,7 +509,7 @@ spec = do
       let constTy = tyarr (tystream tyalloc) (tyarr tynat (tystream tynat))
       unitFunc r `shouldBe`
         Program
-          { _decls =
+          { _imports = [], _decls =
             [ Decl
                 { _ann  = ()
                 , _type = constTy
@@ -560,7 +560,7 @@ spec = do
                         (tyarr tynat (tystream tynat)))
       let natTy = tyarr (tystream tyalloc) (tystream tynat)
       let exp = Program
-            { _decls = [ Decl
+            { _imports = [], _decls = [ Decl
                          { _ann  = ()
                          , _type = natTy
                          , _name = "nats"

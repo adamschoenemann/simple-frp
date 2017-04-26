@@ -7,7 +7,7 @@ import qualified FRP.Parser.Decl           as P
 import qualified FRP.Parser.Program        as P
 import qualified FRP.Parser.Term           as P
 
-import           FRP.AST
+import           FRP.AST hiding (Name)
 import           FRP.AST.Reflect
 import           FRP.Pretty
 import           FRP.TypeInference
@@ -73,12 +73,15 @@ quoteFRPDecl = quoteFRPParser P.decl
 
 quoteFRPDeclTy s = do
   dcl <- quoteParseFRP P.decl s
-  case inferDecl' dcl of
-    Left err -> fail . show $ err
-    Right ty -> do
-          let sing = typeToSingExp (_type dcl)
-          let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
-          runQ [| FRP initEnv $(trm) $(sing) |]
+  let sing = typeToSingExp (_type dcl)
+  let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
+  let dclExp = dataToExpQ (const Nothing) (unitFunc dcl)
+  runQ [|
+      case inferDecl' $(dclExp) of
+        Left err -> fail . show $ err
+        Right ty -> do
+              FRP initEnv $(trm) $(sing)
+      |]
 
 -- quotes an FRP program
 -- the resulting type reflects the type of the definition named "main" or,
@@ -86,6 +89,10 @@ quoteFRPDeclTy s = do
 quoteFRPProgTy s = do
   prog <- quoteParseFRP P.prog s
   let decls = _decls prog
+  let imports = expsToExp <$> (sequence $ map getImport $ _imports prog)
+  let decls' = dataToExpQ (const Nothing) decls :: Q Exp
+  merged <- varE (mkName "++") `appE` imports `appE` decls'
+  -- let imported = map (\nm -> [|_decls $(nm)|]) imports
   mainDecl <-
         maybe (fail "empty programs are not allowed") return $
           find (\d -> _name d == "main") decls <|> safeLast decls
@@ -96,8 +103,18 @@ quoteFRPProgTy s = do
           sing    = typeToSingExp ty
           trm     = dataToExpQ (const Nothing) (unitFunc $ _body mainDecl)
           globals = dataToExpQ (const Nothing) (globalEnv decls)
-      in  runQ [| FRP $(globals) $(trm) $(sing) |]
+      in  conE (mkName "FRP") `appE` globals `appE` trm `appE` sing
+      -- in  runQ [| FRP $(globals) $(trm) $(sing) |]
 
+expsToExp :: [Exp] -> Exp
+expsToExp = foldr (\x acc -> ConE (mkName ":") `AppE` x `AppE` acc)
+                          (ConE (mkName "[]"))
+
+
+getImport :: String -> Q Exp
+getImport imp = do
+  nm <- lookupValueName imp
+  maybe (fail $ "import " ++ imp ++ " not found in scope") varE nm
 
 
 quoteFRPTerm = quoteFRPParser P.term
