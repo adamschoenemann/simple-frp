@@ -91,5 +91,7 @@ typeToSingExp typ = case typ of
     in  runQ [| SStream $(e) |]
   TyStable _ t -> typeToSingExp t
   TyLater  _ t -> typeToSingExp t
+  TyVar _ _    -> fail "FRP types must be fully instantiated when marshalled"
+  TyRec _ _ _  -> fail "Recursive types are not supported"
 
 

@@ -66,7 +66,7 @@ lookupCtx nm = do
     Just (sc, q) | q == QNow || q == QStable ->
       do t <- instantiate sc
          return t
-    Nothing -> typeErr (UnknownIdentifier nm) (Ctx m)
+    _ -> typeErr (UnknownIdentifier nm) (Ctx m)
 
 isStable :: Type t -> Bool
 isStable (TyPrim _ _ )  = True

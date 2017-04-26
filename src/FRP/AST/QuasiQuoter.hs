@@ -73,15 +73,12 @@ quoteFRPDecl = quoteFRPParser P.decl
 
 quoteFRPDeclTy s = do
   dcl <- quoteParseFRP P.decl s
-  let sing = typeToSingExp (_type dcl)
-  let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
-  let dclExp = dataToExpQ (const Nothing) (unitFunc dcl)
-  runQ [|
-      case inferDecl' $(dclExp) of
-        Left err -> fail . show $ err
-        Right ty -> do
-              FRP initEnv $(trm) $(sing)
-      |]
+  case inferDecl' dcl of
+    Left err -> fail . show $ err
+    Right ty -> do
+          let sing = typeToSingExp (_type dcl)
+          let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
+          runQ [| FRP initEnv $(trm) $(sing) |]
 
 -- quotes an FRP program
 -- the resulting type reflects the type of the definition named "main" or,
@@ -89,21 +86,23 @@ quoteFRPDeclTy s = do
 quoteFRPProgTy s = do
   prog <- quoteParseFRP P.prog s
   let decls = _decls prog
-  let imports = expsToExp <$> (sequence $ map getImport $ _imports prog)
-  let decls' = dataToExpQ (const Nothing) decls :: Q Exp
-  merged <- varE (mkName "++") `appE` imports `appE` decls'
-  -- let imported = map (\nm -> [|_decls $(nm)|]) imports
+  -- stuff related to attempting to implement imports. Didn't work :/
+  {- let imports = expsToExp <$> (sequence $ map getImport $ _imports prog)
+     let decls' = dataToExpQ (const Nothing) decls :: Q Exp
+     let merged = varE (mkName "++") `appE` imports `appE` decls'
+     let mergedData = [|$(merged)|] :: [Decl ()]
+  -}
   mainDecl <-
         maybe (fail "empty programs are not allowed") return $
           find (\d -> _name d == "main") decls <|> safeLast decls
   case inferProg emptyCtx prog of
     Left err -> fail . show $ err
-    Right (Ctx ctx) ->
+    Right (Ctx ctx) -> do
       let ty      = _type mainDecl
-          sing    = typeToSingExp ty
-          trm     = dataToExpQ (const Nothing) (unitFunc $ _body mainDecl)
-          globals = dataToExpQ (const Nothing) (globalEnv decls)
-      in  conE (mkName "FRP") `appE` globals `appE` trm `appE` sing
+      sing    <- typeToSingExp ty
+      trm     <- dataToExpQ (const Nothing) (unitFunc $ _body mainDecl)
+      globals <- dataToExpQ (const Nothing) (globalEnv decls)
+      return (ConE (mkName "FRP") `AppE` globals `AppE` trm `AppE` sing)
       -- in  runQ [| FRP $(globals) $(trm) $(sing) |]
 
 expsToExp :: [Exp] -> Exp
