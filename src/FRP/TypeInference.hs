@@ -334,21 +334,21 @@ runSolve :: Unifier t -> Either (TyExcept t) (Subst t, Unifier t)
 runSolve un = runExcept (runStateT (unSolver solver) un) where
   unSolver (Solve m) = m
 
-inferTerm' :: Term t -> Either (TyExcept t) (QualSchm t)
+inferTerm' :: Term t -> Either (TyExcept t) (Scheme t)
 inferTerm' = inferTerm emptyCtx
 
-inferTerm :: Context t -> Term t -> Either (TyExcept t) (QualSchm t)
+inferTerm :: Context t -> Term t -> Either (TyExcept t) (Scheme t)
 inferTerm ctx trm = solveInfer ctx (infer trm)
 
-inferDecl' :: Decl t -> Either (TyExcept t) (QualSchm t)
+inferDecl' :: Decl t -> Either (TyExcept t) (Scheme t)
 inferDecl' = inferDecl emptyCtx
 
-inferDecl :: Context t -> Decl t -> Either (TyExcept t) (QualSchm t)
+inferDecl :: Context t -> Decl t -> Either (TyExcept t) (Scheme t)
 inferDecl ctx decl = solveInfer ctx declInfer where
   declInfer =
-    do (t,q) <- infer (_body decl)
+    do t <- infer (_body decl)
        uni t (_type decl)
-       return (t,q)
+       return t
 
 inferProg :: Context t -> Program t -> Either (TyExcept t) (Context t)
 inferProg ctx (Program {_decls = decls}) =
@@ -356,20 +356,20 @@ inferProg ctx (Program {_decls = decls}) =
   where
     fun ctx decl@(Decl { _name, _ann, _type, _body }) =
       do ctx0 <- ctx
-         (t, q) <- inferDecl ctx0 decl
+         t <- inferDecl ctx0 decl
          -- top-level definitions are inherently stable, since they cannot
          -- capture any non-stable values
          return $ extend ctx0 (_name, (t, QStable))
 
 
-solveInfer :: Context t -> Infer t (Type t, Qualifier) -> Either (TyExcept t) (QualSchm t)
+solveInfer :: Context t -> Infer t (Type t) -> Either (TyExcept t) (Scheme t)
 solveInfer ctx inf = case runInfer ctx inf of
   Left err -> Left err
-  Right ((ty,q), (cs, sts)) -> case runSolve (un cs) of
+  Right (ty, (cs, sts)) -> case runSolve (un cs) of
     Left err             -> Left err
     Right (subst, unies) ->
       case find (not . isStable) $ map unStableTy $ apply subst sts of
-        Nothing -> Right $ (closeOver $ apply subst ty, q)
+        Nothing -> Right (closeOver $ apply subst ty)
         Just notStable -> Left $ TyExcept (NotStableTy notStable, emptyCtx)
   where
     closeOver = normalize . generalize emptyCtx
@@ -454,162 +454,163 @@ inStableCtx :: (Name, QualSchm t) -> Infer t a -> Infer t a
 inStableCtx (x, sc) m = local scope m where
   scope ctx = (stableCtx . remove ctx $ x) `extend` (x, sc)
 
-inferNow :: Term t -> Infer t (Type t, Qualifier)
+inferNow :: Term t -> Infer t (Type t)
 inferNow expr = do
-  (t, q) <- infer expr
-  ctx <- ask
-  if (q == QNow || q == QStable)
-    then return (t,QNow)
-    else typeErr (NotNow expr) ctx
+  t <- infer expr
+  return t
+  -- ctx <- ask
+  -- if (q == QNow || q == QStable)
+  --   then return (t,QNow)
+  --   else typeErr (NotNow expr) ctx
 
-inferLater :: Term t -> Infer t (Type t, Qualifier)
+inferLater :: Term t -> Infer t (Type t)
 inferLater expr = do
-  ctx0 <- ask
-  (t, q) <- local laterCtx $ infer expr
-  if (q == QNow)
-    then return (t,q)
-    else typeErr (NotLater expr) ctx0
+  t <- local laterCtx $ infer expr
+  return t
+  -- ctx0 <- ask
+  -- if (q == QNow)
+  --   then return (t,q)
+  --   else typeErr (NotLater expr) ctx0
 
 inferStable :: Term t -> Infer t (Type t)
 inferStable expr = do
-  (t, q) <- local stableCtx $ infer expr
-  if (q == QNow )
-    then return t
-    else typeErr' (NotStable expr)
+  t <- local stableCtx $ infer expr
+  return t
+  -- if (q == QNow )
+  --   then return t
+  --   else typeErr' (NotStable expr)
 
-infer :: Term t -> Infer t (Type t, Qualifier)
+infer :: Term t -> Infer t (Type t)
 infer term = case term of
-  TmLit a (LInt _)  -> return (TyPrim a TyNat, QNow)
-  TmLit a (LBool _) -> return (TyPrim a TyBool, QNow)
-  TmAlloc a         -> return (TyAlloc a, QNow)
+  TmLit a (LInt _)  -> return (TyPrim a TyNat)
+  TmLit a (LBool _) -> return (TyPrim a TyBool)
+  TmAlloc a         -> return (TyAlloc a)
   TmPntr a l        -> typeErr' (NotSyntax term)
   TmPntrDeref a l   -> typeErr' (NotSyntax term)
 
   TmFst a e -> do
-    (t1, _) <- inferNow e
+    t1 <- inferNow e
     tv1 <- TyVar a <$> freshName
     tv2 <- TyVar a <$> freshName
     uni t1 (TyProd a tv1 tv2)
-    return (tv1, QNow)
+    return (tv1)
 
   TmSnd a e -> do
-    (t1, _) <- inferNow e
+    t1 <- inferNow e
     tv1 <- TyVar a <$> freshName
     tv2 <- TyVar a <$> freshName
     uni t1 (TyProd a tv1 tv2)
-    return (tv2, QNow)
+    return (tv2)
 
   TmTup a e1 e2 -> do
-    (t1, _) <- inferNow e1
-    (t2, _) <- inferNow e2
-    return (TyProd a t1 t2, QNow)
+    t1 <- inferNow e1
+    t2 <- inferNow e2
+    return (TyProd a t1 t2)
 
   TmVar a x -> do
     t <- lookupCtx x
-    return (t, QNow)
+    return (t)
 
   TmLam a x mty e -> do
     tv <- TyVar a <$> freshName
-    (t, q) <- inCtx (x, (Forall [] tv, QNow)) (inferNow e)
+    t <- inCtx (x, (Forall [] tv, QNow)) (inferNow e)
     maybe (return ()) (uni tv) mty -- unify with type ann
-    return (TyArr a tv t, q)
+    return (TyArr a tv t)
 
   TmApp a e1 e2 -> do
-    (t1, _) <- inferNow e1
-    (t2, _) <- inferNow e2
+    t1 <- inferNow e1
+    t2 <- inferNow e2
     tv <- TyVar a <$> freshName
     uni t1 (TyArr a t2 tv)
-    return (tv, QNow)
+    return (tv)
 
   TmLet a p e1 e2 -> do
-    (t1, _) <- inferNow e1
+    t1 <- inferNow e1
     ctx2 <- inferPtn p t1
     local (`unionCtx` ctx2) (inferNow e2)
 
   TmFix a x mty e -> do
     tv <- TyVar a <$> freshName
-    (t, q) <- inStableCtx (x, (Forall [] tv, QLater)) (inferNow e)
+    t <- inStableCtx (x, (Forall [] tv, QLater)) (inferNow e)
     uni tv t
     maybe (return ()) (uni tv) mty -- unify with type ann
-    return (tv, QNow)
+    return (tv)
 
   TmBinOp a op e1 e2 -> do
-    (t1, q1) <- inferNow e1
-    (t2, q2) <- inferNow e2
+    t1 <- inferNow e1
+    t2 <- inferNow e2
     tv <- TyVar a <$> freshName
     let u1 = TyArr a t1 (TyArr a t2 tv)
     u2 <- binOpTy a op
     uni u1 u2
-    return (tv, QNow)
+    return (tv)
 
   TmITE a cond tr fl -> do
-    (t1,q1) <- inferNow cond
-    (t2,q2) <- inferNow tr
-    (t3,q3) <- inferNow fl
+    t1 <- inferNow cond
+    t2 <- inferNow tr
+    t3 <- inferNow fl
     uni t1 (TyPrim a TyBool)
     uni t2 t3
-    return (t2, QNow)
+    return (t2)
 
   TmCons a hd tl -> do
-    (t1,q1) <- inferNow hd
-    (t2,q2) <- inferNow tl
+    t1 <- inferNow hd
+    t2 <- inferNow tl
     tv <- TyVar a <$> freshName
     uni t2 (TyLater a (TyStream a t1))
     uni tv (TyStream a t1)
-    return (tv, QNow)
+    return (tv)
 
   TmPromote a e -> do
-    (t1, _) <- inferNow e
+    t1 <- inferNow e
     stable t1
-    -- tv <- TyVar a <$> freshName
-    -- uni tv (TyStable a t1)
-    return (TyStable a t1, QNow)
+    return (TyStable a t1)
 
   TmStable a e -> do
     t1 <- inferStable e
     tv <- TyVar a <$> freshName
     uni tv (TyStable a t1)
-    return (tv, QNow)
+    return (tv)
 
   TmDelay a u e -> do
-    (tu, _) <- inferNow u
+    tu <- inferNow u
     uni tu (TyAlloc a)
-    (te, _) <- inferLater e
+    te <- inferLater e
     tv <- TyVar a <$> freshName
     uni tv (TyLater a te)
-    return (tv, QNow)
+    return (tv)
 
   TmInl a e -> do
-    (ty, _) <- inferNow e
+    ty <- inferNow e
     tv <- TyVar a <$> freshName
     tvr <- TyVar a <$> freshName
     uni tv (TySum a ty tvr)
-    return (tv, QNow)
+    return (tv)
 
   TmInr a e -> do
-    (ty, _) <- inferNow e
+    ty <- inferNow e
     tv <- TyVar a <$> freshName
     tvl <- TyVar a <$> freshName
     uni tv (TySum a tvl ty)
-    return (tv, QNow)
+    return (tv)
 
   TmCase a e (nm1, c1) (nm2, c2) -> do
-    (ty, _) <- inferNow e
+    ty <- inferNow e
     tvl <- TyVar a <$> freshName
     tvr <- TyVar a <$> freshName
     uni ty (TySum a tvl tvr)
-    (t1, _) <- inCtx (nm1, (Forall [] tvl, QNow)) $ inferNow c1
-    (t2, _) <- inCtx (nm2, (Forall [] tvr, QNow)) $ inferNow c2
+    t1 <- inCtx (nm1, (Forall [] tvl, QNow)) $ inferNow c1
+    t2 <- inCtx (nm2, (Forall [] tvr, QNow)) $ inferNow c2
     uni t1 t2
-    return (t1, QNow)
+    return (t1)
 
   TmInto ann tyann e -> do
     case tyann of
       TyRec a alpha tau -> do
-        (ty, _) <- inferNow e
+        ty <- inferNow e
         let substwith = (TyLater a $ TyRec a alpha tau)
         uni ty (apply (M.singleton alpha substwith) tau)
-        return (TyRec a alpha tau, QNow)
+        return (TyRec a alpha tau)
 
       _ -> do
         alpha <- freshName
@@ -619,11 +620,11 @@ infer term = case term of
   TmOut ann tyann e ->
     case tyann of
       TyRec a alpha tau' -> do
-        (tau, _) <- inferNow e
+        tau <- inferNow e
         uni tyann tau
         let substwith = (TyLater ann tau)
         let tau'' = apply (M.singleton alpha substwith) tau'
-        return (tau'', QNow)
+        return (tau'')
 
       _ -> do
         alpha <- freshName
