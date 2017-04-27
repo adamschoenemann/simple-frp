@@ -493,14 +493,14 @@ infer term = case term of
     tv1 <- TyVar a <$> freshName
     tv2 <- TyVar a <$> freshName
     uni t1 (TyProd a tv1 tv2)
-    return (tv1)
+    return tv1
 
   TmSnd a e -> do
     t1 <- inferNow e
     tv1 <- TyVar a <$> freshName
     tv2 <- TyVar a <$> freshName
     uni t1 (TyProd a tv1 tv2)
-    return (tv2)
+    return tv2
 
   TmTup a e1 e2 -> do
     t1 <- inferNow e1
@@ -522,7 +522,7 @@ infer term = case term of
     t2 <- inferNow e2
     tv <- TyVar a <$> freshName
     uni t1 (TyArr a t2 tv)
-    return (tv)
+    return tv
 
   TmLet a p e1 e2 -> do
     t1 <- inferNow e1
@@ -534,7 +534,7 @@ infer term = case term of
     t <- inStableCtx (x, (Forall [] tv, QLater)) (inferNow e)
     uni tv t
     maybe (return ()) (uni tv) mty -- unify with type ann
-    return (tv)
+    return tv
 
   TmBinOp a op e1 e2 -> do
     t1 <- inferNow e1
@@ -543,7 +543,7 @@ infer term = case term of
     let u1 = TyArr a t1 (TyArr a t2 tv)
     u2 <- binOpTy a op
     uni u1 u2
-    return (tv)
+    return tv
 
   TmITE a cond tr fl -> do
     t1 <- inferNow cond
@@ -551,7 +551,7 @@ infer term = case term of
     t3 <- inferNow fl
     uni t1 (TyPrim a TyBool)
     uni t2 t3
-    return (t2)
+    return t2
 
   TmCons a hd tl -> do
     t1 <- inferNow hd
@@ -559,7 +559,7 @@ infer term = case term of
     tv <- TyVar a <$> freshName
     uni t2 (TyLater a (TyStream a t1))
     uni tv (TyStream a t1)
-    return (tv)
+    return tv
 
   TmPromote a e -> do
     t1 <- inferNow e
@@ -568,31 +568,23 @@ infer term = case term of
 
   TmStable a e -> do
     t1 <- inferStable e
-    tv <- TyVar a <$> freshName
-    uni tv (TyStable a t1)
-    return (tv)
+    return (TyStable a t1)
 
   TmDelay a u e -> do
     tu <- inferNow u
     uni tu (TyAlloc a)
     te <- inferLater e
-    tv <- TyVar a <$> freshName
-    uni tv (TyLater a te)
-    return (tv)
+    return (TyLater a te)
 
   TmInl a e -> do
     ty <- inferNow e
-    tv <- TyVar a <$> freshName
     tvr <- TyVar a <$> freshName
-    uni tv (TySum a ty tvr)
-    return (tv)
+    return (TySum a ty tvr)
 
   TmInr a e -> do
     ty <- inferNow e
-    tv <- TyVar a <$> freshName
     tvl <- TyVar a <$> freshName
-    uni tv (TySum a tvl ty)
-    return (tv)
+    return (TySum a tvl ty)
 
   TmCase a e (nm1, c1) (nm2, c2) -> do
     ty <- inferNow e
@@ -602,7 +594,7 @@ infer term = case term of
     t1 <- inCtx (nm1, (Forall [] tvl, QNow)) $ inferNow c1
     t2 <- inCtx (nm2, (Forall [] tvr, QNow)) $ inferNow c2
     uni t1 t2
-    return (t1)
+    return t1
 
   TmInto ann tyann e -> do
     case tyann of
