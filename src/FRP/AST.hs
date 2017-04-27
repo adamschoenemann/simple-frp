@@ -85,6 +85,14 @@ typeAnn = \case
     TyAlloc  a     -> a
     TyPrim   a _   -> a
 
+-- | checks if a 'Type' is Stable
+isStable :: Type t -> Bool
+isStable (TyPrim _ _ )  = True
+isStable (TyProd _ a b) = isStable a && isStable b
+isStable (TySum  _ a b) = isStable a && isStable b
+isStable (TyStable _ _) = True
+isStable _              = False
+
 data Term a
   = TmFst a (Term a)
   | TmSnd a (Term a)

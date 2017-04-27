@@ -1,5 +1,8 @@
+{-|
+This module defines an inference algorithm to infer the types of a
+term/declaration/program and subsequently typecheck them.
+-}
 {-# LANGUAGE NamedFieldPuns             #-}
-
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -9,7 +12,24 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
 
-module FRP.TypeInference where
+module FRP.TypeInference
+  ( runInfer
+  , runInfer'
+  , infer
+  , inferTerm
+  , inferTerm'
+  , inferDecl
+  , inferDecl'
+  , inferProg
+  , TyExcept(..)
+  , Scheme(..)
+  , InferWrite
+  , Context(..)
+  , emptyCtx
+  , Constraint(..)
+  , toScheme
+  , (.=.)
+  ) where
 
 import           Control.Monad.Except
 import           Control.Monad.Identity
@@ -29,12 +49,109 @@ import           FRP.Pretty
 import           Data.Bifunctor (bimap)
 
 
+-- |A type-variable is just a name
+type TVar = Name
+
+-- |A class for monads that can generate fresh names
+class NameGen m where
+  freshName :: m String
+
+-- |An infinite supply of one-letter variable names.
+-- The names are prefixed with [0..], making them syntactically invalid.
+-- This prevents the user from ever introducing such a name, making them
+-- automatically fresh.
+letters :: [String]
+letters = infiniteSupply alphabet where
+  infiniteSupply supply = addPrefixes supply (0 :: Integer)
+  alphabet = map (:[]) ['a'..'z']
+  addPrefixes xs n = (map (\x -> addPrefix x n) xs) ++ (addPrefixes xs (n+1))
+  addPrefix x n = show n ++ x
+
+{-|
+  A substitution is just a mapping from type-variables to their \'actual\' types
+-}
+type Subst t = Map TVar (Type t)
+
+instance Pretty (Subst a) where
+  ppr n map = vcat $ fmap mapper $ M.toList map where
+    mapper (k, v) = text k <+> char ':' <+> ppr 0 v
+
+-- |The empty substitution
+nullSubst :: Subst a
+nullSubst = M.empty
+
+{-|
+  Something that can be substituted means that you can apply a substitution
+  to it, and you can get the free type-variables.
+  The functional dependency arises from the fact that we want to instance
+  types of kind * -> *, since we have parameterized the type of annotations
+  on types and terms.
+-}
+class Substitutable a t | a -> t where
+  apply :: Subst t -> a -> a
+  ftv   :: a -> Set TVar
+
+{-|
+  You can compose two substitutions s1, s2 by applying s1 to everything in
+  s2 and also keeping the substitutions in s1.
+  @
+    s1 = M.fromList [("a", tynat), ("b", tybool)]
+    s2 = M.fromList [("c", "a" |-> tynat)]
+    s1 `compose` s2 == M.fromList [ ("c", tynat |-> tynat)
+                                  , ("b", tybool)
+                                  , ("a", tynat)
+                                  ]
+  @
+-}
+compose :: Subst a -> Subst a -> Subst a
+s1 `compose` s2 = M.map (apply s1) s2 `M.union` s1
+
+-- |Just to use S.union infix a bit easier
+(+++) = S.union
+
+-- |You can substitute lists of substitutables
+instance Substitutable (f a) a => Substitutable [f a] a  where
+  apply = fmap . apply
+  ftv   = foldr ((+++) . ftv) S.empty
+
+-- |Types are substitutable
+instance Substitutable (Type a) a where
+  apply st typ = case typ of
+    TyVar    a name  -> M.findWithDefault typ name st
+    TyProd   a l r   -> TyProd   a (apply st l) (apply st r)
+    TySum    a l r   -> TySum    a (apply st l) (apply st r)
+    TyArr    a t1 t2 -> TyArr    a (apply st t1) (apply st t2)
+    TyLater  a ty    -> TyLater  a (apply st ty)
+    TyStable a ty    -> TyStable a (apply st ty)
+    TyStream a ty    -> TyStream a (apply st ty)
+    TyRec    a nm ty -> TyRec    a nm (apply st ty) -- FIXME: Is this correct?
+    TyAlloc  a       -> TyAlloc  a
+    TyPrim{}         -> typ
+
+  ftv = \case
+    TyVar    _ name   -> S.singleton name
+    TyProd   _ l r    -> ftv l  +++ ftv r
+    TySum    _ l r    -> ftv l  +++ ftv r
+    TyArr    _ t1 t2  -> ftv t1 +++ ftv t2
+    TyLater  _ ty     -> ftv ty
+    TyStable _ ty     -> ftv ty
+    TyStream _ ty     -> ftv ty
+    TyRec    _ nm ty  -> S.delete nm $ ftv ty
+    TyAlloc  _        -> S.empty
+    TyPrim{}          -> S.empty
+
+-- |
+-- = 'Scheme'
+
+-- |A quantified (forall) type
 data Scheme a = Forall [TVar] (Type a)
   deriving (Eq, Functor)
 
+-- |Get the underlying type of the scheme
 unScheme :: Scheme a -> Type a
 unScheme (Forall _ ty) = ty
 
+-- |Promote a type to a zero-quantified scheme
 toScheme :: Type a -> Scheme a
 toScheme = Forall []
 
@@ -46,20 +163,49 @@ instance Pretty (Scheme a) where
 instance Show (Scheme a) where
   show = ppshow
 
+instance Substitutable (Scheme a) a where
+  apply st (Forall vs t) =
+    let st' = foldr M.delete st vs
+    in  Forall vs $ apply st' t
 
+  ftv (Forall vs t) = ftv t `S.difference` S.fromList vs
+
+-- |A scheme and a 'Qualifier'
 type QualSchm t = (Scheme t, Qualifier)
 
+-- |Qualified schemes are substitutable
+instance Substitutable (QualSchm a) a where
+  apply st (ty, q) = (apply st ty, q)
+  ftv (ty, q)      = ftv ty
+
+-- |A type context is a map from names to 'QualSchm's
 newtype Context t = Ctx {unCtx :: Map Name (QualSchm t)} deriving (Show, Eq)
+
+instance Pretty (Context t) where
+  ppr n (Ctx map) = vcat $ fmap mapper $ M.toList map where
+    mapper (k, v) = text k <+> char ':' <+> ppr 0 v
+
+instance Substitutable (Context a) a where
+  apply s (Ctx ctx) = Ctx $ M.map (apply s) ctx
+  ftv (Ctx ctx)     = foldr ((+++) . ftv) S.empty $ M.elems ctx
 
 emptyCtx :: Context t
 emptyCtx = Ctx M.empty
 
+-- |Extend a context with a 'Name' and a 'QualSchm'
 extend :: Context t -> (Name, QualSchm t) -> Context t
 extend c (n, t) = Ctx $ M.insert n t $ unCtx c
 
+-- |Remove a name from a context
 remove :: Context t -> Name -> Context t
 remove (Ctx m) x = Ctx $ M.delete x m
 
+{-|
+  Lookup the type of a name in the context.
+  If the name is not in the context, it will throw an 'UnknownIdentifier' error.
+  If the associated qualifier is not 'QNow' or 'QStable', it will return a
+  'DelayedUse' exception.
+-}
 lookupCtx :: Name -> Infer t (Type t)
 lookupCtx nm = do
   Ctx m <- ask
@@ -67,25 +213,20 @@ lookupCtx nm = do
     Just (sc, q) | q == QNow || q == QStable ->
       do t <- instantiate sc
          return t
-    _ -> typeErr (UnknownIdentifier nm) (Ctx m)
+    Just (sc, q) -> typeErr (DelayedUse nm) (Ctx m)
+    Nothing -> typeErr (UnknownIdentifier nm) (Ctx m)
 
-isStable :: Type t -> Bool
-isStable (TyPrim _ _ )  = True
-isStable (TyProd _ a b) = isStable a && isStable b
-isStable (TySum  _ a b) = isStable a && isStable b
-isStable (TyStable _ _) = True
-isStable _              = False
-
-instance Pretty (Context t) where
-  ppr n (Ctx map) = vcat $ fmap mapper $ M.toList map where
-    mapper (k, v) = text k <+> char ':' <+> ppr 0 v
-
+-- |A type exception is a type-error and an associated type context
 newtype TyExcept t = TyExcept (TyErr t, Context t)
   deriving (Eq)
 
 instance Show (TyExcept t) where
   show = ppshow
 
+instance Pretty (TyExcept t) where
+  ppr n (TyExcept (err, ctx)) = ppr n err $$ text "in context: " $$ ppr n ctx
+
+-- |An error that can happen during type inference
 data TyErr t
   = CannotUnify (Type t) (Type t) (Unifier t)
   | UnificationMismatch [Type t] [Type t]
@@ -97,10 +238,8 @@ data TyErr t
   | NotStable (Term t)
   | NotNow (Term t)
   | NotLater (Term t)
+  | DelayedUse Name
   deriving (Show, Eq)
-
-instance Pretty (TyExcept t) where
-  ppr n (TyExcept (err, ctx)) = ppr n err $$ text "in context: " $$ ppr n ctx
 
 instance Pretty (TyErr t) where
   ppr n = \case
@@ -128,118 +267,28 @@ instance Pretty (TyErr t) where
     NotNow    trm           -> text "expected" <+> ppr n trm <+> text "to be now"
     NotLater  trm           -> text "expected" <+> ppr n trm <+> text "to be later"
     NotStable trm           -> text "expected" <+> ppr n trm <+> text "to be stable"
+    DelayedUse name         -> text "cannot use delayed name" <+> text name
 
+-- |Throw a type error in a context
 typeErr :: MonadError (TyExcept t) m
         => TyErr t -> Context t -> m a
 typeErr err ctx = throwError (TyExcept (err, ctx))
 
-typeErr' :: (MonadError (TyExcept t) m, MonadReader (Context t) m)
+-- |Throw a type error, getting the context from the reader monad
+typeErrM :: (MonadError (TyExcept t) m, MonadReader (Context t) m)
          => TyErr t -> m a
-typeErr' err = do
+typeErrM err = do
   ctx <- ask
   throwError (TyExcept (err, ctx))
 
-class NameGen m where
-  freshName :: m String
 
-instance NameGen (Infer t) where
-  freshName =
-    do nm:nms <- get
-       put nms
-       return nm
-
-letters :: [String]
-letters = infiniteSupply alphabet where
-  infiniteSupply supply = addPrefixes supply (0 :: Integer)
-  alphabet = map (:[]) ['a'..'z']
-  addPrefixes xs n = (map (\x -> addPrefix x n) xs) ++ (addPrefixes xs (n+1))
-  addPrefix x n = show n ++ x
-
-runInfer' :: Infer t a -> Either (TyExcept t) (a, InferWrite t)
-runInfer' inf = noSnd <$> runInfer emptyCtx inf
-  where
-    noSnd (a,b,c) = (a,c)
-
-runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, InferState, InferWrite t)
-runInfer ctx inf =
-  runExcept (runRWST (unInfer inf) ctx letters)
-
-
-type TVar = Name
-type Subst a = Map TVar (Type a)
-
-instance Pretty (Subst a) where
-  ppr n map = vcat $ fmap mapper $ M.toList map where
-    mapper (k, v) = text k <+> char ':' <+> ppr 0 v
-
-nullSubst :: Subst a
-nullSubst = M.empty
-
-class Substitutable a b | a -> b where
-  apply :: Subst b -> a -> a
-  ftv   :: a -> Set TVar
-
-compose :: Subst a -> Subst a -> Subst a
-s1 `compose` s2 = M.map (apply s1) s2 `M.union` s1
-
-(+++) = S.union
-
-instance Substitutable (Type a) a where
-  apply st typ = case typ of
-    TyVar    a name  -> M.findWithDefault typ name st
-    TyProd   a l r   -> TyProd   a (apply st l) (apply st r)
-    TySum    a l r   -> TySum    a (apply st l) (apply st r)
-    TyArr    a t1 t2 -> TyArr    a (apply st t1) (apply st t2)
-    TyLater  a ty    -> TyLater  a (apply st ty)
-    TyStable a ty    -> TyStable a (apply st ty)
-    TyStream a ty    -> TyStream a (apply st ty)
-    TyRec    a nm ty -> TyRec    a nm (apply st ty) -- FIXME: Is this correct?
-    TyAlloc  a       -> TyAlloc  a
-    TyPrim{}         -> typ
-
-  ftv = \case
-    TyVar    _ name   -> S.singleton name
-    TyProd   _ l r    -> ftv l  +++ ftv r
-    TySum    _ l r    -> ftv l  +++ ftv r
-    TyArr    _ t1 t2  -> ftv t1 +++ ftv t2
-    TyLater  _ ty     -> ftv ty
-    TyStable _ ty     -> ftv ty
-    TyStream _ ty     -> ftv ty
-    TyRec    _ nm ty  -> S.delete nm $ ftv ty
-    TyAlloc  _        -> S.empty
-    TyPrim{}          -> S.empty
-
-instance Substitutable (Scheme a) a where
-  apply st (Forall vs t) =
-    let st' = foldr M.delete st vs
-    in  Forall vs $ apply st' t
-
-  ftv (Forall vs t) = ftv t `S.difference` S.fromList vs
-
-instance Substitutable (f a) a => Substitutable [f a] a  where
-  apply = fmap . apply
-  ftv   = foldr ((+++) . ftv) S.empty
-
-instance Substitutable (QualSchm a) a where
-  apply st (ty, q) = (apply st ty, q)
-  ftv (ty, q)      = ftv ty
-
-instance Substitutable (Context a) a where
-  apply s (Ctx ctx) = Ctx $ M.map (apply s) ctx
-  ftv (Ctx ctx)     = foldr ((+++) . ftv) S.empty $ M.elems ctx
-
-instance Substitutable (Constraint a) a where
-   apply s (Constraint (t1, t2)) = Constraint (apply s t1, apply s t2)
-   ftv (Constraint (t1, t2)) = ftv t1 +++ ftv t2
-
-instance Substitutable (StableTy a) a where
-   apply s (StableTy t) = StableTy (apply s t)
-   ftv (StableTy t) = ftv t
-
+-- |Checks if a type variable occurs in a type signature.
+-- If it does, then unification would never terminate.
 occursCheck :: Substitutable a b => TVar -> a -> Bool
 occursCheck a t = a `S.member` ftv t
 
-
+-- |Bind a type-variable to a type
+-- Throws an OccursCheckFailed error if the variable occurs in type to be bound.
 bind :: TVar -> Type a -> Solve a (Unifier a)
 bind a t | unitFunc t == TyVar () a = return emptyUnifier
          | occursCheck a t = do
@@ -247,6 +296,8 @@ bind a t | unitFunc t == TyVar () a = return emptyUnifier
               typeErr (OccursCheckFailed a t unif) emptyCtx
          | otherwise       = return $ Unifier (M.singleton a t, [])
 
+-- |Instantiates a 'Scheme' with fresh type variables, making a mono-type
+-- out of a poly-type
 instantiate :: Scheme a -> Infer a (Type a)
 instantiate (Forall as t) = do
   let ann = typeAnn t
@@ -274,6 +325,23 @@ newtype Infer t a = Infer
            , MonadError (TyExcept t), Applicative
            )
 
+instance NameGen (Infer t) where
+  freshName =
+    do nm:nms <- get
+       put nms
+       return nm
+
+runInfer' :: Infer t a -> Either (TyExcept t) (a, InferWrite t)
+runInfer' inf = noSnd <$> runInfer emptyCtx inf
+  where
+    noSnd (a,b,c) = (a,c)
+
+runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, InferState, InferWrite t)
+runInfer ctx inf =
+  runExcept (runRWST (unInfer inf) ctx letters)
+
+-- -----------------------------------------------------------------------------
+-- | A 'Constraint' represents that two types should unify
 newtype Constraint t = Constraint (Type t, Type t)
   deriving (Eq)
 
@@ -289,6 +357,11 @@ instance Pretty [Constraint a] where
 instance Show (Constraint a) where
   show = ppshow
 
+instance Substitutable (Constraint a) a where
+   apply s (Constraint (t1, t2)) = Constraint (apply s t1, apply s t2)
+   ftv (Constraint (t1, t2)) = ftv t1 +++ ftv t2
+
+
 newtype StableTy t = StableTy { unStableTy :: (Type t) }
   deriving (Eq)
 
@@ -303,6 +376,10 @@ instance Pretty [StableTy a] where
 
 instance Show (StableTy a) where
   show = ppshow
+
+instance Substitutable (StableTy a) a where
+   apply s (StableTy t) = StableTy (apply s t)
+   ftv (StableTy t) = ftv t
 
 
 infixr 0 .=.
@@ -490,15 +567,15 @@ inferStable expr = do
   return t
   -- if (q == QNow )
   --   then return t
-  --   else typeErr' (NotStable expr)
+  --   else typeErrM (NotStable expr)
 
 infer :: Term t -> Infer t (Type t)
 infer term = case term of
   TmLit a (LInt _)  -> return (TyPrim a TyNat)
   TmLit a (LBool _) -> return (TyPrim a TyBool)
   TmAlloc a         -> return (TyAlloc a)
-  TmPntr a l        -> typeErr' (NotSyntax term)
-  TmPntrDeref a l   -> typeErr' (NotSyntax term)
+  TmPntr a l        -> typeErrM (NotSyntax term)
+  TmPntrDeref a l   -> typeErrM (NotSyntax term)
 
   TmFst a e -> do
     t1 <- inferNow e
@@ -619,7 +696,7 @@ infer term = case term of
       _ -> do
         alpha <- freshName
         tau'  <- TyVar ann <$> freshName
-        typeErr' (UnificationMismatch [tyann] [TyRec ann alpha tau'])
+        typeErrM (UnificationMismatch [tyann] [TyRec ann alpha tau'])
 
   TmOut ann tyann e ->
     case tyann of
@@ -633,7 +710,7 @@ infer term = case term of
       _ -> do
         alpha <- freshName
         tau'  <- TyVar ann <$> freshName
-        typeErr' (UnificationMismatch [tyann] [TyRec ann alpha tau'])
+        typeErrM (UnificationMismatch [tyann] [TyRec ann alpha tau'])
 
 
   where
