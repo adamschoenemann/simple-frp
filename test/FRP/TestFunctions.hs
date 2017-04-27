@@ -259,14 +259,6 @@ frp_scary_const_fails = unitFunc [decl|
     cons(xs, delay(u, scary_const us' xs)).
 |]
 
--- frp_scary_const_fails_ty = [declTy|
---   scary_const : S alloc -> S Nat -> S (S Nat)
---   scary_const us ns =
---     let cons(u, delay(us')) = us in
---     let stable(xs) = promote(nxs) in
---     cons(xs, delay(u, scary_const us' xs)).
--- |]
-
 frp_scary_const :: FRP (TStream TAlloc :->: TStream (TStream TNat))
 frp_scary_const = [progTy|
   buffer : S alloc -> Nat -> S Nat -> S Nat

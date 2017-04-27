@@ -477,8 +477,6 @@ inferStable expr = do
     then return t
     else typeErr' (NotStable expr)
 
--- Consideration: Move logic that enforces qualifiers to be now/stbl/whatever
--- into the constraint solver? Could that be done? Is it better? Don't know yet
 infer :: Term t -> Infer t (Type t, Qualifier)
 infer term = case term of
   TmLit a (LInt _)  -> return (TyPrim a TyNat, QNow)

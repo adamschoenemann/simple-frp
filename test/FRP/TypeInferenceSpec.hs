@@ -536,6 +536,15 @@ spec = do
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
+    let trm = [term|\x -> let stable(y) = promote(x) in True|]
+    it (ppshow trm) $ do
+      shouldTyErr (inferTerm' trm)
+
+    let trm = [term|\(x:Nat) -> let stable(y) = promote(x) in True|]
+    it (ppshow trm) $ do
+      putStrLn (ppshow $ inferTerm' trm)
+      True `shouldBe` True
+
     it "scary_const_fails" $ do
       shouldTyErr (inferDecl' frp_scary_const_fails)
 
