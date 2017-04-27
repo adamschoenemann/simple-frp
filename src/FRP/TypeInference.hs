@@ -13,8 +13,8 @@ module FRP.TypeInference where
 
 import           Control.Monad.Except
 import           Control.Monad.Identity
-import           Control.Monad.RWS      (MonadReader, RWST, ask, local, runRWST,
-                                         tell)
+import           Control.Monad.RWS      ( MonadReader, RWST, ask, local, runRWST
+                                        , tell, MonadWriter)
 import           Control.Monad.State
 import           Data.List              (nub, find)
 import           Data.Map.Strict        (Map)
@@ -26,6 +26,7 @@ import           Debug.Trace
 import           FRP.AST
 import           FRP.AST.Construct      (tmvar)
 import           FRP.Pretty
+import           Data.Bifunctor (bimap)
 
 
 data Scheme a = Forall [TVar] (Type a)
@@ -138,23 +139,14 @@ typeErr' err = do
   ctx <- ask
   throwError (TyExcept (err, ctx))
 
+class NameGen m where
+  freshName :: m String
 
--- newtype Infer t a = Infer (ExceptT (TyExcept t) (State [Name]) a)
---   deriving ( Functor, Applicative, Monad, MonadState [Name]
---            , MonadError (TyExcept t))
-
--- syntax highlighting is being a bitch so I added braces
-freshName :: Infer t Name
-freshName =
-  do {
-    nm:nms <- get;
-    put nms;
-    return nm
-  }
-
-
--- runInferTerm ctx t = runInfer (checkTerm ctx t)
--- runInferTerm' t = runInfer (checkTerm emptyCtx t)
+instance NameGen (Infer t) where
+  freshName =
+    do nm:nms <- get
+       put nms
+       return nm
 
 letters :: [String]
 letters = infiniteSupply alphabet where
@@ -164,14 +156,13 @@ letters = infiniteSupply alphabet where
   addPrefix x n = show n ++ x
 
 runInfer' :: Infer t a -> Either (TyExcept t) (a, InferWrite t)
-runInfer' = runInfer emptyCtx
-
-runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, InferWrite t)
-runInfer ctx inf =
-  let r = runExcept (runRWST inf ctx letters)
-  in  noSnd <$> r
+runInfer' inf = noSnd <$> runInfer emptyCtx inf
   where
     noSnd (a,b,c) = (a,c)
+
+runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, InferState, InferWrite t)
+runInfer ctx inf =
+  runExcept (runRWST (unInfer inf) ctx letters)
 
 
 type TVar = Name
@@ -252,7 +243,7 @@ occursCheck a t = a `S.member` ftv t
 bind :: TVar -> Type a -> Solve a (Unifier a)
 bind a t | unitFunc t == TyVar () a = return emptyUnifier
          | occursCheck a t = do
-              unif <- get
+              unif <- getUni
               typeErr (OccursCheckFailed a t unif) emptyCtx
          | otherwise       = return $ Unifier (M.singleton a t, [])
 
@@ -271,13 +262,17 @@ generalize ctx t = Forall as t
 type InferState = [String]
 type InferWrite t = ([Constraint t], [StableTy t])
 
-type Infer t a =
-  (RWST (Context t)
-        (InferWrite t)
-        InferState
-        (Except (TyExcept t))
-        a
-  )
+newtype Infer t a = Infer
+  {unInfer :: RWST (Context t)
+                (InferWrite t)
+                InferState
+                (Except (TyExcept t))
+                a
+  }
+  deriving ( Functor, Monad, MonadState (InferState)
+           , MonadReader (Context t), MonadWriter (InferWrite t)
+           , MonadError (TyExcept t), Applicative
+           )
 
 newtype Constraint t = Constraint (Type t, Type t)
   deriving (Eq)
@@ -325,14 +320,25 @@ instance Pretty (Unifier t) where
 emptyUnifier :: Unifier t
 emptyUnifier = Unifier (nullSubst, [])
 
-newtype Solve t a = Solve (StateT (Unifier t) (Except (TyExcept t)) a)
-  deriving ( Functor, Monad, MonadState (Unifier t)
+-- unifier and fresh names
+type SolveState t = (Unifier t, [String])
+
+newtype Solve t a = Solve (StateT (SolveState t) (Except (TyExcept t)) a)
+  deriving ( Functor, Monad, MonadState (SolveState t)
            , MonadError (TyExcept t), Applicative
            )
 
-runSolve :: Unifier t -> Either (TyExcept t) (Subst t, Unifier t)
-runSolve un = runExcept (runStateT (unSolver solver) un) where
-  unSolver (Solve m) = m
+instance NameGen (Solve t) where
+  freshName =
+    do nm:nms <- snd <$> get
+       modify (\(u,_) -> (u, nms))
+       return nm
+
+runSolve :: [String] -> Unifier t -> Either (TyExcept t) (Subst t, Unifier t)
+runSolve names un = bimap id rmNames $  runExcept (runStateT (unSolver solver) (un, names))
+  where
+    rmNames e = let (s, (u, _)) = e in (s, u)
+    unSolver (Solve m) = m
 
 inferTerm' :: Term t -> Either (TyExcept t) (Scheme t)
 inferTerm' = inferTerm emptyCtx
@@ -365,7 +371,7 @@ inferProg ctx (Program {_decls = decls}) =
 solveInfer :: Context t -> Infer t (Type t) -> Either (TyExcept t) (Scheme t)
 solveInfer ctx inf = case runInfer ctx inf of
   Left err -> Left err
-  Right (ty, (cs, sts)) -> case runSolve (un cs) of
+  Right (ty, fnms, (cs, sts)) -> case runSolve fnms (un cs) of
     Left err             -> Left err
     Right (subst, unies) ->
       case find (not . isStable) $ map unStableTy $ apply subst sts of
@@ -387,10 +393,10 @@ unifies (TyStable _ t1)  (TyStable _ t2)  = t1 `unifies` t2
 unifies (TyLater _ t1)   (TyLater _ t2)   = t1 `unifies` t2
 unifies (TyStream _ t1)  (TyStream _ t2)  = t1 `unifies` t2
 unifies (TyRec a af t1)  (TyRec _ bf t2)  = do
-  let fv = "ioasdoijaoij" -- FIXME: Get an actual free variable
+  fv <- freshName
   apply (M.singleton af (TyVar a fv)) t1 `unifies` apply (M.singleton bf (TyVar a fv)) t2
 unifies t1 t2 = do
-  unif <- get
+  unif <- getUni
   typeErr (CannotUnify t1 t2 unif) emptyCtx
 
 unifyMany :: [Type t] -> [Type t] -> Solve t (Unifier t)
@@ -410,13 +416,19 @@ solver = do
 
 solveConstraints :: Solve t (Subst t)
 solveConstraints = do
-  Unifier (su, cs) <- get
+  Unifier (su, cs) <- getUni
   case cs of
     [] -> return su
     (Constraint (t1,t2) : cs0) -> do
       Unifier (su1, cs1) <- unifies t1 t2
-      put $ Unifier (su1 `compose` su, cs1 ++ (apply su1 cs0))
+      putUni $ Unifier (su1 `compose` su, cs1 ++ (apply su1 cs0))
       solveConstraints
+
+putUni :: MonadState (SolveState t) m => Unifier t -> m ()
+putUni u = modify (\(_,n) -> (u,n))
+
+getUni :: MonadState (SolveState t) m => m (Unifier t)
+getUni = fst <$> get
 
 uni :: Type t -> Type t -> Infer t ()
 uni t1 t2 = tell ([Constraint (t1, t2)], [])
