@@ -114,7 +114,7 @@ spec = do
 
         ppdebug frp_sum_acc
         debug ""
-        let (v, s) = evalProgram prog
+        let (v, s) = stepProgram prog
         debug "======== run 1 ======="
         ppdebug v
         ppdebug s

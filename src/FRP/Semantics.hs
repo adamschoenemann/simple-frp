@@ -1,6 +1,28 @@
+{-|
+Module      : FRP.Semantics
+Description : Operational Semantics
+
+This module implements the operational semantics from the paper
+-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module FRP.Semantics where
+module FRP.Semantics (
+    StoreVal(..)
+  , globalEnv
+  , Scope
+  , Store
+  , tick
+  , EvalState(..)
+  , initialState
+  , EvalM
+  , toHaskList
+  , runExpr
+  , evalExpr
+  , runTermInEnv
+  , stepProgram
+  , runProgram
+  , interpProgram
+  ) where
 
 import           Control.Monad.Reader
 import           Control.Monad.State
@@ -14,14 +36,13 @@ import           FRP.AST.Construct
 import           FRP.Pretty
 
 
+-- |An item in the store
 data StoreVal
+  -- |is a value that is available now or
   = SVNow Value
+  -- |a term along with an environment that is available later
   | SVLater EvalTerm Env
   deriving (Show, Eq)
-
-type Scope = Map Name EvalTerm
-type Store = Map Label StoreVal
-
 
 instance Pretty StoreVal where
  ppr n = \case
@@ -29,10 +50,17 @@ instance Pretty StoreVal where
     SVLater e env -> text "->later" <+> ppr n e
                    $$ text ", env" <> parens (ppr n env)
 
-instance Pretty (Map Label StoreVal) where
+-- |A scope is a map from names to evaluable terms
+type Scope = Map Name EvalTerm
+-- |A store is a map from pointer-labels to store values
+type Store = Map Label StoreVal
+
+instance Pretty Store where
   ppr n m = vcat . M.elems $ M.mapWithKey mapper m where
     mapper k v = char '{' <> int k <+> ppr n v <> char '}'
 
+-- |The state for the Eval monad is a store and a counter
+-- that generates pointer labels
 data EvalState = EvalState
   { _store    :: Store
   , _labelGen :: Int
@@ -43,29 +71,35 @@ instance Pretty EvalState where
     text "labelGen =" <+> int lg
     $$ ppr n s
 
+-- |The Eval monad handles evaluation of programs
 type EvalM a = StateT EvalState (Reader Env) a
 
+-- |the initial state for the evaluator is with an empty Store and
+-- a label generator at 0
 initialState :: EvalState
 initialState = EvalState M.empty 0
 
+-- |Get the store
 getStore :: EvalM Store
 getStore = _store <$> get
 
+-- |Allocate a value on the store, changing the state
 allocVal :: StoreVal -> EvalM Label
 allocVal v = do
   label <- genLabel
-  --traceM ("allocate " ++ show label ++ " as " ++ ppshow v)
   let change st@(EvalState {_store = s}) =
         let s' = M.insert label v s
         in st {_store = s'}
   modify change
   return label
 
+-- |Unsafely lookup a value in a map
 unsafeLookup :: (Ord k, Show k, Show v) => k -> Map k v -> v
 unsafeLookup k m = case M.lookup k m of
   Just x  -> x
   Nothing -> error $ show k ++ " not found in map " ++ show m
 
+-- |Lookup a pointer in the store
 lookupPntr :: Label -> EvalM StoreVal
 lookupPntr lbl = do
   store <- getStore
@@ -73,6 +107,7 @@ lookupPntr lbl = do
     Nothing -> error $ "pntr " ++ show lbl ++ " not in store " ++ show store
     Just x  -> return x
 
+-- |Get a Value from the Scope
 useVar :: String -> EvalM Value
 useVar x = do
   env <- ask
@@ -81,13 +116,14 @@ useVar x = do
     Just (Left  t) -> eval t
     Just (Right v) -> return v
 
-
+-- |Crash the evaluator
 crash :: String -> EvalM a
 crash s = do
   env <- ask
   store <- get
   error $ s ++ "\nenv: " ++ ppshow env ++ "\nstore" ++ ppshow store
 
+-- |Generate a new pointer label, updating the state
 genLabel :: EvalM Label
 genLabel = do
   st <- get
@@ -95,23 +131,28 @@ genLabel = do
   put $ st { _labelGen = succ gen }
   return gen
 
-
+-- |Evaluate an expression in an environment, but with an initial state
 evalExpr :: Env -> EvalTerm -> Value
 evalExpr = evalExpr' initialState
 
+-- |Evaluate an expression in a given state and environment
 evalExpr' :: EvalState -> Env -> EvalTerm -> Value
 evalExpr' s env term = fst $ runExpr s env term
 
+-- |Run an expression\/term in a given state and environment
 runExpr :: EvalState -> Env -> EvalTerm -> (Value, EvalState)
 runExpr initState initEnv term =
   let (v, s) = runReader (runStateT (eval term) initState) initEnv
   in  -- trace ("runExpr " ++ ppshow term ++ " with lg " ++ show (_labelGen initState) ++ " = " ++ ppshow v) $
       (v,s)
 
+-- |Main evaluation function. This encodes the operational semantics from
+-- the paper
 eval :: EvalTerm -> EvalM Value
 eval term = case term of
   TmVar _a x -> useVar x
   TmLit _a x -> return $ VLit x
+  -- eval a lambda to a closure that captures the current scope
   TmLam _a x _ty e -> VClosure x e <$> ask
 
   TmApp _a e1 e2 -> do
@@ -139,6 +180,7 @@ eval term = case term of
   TmCons _a hd tl    -> VCons <$> eval hd <*> eval tl
   TmFix _a x ty e    -> local (M.insert x (Left $ term)) $ eval e
 
+  -- delay a term by allocating it on the store
   TmDelay _a e' e -> do
     v <- eval e'
     case v of
@@ -148,11 +190,11 @@ eval term = case term of
         return $ VPntr label
       _ -> crash $ "expected VAlloc, got" ++ (ppshow v)
 
+  -- dereference a pointer
   TmPntrDeref _a label -> do
     v <- lookupPntr label
     case v of
       SVNow v' -> return v'
-      -- _             -> return $ VPntr label -- this is debatable if correct
       er       -> crash $ "illegal pntr deref " ++ ppshow (tmpntrderef label) ++ ".\n" ++ (ppshow er)
 
   TmStable _a e -> VStable <$> eval e
@@ -163,8 +205,9 @@ eval term = case term of
     case res of
       VInl vl -> local (M.insert nml (Right vl)) $ eval trml
       VInr vr -> local (M.insert nmr (Right vr)) $ eval trmr
-      _       -> error "not well-typed"
+      _       -> crash "not well-typed"
 
+  -- eval a let by binding the name to the scope using 'matchPat'
   TmLet _a pat e e' -> do
     v <- eval e
     env' <- matchPat pat v
@@ -188,6 +231,7 @@ eval term = case term of
     return $ VInto v
 
   where
+    -- evaluate a pattern match
     matchPat :: Pattern -> Value -> EvalM Env
     matchPat (PBind x) v   = return $ M.singleton x (Right v)
     matchPat (PDelay x) (VPntr l) =
@@ -204,6 +248,7 @@ eval term = case term of
       error $ ppshow pat ++ " cannot match " ++ ppshow v
             ++ "\nenv: " ++ (ppshow env) ++ "\nstore: " ++ ppshow store
 
+    -- evaluate a binary operator
     evalBinOp op el er = case op of
         Add  -> intOp    (+)
         Sub  -> intOp    (-)
@@ -235,6 +280,15 @@ eval term = case term of
             return $ VLit (LBool (x == y))
 
 
+-- |Tick a store.
+--
+-- All now values are deleted
+-- all later terms are promoted to now by eval'ing it in the
+-- so-far-ticked store.
+-- There is an implicit ordering imposed here, so we evaluate the
+-- points from smallest-to-biggest since allocated values can
+-- only depend on other allocations with a pointer label that is
+-- smaller than their own.
 tick :: EvalState -> EvalState
 tick st
   | M.null (_store st) = st
@@ -246,8 +300,9 @@ tick st
           in  st' { _store  = M.insert k (SVNow v) s }
       tock acc k (SVNow _)  = acc { _store = M.delete k (_store acc) }
 
-evalProgram :: Program a -> (Value, EvalState)
-evalProgram (Program {_decls = decls}) =
+-- |Evaluate a program one step.
+stepProgram :: Program a -> (Value, EvalState)
+stepProgram (Program {_decls = decls}) =
   let main = maybe (error "no main function") id
            $ find (\d -> _name d == "main") decls
   in  case main of
@@ -255,6 +310,7 @@ evalProgram (Program {_decls = decls}) =
   where
     globals    = globalEnv decls
 
+-- |Run a term in an environment
 runTermInEnv :: Env -> Term () -> Value
 runTermInEnv env trm =
   keepRunning initialState trm
@@ -270,6 +326,7 @@ runTermInEnv env trm =
       VCons x (VPntr l) -> keepRunning s (tmpntrderef l)
       v                 -> v
 
+-- |Run a program
 runProgram :: Program a -> Value
 runProgram (Program {_decls = decls}) = runTermInEnv globals startMain
   where
@@ -281,17 +338,24 @@ runProgram (Program {_decls = decls}) = runTermInEnv globals startMain
     startMain = case main of
       Decl _a _ty _nm body -> mainEvalTerm $ unitFunc body
 
-
+-- |Run a program and convert the result to a haskell list of
+-- values.
 interpProgram :: Program a -> [Value]
 interpProgram = toHaskList . runProgram
 
+-- |Convert a Value (which is hopefully a Cons) to a Haskell list
+toHaskList :: Value -> [Value]
 toHaskList = \case
   VCons h t -> h : toHaskList t
   v         -> error $ "expected cons but got " ++ ppshow v
 
-
+-- |Wrap a function in an application with a fixpoint of allocators.
+-- This will produce a term that is ready to be evaluated, assuming
+-- it is given a "main" function of type @forall a. S alloc -> S a$
+mainEvalTerm :: EvalTerm -> EvalTerm
 mainEvalTerm body = tmapp body (tmfix "xs" undefined $ tmcons tmalloc (tmdelay tmalloc (tmvar "xs")))
 
+-- |Take a list of declarations and convert into a \"global\" environment
 globalEnv :: [Decl a] -> Env
 globalEnv decls = foldl go M.empty decls
   where

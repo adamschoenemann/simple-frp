@@ -1,6 +1,9 @@
 {-|
+Module      : FRP.TypeInference
+Description : Type inference
+
 This module defines an inference algorithm to infer the types of a
-term/declaration/program and subsequently typecheck them.
+term\/declaration\/program and subsequently typecheck them.
 -}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE DeriveFunctor              #-}
@@ -12,23 +15,25 @@ term/declaration/program and subsequently typecheck them.
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
 
-module FRP.TypeInference
-  ( runInfer
-  , runInfer'
+module FRP.TypeInference (
+    Scheme(..)
+  , toScheme
+  , Context(..)
+  , emptyCtx
+  , Constraint(..)
+  , QualSchm
+  , StableTy(..)
+  , (.=.)
+  , TyExcept(..)
+  , InferWrite
   , infer
   , inferTerm
   , inferTerm'
   , inferDecl
   , inferDecl'
   , inferProg
-  , TyExcept(..)
-  , Scheme(..)
-  , InferWrite
-  , Context(..)
-  , emptyCtx
-  , Constraint(..)
-  , toScheme
-  , (.=.)
+  , runInfer
+  , runInfer'
   ) where
 
 import           Control.Monad.Except
@@ -140,8 +145,6 @@ instance Substitutable (Type a) a where
     TyAlloc  _        -> S.empty
     TyPrim{}          -> S.empty
 
--- |
--- = 'Scheme'
 
 -- |A quantified (forall) type
 data Scheme a = Forall [TVar] (Type a)
@@ -189,6 +192,7 @@ instance Substitutable (Context a) a where
   apply s (Ctx ctx) = Ctx $ M.map (apply s) ctx
   ftv (Ctx ctx)     = foldr ((+++) . ftv) S.empty $ M.elems ctx
 
+-- |The empty context
 emptyCtx :: Context t
 emptyCtx = Ctx M.empty
 
@@ -309,16 +313,17 @@ generalize :: Context a -> Type a -> Scheme a
 generalize ctx t = Forall as t
   where as = S.toList $ ftv t `S.difference` ftv ctx
 
--- monad to do inference by constraint generation first and the solving
-type InferState = [String]
+-- |The state of infer is just a list of fresh names
+type InferState = [Name]
+
+-- |An Infer monad writes a list of unification constraints and a list
+-- of types that should be stable
 type InferWrite t = ([Constraint t], [StableTy t])
 
+-- |Monad that generates unification constraints to be solved later
 newtype Infer t a = Infer
-  {unInfer :: RWST (Context t)
-                (InferWrite t)
-                InferState
-                (Except (TyExcept t))
-                a
+  {unInfer :: RWST (Context t) (InferWrite t) InferState
+                   (Except (TyExcept t)) a
   }
   deriving ( Functor, Monad, MonadState (InferState)
            , MonadReader (Context t), MonadWriter (InferWrite t)
@@ -331,11 +336,13 @@ instance NameGen (Infer t) where
        put nms
        return nm
 
+-- |Run an infer in the empty context, and forget about the state of the freshnames
 runInfer' :: Infer t a -> Either (TyExcept t) (a, InferWrite t)
 runInfer' inf = noSnd <$> runInfer emptyCtx inf
   where
     noSnd (a,b,c) = (a,c)
 
+-- |Run an infer in a given context
 runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, InferState, InferWrite t)
 runInfer ctx inf =
   runExcept (runRWST (unInfer inf) ctx letters)
@@ -362,6 +369,8 @@ instance Substitutable (Constraint a) a where
    ftv (Constraint (t1, t2)) = ftv t1 +++ ftv t2
 
 
+-- -----------------------------------------------------------------------------
+-- |A 'StableTy' represents that a type should be stable
 newtype StableTy t = StableTy { unStableTy :: (Type t) }
   deriving (Eq)
 
@@ -381,11 +390,15 @@ instance Substitutable (StableTy a) a where
    apply s (StableTy t) = StableTy (apply s t)
    ftv (StableTy t) = ftv t
 
-
+-- |Infix constructor for unification constraints
 infixr 0 .=.
 (.=.) :: Type t -> Type t -> Constraint t
 t1 .=. t2 = Constraint (t1, t2)
 
+
+-- -----------------------------------------------------------------------------
+-- |A 'Unifier' is a substitution that will yield the principal type
+-- that satisfies the constraints, or fail
 newtype Unifier t = Unifier (Subst t, [Constraint t])
   deriving (Eq, Show, Functor)
 
@@ -397,35 +410,44 @@ instance Pretty (Unifier t) where
 emptyUnifier :: Unifier t
 emptyUnifier = Unifier (nullSubst, [])
 
--- unifier and fresh names
-type SolveState t = (Unifier t, [String])
+-- -----------------------------------------------------------------------------
+-- |The state of the solver is a unifier and a supply of fresh names
+type SolveState t = (Unifier t, [Name])
 
+-- |The 'Solve' monad is a stack of a state-monad with 'SolveState' and
+-- an exception monad that throws 'TyExcept's
 newtype Solve t a = Solve (StateT (SolveState t) (Except (TyExcept t)) a)
   deriving ( Functor, Monad, MonadState (SolveState t)
            , MonadError (TyExcept t), Applicative
            )
 
+-- |Solve can generate fresh names
 instance NameGen (Solve t) where
   freshName =
     do nm:nms <- snd <$> get
        modify (\(u,_) -> (u, nms))
        return nm
 
+-- |Run a Solve monad. Supply list of fresh names and a starting unifier
 runSolve :: [String] -> Unifier t -> Either (TyExcept t) (Subst t, Unifier t)
 runSolve names un = bimap id rmNames $  runExcept (runStateT (unSolver solver) (un, names))
   where
     rmNames e = let (s, (u, _)) = e in (s, u)
     unSolver (Solve m) = m
 
+-- |Infer a term in the empty typing context
 inferTerm' :: Term t -> Either (TyExcept t) (Scheme t)
 inferTerm' = inferTerm emptyCtx
 
+-- |Infer a term in a given typing context
 inferTerm :: Context t -> Term t -> Either (TyExcept t) (Scheme t)
 inferTerm ctx trm = solveInfer ctx (infer trm)
 
+-- |Infer a declaration in the empty typing context
 inferDecl' :: Decl t -> Either (TyExcept t) (Scheme t)
 inferDecl' = inferDecl emptyCtx
 
+-- |Infer a declaration in a given context
 inferDecl :: Context t -> Decl t -> Either (TyExcept t) (Scheme t)
 inferDecl ctx decl = solveInfer ctx declInfer where
   declInfer =
@@ -433,6 +455,7 @@ inferDecl ctx decl = solveInfer ctx declInfer where
        uni t (_type decl)
        return t
 
+-- |Infer a program in a given context
 inferProg :: Context t -> Program t -> Either (TyExcept t) (Context t)
 inferProg ctx (Program {_decls = decls}) =
   foldl fun (return ctx) decls
@@ -444,38 +467,44 @@ inferProg ctx (Program {_decls = decls}) =
          -- capture any non-stable values
          return $ extend ctx0 (_name, (t, QStable))
 
-
+-- |Run an inference computation and solve it
 solveInfer :: Context t -> Infer t (Type t) -> Either (TyExcept t) (Scheme t)
-solveInfer ctx inf = case runInfer ctx inf of
-  Left err -> Left err
-  Right (ty, fnms, (cs, sts)) -> case runSolve fnms (un cs) of
-    Left err             -> Left err
-    Right (subst, unies) ->
-      case find (not . isStable) $ map unStableTy $ apply subst sts of
-        Nothing -> Right (closeOver $ apply subst ty)
-        Just notStable -> Left $ TyExcept (NotStableTy notStable, emptyCtx)
+solveInfer ctx inf = do
+  (ty, fnms, (cs, sts)) <- runInfer ctx inf
+  (subst, unies) <- runSolve fnms (un cs)
+  case find (not . isStable) $ map unStableTy $ apply subst sts of
+    Nothing -> Right (closeOver $ apply subst ty)
+    Just notStable -> Left $ TyExcept (NotStableTy notStable, emptyCtx)
   where
     closeOver = normalize . generalize emptyCtx
     un cs = Unifier (nullSubst, cs)
 
 
+-- |Attempt to unify two types
 unifies :: Type t -> Type t -> Solve t (Unifier t)
+-- A type unifies to itself with no substitution
 unifies t1 t2 | unitFunc t1 == unitFunc t2 = return emptyUnifier
+-- Any type unifies to a type-variable by binding the type to the name
 unifies (TyVar _ v) t = v `bind` t
 unifies t (TyVar _ v) = v `bind` t
+-- Two function types unifies their domains and codomains unifies
 unifies (TyArr _ t1 t2)  (TyArr _ t3 t4)  = unifyMany [t1,t2] [t3,t4]
 unifies (TyProd _ t1 t2) (TyProd _ t3 t4) = unifyMany [t1,t2] [t3,t4]
 unifies (TySum _ t1 t2)  (TySum _ t3 t4)  = unifyMany [t1,t2] [t3,t4]
 unifies (TyStable _ t1)  (TyStable _ t2)  = t1 `unifies` t2
 unifies (TyLater _ t1)   (TyLater _ t2)   = t1 `unifies` t2
 unifies (TyStream _ t1)  (TyStream _ t2)  = t1 `unifies` t2
+-- Two recursive types unify if their inner types unify after we've replaced
+-- the name of the bound type-variable to a fresh name in both types
 unifies (TyRec a af t1)  (TyRec _ bf t2)  = do
   fv <- freshName
-  apply (M.singleton af (TyVar a fv)) t1 `unifies` apply (M.singleton bf (TyVar a fv)) t2
+  apply (M.singleton af (TyVar a fv)) t1 `unifies`
+    apply (M.singleton bf (TyVar a fv)) t2
 unifies t1 t2 = do
   unif <- getUni
   typeErr (CannotUnify t1 t2 unif) emptyCtx
 
+-- |Unify many types
 unifyMany :: [Type t] -> [Type t] -> Solve t (Unifier t)
 unifyMany [] [] = return emptyUnifier
 unifyMany (t1 : ts1) (t2 : ts2) =
@@ -484,41 +513,45 @@ unifyMany (t1 : ts1) (t2 : ts2) =
      return $ Unifier (su2 `compose` su1, cs1 ++ cs2)
 unifyMany t1 t2 = typeErr (UnificationMismatch t1 t2) emptyCtx
 
-
+-- |Solves a Solve monad, or fails if there are no solutions
 solver :: Solve t (Subst t)
 solver = do
-  subst <- solveConstraints
-  -- traceM (ppshow subst)
-  return subst
-
-solveConstraints :: Solve t (Subst t)
-solveConstraints = do
   Unifier (su, cs) <- getUni
   case cs of
     [] -> return su
     (Constraint (t1,t2) : cs0) -> do
       Unifier (su1, cs1) <- unifies t1 t2
       putUni $ Unifier (su1 `compose` su, cs1 ++ (apply su1 cs0))
-      solveConstraints
+      solver
 
+-- |Put a Unifier
 putUni :: MonadState (SolveState t) m => Unifier t -> m ()
 putUni u = modify (\(_,n) -> (u,n))
 
+-- |Get a Unifier
 getUni :: MonadState (SolveState t) m => m (Unifier t)
 getUni = fst <$> get
 
+-- |Record that two types must unify
 uni :: Type t -> Type t -> Infer t ()
 uni t1 t2 = tell ([Constraint (t1, t2)], [])
 
+-- |Record that a type must be stable
 stable :: Type t -> Infer t ()
 stable t = tell ([], [StableTy t])
 
+-- |Union two ctxs
 unionCtx :: Context t -> Context t -> Context t
 unionCtx (Ctx c1) (Ctx c2) = Ctx (c1 `M.union` c2)
 
+-- |Map a function over a context
 mapCtx :: (QualSchm t -> QualSchm t) -> Context t -> Context t
 mapCtx fn (Ctx m) = Ctx (M.map fn m)
 
+-- |Turn a context into a /later/ context.
+-- This effectively steps the context one tick, deleting all
+-- /now/ types and changing all /later/ values
+-- to /now/
 laterCtx :: Context t -> Context t
 laterCtx (Ctx c1) =
   Ctx $ M.map (maybe (error "laterCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
@@ -527,6 +560,8 @@ laterCtx (Ctx c1) =
       QStable -> Just (t, QStable)
       QLater  -> Just (t, QNow)
 
+-- |Turn a context into a /stable/ context.
+-- This deletes all types in the context that are not stable
 stableCtx :: Context t -> Context t
 stableCtx (Ctx c1) =
   Ctx $ M.map (maybe (error "laterCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
@@ -535,14 +570,18 @@ stableCtx (Ctx c1) =
       QStable -> Just (t, QStable)
       QLater  -> Nothing
 
+-- |Runs an inference action in a context with a schema bound to the given name
 inCtx :: (Name, QualSchm t) -> Infer t a -> Infer t a
 inCtx (x, sc) m = local scope m where
   scope e = (remove e x) `extend` (x, sc)
 
+-- |Runs an inference action in a stable context with a schema bound to
+-- the given name
 inStableCtx :: (Name, QualSchm t) -> Infer t a -> Infer t a
 inStableCtx (x, sc) m = local scope m where
   scope ctx = (stableCtx . remove ctx $ x) `extend` (x, sc)
 
+-- |Infer a term to be /now/
 inferNow :: Term t -> Infer t (Type t)
 inferNow expr = do
   t <- infer expr
@@ -552,6 +591,7 @@ inferNow expr = do
   --   then return (t,QNow)
   --   else typeErr (NotNow expr) ctx
 
+-- |Infer a term to be /later/
 inferLater :: Term t -> Infer t (Type t)
 inferLater expr = do
   t <- local laterCtx $ infer expr
@@ -561,6 +601,7 @@ inferLater expr = do
   --   then return (t,q)
   --   else typeErr (NotLater expr) ctx0
 
+-- |Infer a term to /stable/
 inferStable :: Term t -> Infer t (Type t)
 inferStable expr = do
   t <- local stableCtx $ infer expr
@@ -569,6 +610,9 @@ inferStable expr = do
   --   then return t
   --   else typeErrM (NotStable expr)
 
+-- |Infer the type of a term.
+-- Does not actually return the type, but rather the collection of all
+-- type constraints generated by the term, to be solved later.
 infer :: Term t -> Infer t (Type t)
 infer term = case term of
   TmLit a (LInt _)  -> return (TyPrim a TyNat)
@@ -685,6 +729,7 @@ infer term = case term of
     uni t1 t2
     return t1
 
+  -- Into must have a type annotation
   TmInto ann tyann e -> do
     case tyann of
       TyRec a alpha tau -> do
@@ -698,6 +743,7 @@ infer term = case term of
         tau'  <- TyVar ann <$> freshName
         typeErrM (UnificationMismatch [tyann] [TyRec ann alpha tau'])
 
+  -- Out must have a type annotation
   TmOut ann tyann e ->
     case tyann of
       TyRec a alpha tau' -> do
@@ -714,7 +760,8 @@ infer term = case term of
 
 
   where
-    binOpTy :: a -> BinOp -> Infer a (Type a) -- (Type a, Type a, Type a)
+    -- infer the type of a binary-operator expression
+    binOpTy :: a -> BinOp -> Infer a (Type a)
     binOpTy a =
       let fromPrim (x,y,z) = (TyPrim a x, TyPrim a y, TyPrim a z)
           toArr (x,y,z)    = TyArr a y (TyArr a z x)
@@ -736,9 +783,9 @@ infer term = case term of
           let (|->) = TyArr a
           return (tv |-> (tv |-> TyPrim a TyBool))
 
--- "Type check" a pattern. Basically, it unfold the pattern, makes sure
+-- |"Type check" a pattern. Basically, it unfold the pattern, makes sure
 -- it matches the term, and then returns a context with all the bound names
--- Let generalization makes this hard. It works right now, but I'm pretty
+-- Lets are not generalized, unfortunately. It works right now, but I'm pretty
 -- sure it is not correct. Ask your supervisors!
 inferPtn :: Pattern -> Type t -> Infer t (Context t)
 inferPtn pattern ty = case pattern of
@@ -790,7 +837,7 @@ inferPtn pattern ty = case pattern of
     ctx2 <- inCtx (nm2, (Forall [] tv2, QNow)) $ inferPtn p2 tv2
     return (ctx1 `unionCtx` ctx2)
 
--- normalize a type-scheme in the sense that we rename all the
+-- |Normalize a type-scheme in the sense that we rename all the
 -- type variables to be in alphabetical order of occurence
 normalize :: Scheme t -> Scheme t
 normalize (Forall _ body) = Forall (map snd ord) (normtype ord body)
