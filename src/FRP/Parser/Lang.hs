@@ -1,4 +1,7 @@
-
+{-|
+Module      : FRP.Parser.Lang
+Description : Language definition for FRP programs
+-}
 module FRP.Parser.Lang (
     module FRP.Parser.Lang
   , Operator(..)
@@ -11,10 +14,6 @@ import Text.Parsec.String
 import Text.Parsec
 import Text.Parsec.Expr
 import qualified Text.Parsec.Token as Tok
-
--- (<$$>) :: (Functor f, Monad f) => (a -> f b) -> f a -> f b
--- (<$$>) fn x = x >>= fn
-
 
 opNames :: [String]
 opNames    = [ "+", "-", "*", "/", "=", "==", "&&", "||"

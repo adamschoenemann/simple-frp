@@ -1,4 +1,10 @@
+{-|
+Module      : FRP.Parser.Construct
+Description : Helpers for constructing FRP parsers
 
+All the parser also accept the position of the parsed code.
+To avoid boiler-plate, these definitions take care of that
+-}
 module FRP.Parser.Construct where
 
 import FRP.AST

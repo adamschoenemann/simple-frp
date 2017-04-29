@@ -25,6 +25,7 @@ module FRP.Semantics (
   , interpProgram
   ) where
 
+import           Utils (unsafeLookup)
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Map.Strict      (Map)
@@ -95,11 +96,6 @@ allocVal v = do
   modify change
   return label
 
--- |Unsafely lookup a value in a map
-unsafeLookup :: (Ord k, Show k, Show v) => k -> Map k v -> v
-unsafeLookup k m = case M.lookup k m of
-  Just x  -> x
-  Nothing -> error $ show k ++ " not found in map " ++ show m
 
 -- |Lookup a pointer in the store
 lookupPntr :: Label -> EvalM StoreVal
@@ -265,16 +261,16 @@ eval term = case term of
         Eq   -> eqOp
         where
           intOp fn = do
-            VLit (LInt x)  <- eval el
-            VLit (LInt y)  <- eval er
-            return $ VLit (LInt $ fn x y)
+            VLit (LNat x)  <- eval el
+            VLit (LNat y)  <- eval er
+            return $ VLit (LNat $ fn x y)
           boolOp fn = do
             VLit (LBool x) <- eval el
             VLit (LBool y) <- eval er
             return $ VLit (LBool $ fn x y)
           intCmpOp fn = do
-            VLit (LInt x)  <- eval el
-            VLit (LInt y)  <- eval er
+            VLit (LNat x)  <- eval el
+            VLit (LNat y)  <- eval er
             return $ VLit (LBool $ fn x y)
           eqOp = do
             VLit x <- eval el

@@ -1,3 +1,7 @@
+{-|
+Module      : FRP.AST.QuasiQuoter
+Description : Quasi-Quoters for FRP programs
+-}
 {-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -15,64 +19,77 @@ import           FRP.Semantics
 
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Quote
+import           Data.Data
 import           Control.Applicative
 import           Text.Parsec hiding ((<|>))
 import           Data.List (find)
 import           Text.Parsec.String
 import           Utils (safeLast)
 
-prog :: QuasiQuoter
-prog = QuasiQuoter
-  { quoteExp = quoteFRPProg
-  , quotePat = undefined -- quoteCmmPat
+-- |Quote a program without type-checking it
+unsafeProg :: QuasiQuoter
+unsafeProg = QuasiQuoter
+  { quoteExp = unsafeQuoteProg
+  , quotePat = undefined
   , quoteDec = undefined
   , quoteType = undefined
   }
 
+-- |Quote a declaration without type-checking it
+unsafeDecl :: QuasiQuoter
+unsafeDecl = QuasiQuoter
+  { quoteExp = unsafeQuoteDecl
+  , quotePat = undefined
+  , quoteDec = undefined
+  , quoteType = undefined
+  }
+
+-- |Quote and type-check a declaration
 decl :: QuasiQuoter
 decl = QuasiQuoter
   { quoteExp = quoteFRPDecl
-  , quotePat = undefined -- quoteCmmPat
-  , quoteDec = undefined
-  , quoteType = undefined
-  }
-
-declTy :: QuasiQuoter
-declTy = QuasiQuoter
-  { quoteExp = quoteFRPDeclTy
   , quotePat = undefined
   , quoteDec = undefined
   , quoteType = undefined
   }
 
-progTy :: QuasiQuoter
-progTy = QuasiQuoter
-  { quoteExp = quoteFRPProgTy
+-- |Quote and type-check a program
+prog :: QuasiQuoter
+prog = QuasiQuoter
+  { quoteExp = quoteProg
   , quotePat = undefined
   , quoteDec = undefined
   , quoteType = undefined
   }
 
-
-term :: QuasiQuoter
-term = QuasiQuoter
-  { quoteExp = quoteFRPTerm
-  , quotePat = undefined -- quoteCmmPat
+-- |Quote a term without type-checking it
+unsafeTerm :: QuasiQuoter
+unsafeTerm = QuasiQuoter
+  { quoteExp = unsafeQuoteTerm
+  , quotePat = undefined
   , quoteDec = undefined
   , quoteType = undefined
   }
 
-quoteParseFRP :: Monad m => Parser p -> String -> m p
-quoteParseFRP p s = either (fail . show) return $ parse (spaces >> p) "quasi" s
+-- |Helper function for quoting the result of a parser
+parseFRP :: Monad m => Parser p -> String -> m p
+parseFRP p s = either (fail . show) return $ parse (spaces >> p) "quasi" s
 
-quoteFRPParser p s = do
-  ast <- quoteParseFRP p s
+-- |Unsafely quote the result of a parser
+unsafeQuoteFRPParser :: Data a => Parser a -> String -> Q Exp
+unsafeQuoteFRPParser p s = do
+  ast <- parseFRP p s
   dataToExpQ (const Nothing) ast
 
-quoteFRPDecl = quoteFRPParser P.decl
+unsafeQuoteDecl, unsafeQuoteTerm, unsafeQuoteProg :: String -> Q Exp
+unsafeQuoteDecl = unsafeQuoteFRPParser P.decl
+unsafeQuoteTerm = unsafeQuoteFRPParser P.term
+unsafeQuoteProg = unsafeQuoteFRPParser P.prog
 
-quoteFRPDeclTy s = do
-  dcl <- quoteParseFRP P.decl s
+-- |Quote and type-check a declaration
+quoteFRPDecl :: String -> Q Exp
+quoteFRPDecl s = do
+  dcl <- parseFRP P.decl s
   case inferDecl' dcl of
     Left err -> fail . show $ err
     Right ty -> do
@@ -80,18 +97,13 @@ quoteFRPDeclTy s = do
           let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
           runQ [| FRP initEnv $(trm) $(sing) |]
 
--- quotes an FRP program
--- the resulting type reflects the type of the definition named "main" or,
--- if there is no such definition, the last definition in the quasiquote
-quoteFRPProgTy s = do
-  prog <- quoteParseFRP P.prog s
+-- |Quotes an FRP program.
+-- The resulting type reflects the type of the definition named "main" or,
+-- if there is no such definition, the last definition in the quasiquote.
+quoteProg :: String -> Q Exp
+quoteProg s = do
+  prog <- parseFRP P.prog s
   let decls = _decls prog
-  -- stuff related to attempting to implement imports. Didn't work :/
-  {- let imports = expsToExp <$> (sequence $ map getImport $ _imports prog)
-     let decls' = dataToExpQ (const Nothing) decls :: Q Exp
-     let merged = varE (mkName "++") `appE` imports `appE` decls'
-     let mergedData = [|$(merged)|] :: [Decl ()]
-  -}
   mainDecl <-
         maybe (fail "empty programs are not allowed") return $
           find (\d -> _name d == "main") decls <|> safeLast decls
@@ -103,21 +115,24 @@ quoteFRPProgTy s = do
       trm     <- dataToExpQ (const Nothing) (unitFunc $ _body mainDecl)
       globals <- dataToExpQ (const Nothing) (globalEnv decls)
       return (ConE (mkName "FRP") `AppE` globals `AppE` trm `AppE` sing)
-      -- in  runQ [| FRP $(globals) $(trm) $(sing) |]
+
+-- stuff related to attempting to implement imports. Didn't work :/
+{- let imports = expsToExp <$> (sequence $ map getImport $ _imports prog)
+   let decls' = dataToExpQ (const Nothing) decls :: Q Exp
+   let merged = varE (mkName "++") `appE` imports `appE` decls'
+   let mergedData = [|$(merged)|] :: [Decl ()]
 
 expsToExp :: [Exp] -> Exp
 expsToExp = foldr (\x acc -> ConE (mkName ":") `AppE` x `AppE` acc)
                           (ConE (mkName "[]"))
-
-
 getImport :: String -> Q Exp
 getImport imp = do
   nm <- lookupValueName imp
   maybe (fail $ "import " ++ imp ++ " not found in scope") varE nm
+-}
 
 
-quoteFRPTerm = quoteFRPParser P.term
-quoteFRPProg = quoteFRPParser P.prog
+
 
 
 

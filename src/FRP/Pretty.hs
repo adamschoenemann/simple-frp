@@ -1,3 +1,7 @@
+{-|
+Module      : FRP.Pretty
+Description : A tiny interface for pretty-printing things
+-}
 
 module FRP.Pretty
   ( module Text.PrettyPrint
@@ -6,6 +10,7 @@ module FRP.Pretty
 
 import Text.PrettyPrint
 
+-- |A class for pretty-printing
 class Pretty p where
   ppr :: Int -> p -> Doc
   pp :: p -> Doc

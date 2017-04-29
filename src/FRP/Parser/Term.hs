@@ -57,13 +57,13 @@ tmtable   = [ [Infix spacef AssocLeft]
                      >> C.tmapp
                      <?> "space application"
             negation p =
-              let TmLit pos (LInt x) = p
-              in TmLit pos (LInt (negate x))
+              let TmLit pos (LNat x) = p
+              in TmLit pos (LNat (negate x))
 
             negation' = C.tmbinop <*> return Sub <*> one
             one = do
               pos <- getPosition
-              return $ TmLit pos (LInt 1)
+              return $ TmLit pos (LNat 1)
             bo o = C.tmbinop <*> return o
 
 tmtup :: Parser ParsedTerm
@@ -118,7 +118,7 @@ tmlam = do
   params <- symbol "\\" *> many1 lamParam
   bd <- reservedOp "->" *> term
   p <- getPosition
-  let lams = paramsToLams' p params
+  let lams = paramsToLams p params
   return (lams bd)
   where
     lamParam = (\x -> (x,Nothing)) <$> identifier
@@ -160,7 +160,7 @@ tmcons = reserved "cons" *> parens
 
 var, int, bool :: Parser ParsedTerm
 var  = C.tmvar <*> identifier
-int = C.tmlit <*> (LInt . fromInteger <$> natural)
+int = C.tmlit <*> (LNat . fromInteger <$> natural)
 bool = C.tmlit <*> (LBool <$> (true <|> false)) where
   true = reserved "True" >> return True
   false = reserved "False" >> return False

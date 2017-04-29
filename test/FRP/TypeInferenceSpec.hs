@@ -52,237 +52,237 @@ spec = do
   describe "typeinference" $ do
     describe "simple terms" $ do
       it "should infer \\x -> x" $ do
-       runInfer' (infer [term|\x -> x|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|\x -> x|]) `shouldInfer`
         ("0a" |-> "0a", [])
       it "should infer \\x -> 10" $ do
-       runInfer' (infer [term|\x -> 10|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|\x -> 10|]) `shouldInfer`
         ("0a" |-> tynat, [])
       it "should infer \\x -> True" $ do
-       runInfer' (infer [term|\x -> True|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|\x -> True|]) `shouldInfer`
         ("0a" |-> tybool, [])
       it "should infer \\x y -> y" $ do
-       runInfer' (infer [term|\x y -> y|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|\x y -> y|]) `shouldInfer`
         ("0a" |-> "0b" |-> "0b", [])
       it "should infer \\x y -> x" $ do
-       runInfer' (infer [term|\x y -> x|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|\x y -> x|]) `shouldInfer`
         ("0a" |-> "0b" |-> "0a", [])
       it "should infer \\x y -> x" $ do
-       runInfer' (infer [term|\x y -> x|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|\x y -> x|]) `shouldInfer`
         ("0a" |-> "0b" |-> "0a", [])
       it "should infer \\f x -> f x" $ do
-       runInfer' (infer [term|\f x -> f x|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|\f x -> f x|]) `shouldInfer`
         ("0a" |-> "0b" |-> "0c", [("0a" .=. "0b" |-> "0c")])
       it "should infer \\f g x -> f (g x)" $ do
-       runInfer' (infer [term|\f g x -> f (g x)|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|\f g x -> f (g x)|]) `shouldInfer`
         ("0a" |-> "0b" |-> "0c" |-> "0e",
           [("0b" .=. "0c" |-> "0d"), ("0a" .=. "0d" |-> "0e")]
         )
     describe "binary ops" $ do
       it "should infer 10 + 10" $ do
-       runInfer' (infer [term|10 + 10|]) `shouldInfer`
+       runInfer' (infer [unsafeTerm|10 + 10|]) `shouldInfer`
         ("0a", [tynat |-> tynat |-> "0a" .=. tynat |-> tynat |-> tynat])
 
       it "should infer \\x y z -> x + y == z : Nat -> Nat -> Nat -> Bool" $ do
-        inferTerm' [term|\x y z -> x + y == z|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x y z -> x + y == z|] `shouldSolve`
           (toScheme $ tynat |-> tynat |-> tynat |-> tybool)
 
-        inferTerm' [term|\x y z -> x + y == z|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x y z -> x + y == z|] `shouldSolve`
           (toScheme $ tynat |-> tynat |-> tynat |-> tybool)
 
       it "should infer \\f x -> f (x + 1) + 1 : (Nat -> Nat) -> Nat -> Nat" $ do
-        inferTerm' [term|\f x -> f (x + 1) + 1|] `shouldSolve`
+        inferTerm' [unsafeTerm|\f x -> f (x + 1) + 1|] `shouldSolve`
           (toScheme $ (tynat |-> tynat) |-> tynat |-> tynat)
 
       it "should infer \\f x -> f (x + 1) && True : (Nat -> Bool) -> Nat -> Bool" $ do
-        inferTerm' [term|\f x -> f (x + 1) && True |] `shouldSolve`
+        inferTerm' [unsafeTerm|\f x -> f (x + 1) && True |] `shouldSolve`
           (toScheme $ (tynat |-> tybool) |-> tynat |-> tybool)
 
     describe "if-then-else" $ do
       it "\\x -> if x > 10 then x else x * 2 : Nat -> Nat" $ do
-        inferTerm' [term|\x -> if x > 10 then x else x * 2 |] `shouldSolve`
+        inferTerm' [unsafeTerm|\x -> if x > 10 then x else x * 2 |] `shouldSolve`
           (toScheme $ tynat |-> tynat)
       it "\\f x -> if f x then f 10 else False : (Nat -> Bool) -> Nat -> Bool" $ do
-        inferTerm' [term|\f x -> if f x then f 10 else False|] `shouldSolve`
+        inferTerm' [unsafeTerm|\f x -> if f x then f 10 else False|] `shouldSolve`
           (toScheme $ (tynat |-> tybool) |-> tynat |-> tybool)
 
     describe "cons" $ do
       it "\\x xs -> cons(x,xs) : a -> @(S a) -> S a" $ do
-        inferTerm' [term|\x xs -> cons(x,xs) |] `shouldSolve`
+        inferTerm' [unsafeTerm|\x xs -> cons(x,xs) |] `shouldSolve`
           (Forall ["0a"] ("0a" |-> tylater (tystream "0a") |-> tystream "0a"))
 
       it "\\f x xs -> cons(f x, xs) : (a -> b) -> a -> @(S b) -> S b" $ do
-        inferTerm' [term|\f x xs -> cons(f x,xs) |] `shouldSolve`
+        inferTerm' [unsafeTerm|\f x xs -> cons(f x,xs) |] `shouldSolve`
           (Forall ["0a", "0b"]
              (("0a" |-> "0b") |-> "0a" |-> tylater (tystream "0b") |-> tystream "0b")
           )
 
     describe "fst" $ do
       it "\\x -> fst x"  $ do
-        inferTerm' [term|\x -> fst x|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x -> fst x|] `shouldSolve`
           (Forall ["0a", "0b"] $ "0a" .*. "0b" |-> "0a")
 
       it "\\x -> (fst x) * 2"  $ do
-        inferTerm' [term|\x -> (fst x) * 2|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x -> (fst x) * 2|] `shouldSolve`
           (Forall ["0a"] $ tynat .*. "0a" |-> tynat)
 
       it "\\x -> fst x * 2"  $ do
-        inferTerm' [term|\x -> fst x * 2|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x -> fst x * 2|] `shouldSolve`
           (Forall ["0a"] $ tynat .*. "0a" |-> tynat)
 
     describe "snd" $ do
       it "\\x -> snd x"  $ do
-        inferTerm' [term|\x -> snd x|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x -> snd x|] `shouldSolve`
           (Forall ["0a", "0b"] $ "0a" .*. "0b" |-> "0b")
 
       it "\\x -> (snd x) * 2"  $ do
-        inferTerm' [term|\x -> (snd x) * 2|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x -> (snd x) * 2|] `shouldSolve`
           (Forall ["0a"] $ "0a" .*. tynat |-> tynat)
 
       it "\\x -> snd x * 2"  $ do
-        inferTerm' [term|\x -> snd x * 2|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x -> snd x * 2|] `shouldSolve`
           (Forall ["0a"] $ "0a" .*. tynat |-> tynat)
 
     describe "tuples" $ do
       it "\\x y -> (x,y) : a -> b -> a * b"  $ do
-        inferTerm' [term|\x y -> (x,y)|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x y -> (x,y)|] `shouldSolve`
           (Forall ["0a","0b"] $ "0a" |-> "0b" |-> "0a" .*. "0b")
 
       it "\\x y -> (x * 2,y) : Nat -> a -> a * b"  $ do
-        inferTerm' [term|\x y -> (x * 2,y)|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x y -> (x * 2,y)|] `shouldSolve`
           (Forall ["0a"] $ tynat |-> "0a" |-> tynat .*. "0a")
 
       it "\\x y -> (x,y * 2) : a -> Nat -> a * Nat"  $ do
-        inferTerm' [term|\x y -> (x,y * 2)|] `shouldSolve`
+        inferTerm' [unsafeTerm|\x y -> (x,y * 2)|] `shouldSolve`
           (Forall ["0a"] $ "0a" |-> tynat |-> "0a" .*. tynat)
 
       it "\\y f -> f y + f (10, 20)"  $ do
-        inferTerm' [term|\y f -> f y + f (10, 20)|] `shouldSolve`
+        inferTerm' [unsafeTerm|\y f -> f y + f (10, 20)|] `shouldSolve`
           (toScheme $ tynat .*. tynat |-> (tynat .*. tynat |-> tynat) |-> tynat)
 
     -- describe "let-generalization" $ do
     --   it "let f = (\\x -> x) in let g = (f True) in f 3" $ do
-    --     inferTerm' [term|let f = (\x -> x) in let g = (f True) in f 3|] `shouldSolve`
+    --     inferTerm' [unsafeTerm|let f = (\x -> x) in let g = (f True) in f 3|] `shouldSolve`
     --       (toScheme tynat)
 
     describe "sum-types" $ do
 
       describe "inl" $ do
         it "\\x -> inl x" $ do
-          inferTerm' [term|\x -> inl x|] `shouldSolve`
+          inferTerm' [unsafeTerm|\x -> inl x|] `shouldSolve`
             (Forall ["0a", "0b"] $ "0a" |-> "0a" .+. "0b")
 
         it "inl 10" $ do
-          inferTerm' [term|inl 10|] `shouldSolve`
+          inferTerm' [unsafeTerm|inl 10|] `shouldSolve`
             (Forall ["0a"] $ tynat .+. "0a")
 
         it "\\f -> f (inl 10) && False" $ do
-          inferTerm' [term|\f -> f (inl 10) && False|] `shouldSolve`
+          inferTerm' [unsafeTerm|\f -> f (inl 10) && False|] `shouldSolve`
             (Forall ["0a"] $ (tynat .+. "0a" |-> tybool) |-> tybool)
 
       describe "inr" $ do
         it "\\x -> inr x" $ do
-          inferTerm' [term|\x -> inr x|] `shouldSolve`
+          inferTerm' [unsafeTerm|\x -> inr x|] `shouldSolve`
             (Forall ["0a", "0b"] $ "0a" |-> "0b" .+. "0a")
 
         it "inr 10" $ do
-          inferTerm' [term|inr 10|] `shouldSolve`
+          inferTerm' [unsafeTerm|inr 10|] `shouldSolve`
             (Forall ["0a"] $ "0a" .+. tynat)
 
         it "\\f -> f (inr 10) && False" $ do
-          inferTerm' [term|\f -> f (inr 10) && False|] `shouldSolve`
+          inferTerm' [unsafeTerm|\f -> f (inr 10) && False|] `shouldSolve`
             (Forall ["0a"] $ ("0a" .+. tynat |-> tybool) |-> tybool)
 
       describe "case" $ do
-        let t1 = [term|\x -> case x of | inl y -> y < 20 | inr z -> z && False|]
+        let t1 = [unsafeTerm|\x -> case x of | inl y -> y < 20 | inr z -> z && False|]
         it (ppshow t1) $ do
           inferTerm' t1 `shouldSolve`
             (Forall [] $ tynat .+. tybool |-> tybool)
 
-        let t2 = [term|\x xx -> case x of | inl y -> xx | inr z -> xx|]
+        let t2 = [unsafeTerm|\x xx -> case x of | inl y -> xx | inr z -> xx|]
         it (ppshow t2) $ do
           inferTerm' t2 `shouldSolve`
             (Forall ["0a","0b","0c"] $ "0b" .+. "0c" |-> "0a" |-> "0a")
 
-        let t3 = [term|\x -> case x of | inl y -> y | inr z -> z|]
+        let t3 = [unsafeTerm|\x -> case x of | inl y -> y | inr z -> z|]
         it (ppshow t3) $ do
           inferTerm' t3 `shouldSolve`
             (Forall ["0a"] $ "0a" .+. "0a" |-> "0a")
 
     describe "delay-elim" $ do
       it "\\u x -> let delay(x') = x in delay(u,x')" $ do
-        inferTerm' [term|\u x -> let delay(x') = x in delay(u,x')|] `shouldSolve`
+        inferTerm' [unsafeTerm|\u x -> let delay(x') = x in delay(u,x')|] `shouldSolve`
           (Forall ["0a"] $ tyalloc |-> tylater "0a" |-> tylater "0a")
 
     describe "cons-elim" $ do
       it "\\xs -> let cons(x, xs') = xs in x" $ do
-        let trm = [term|\xs -> let cons(x, xs') = xs in x|]
+        let trm = [unsafeTerm|\xs -> let cons(x, xs') = xs in x|]
         inferTerm' trm `shouldSolve`
           (Forall ["0a"] $ tystream "0a" |-> "0a")
 
       it "\\u xs -> let cons(x, delay(xs')) = xs in delay(u, xs')" $ do
-        let trm = [term|\u xs -> let cons(x, delay(xs')) = xs in delay(u,xs')|]
+        let trm = [unsafeTerm|\u xs -> let cons(x, delay(xs')) = xs in delay(u,xs')|]
         inferTerm' trm `shouldSolve`
           (Forall ["0a"] $ tyalloc |-> tystream "0a" |-> tylater (tystream "0a"))
 
       it "fails \\xs -> let cons(x, delay(xs')) = xs in let y = x True in x 10" $ do
-        let trm = [term|\xs -> let cons(x, delay(xs')) = xs in let y = x True in x 10|]
+        let trm = [unsafeTerm|\xs -> let cons(x, delay(xs')) = xs in let y = x True in x 10|]
         shouldTyErr (inferTerm' trm )
 
     describe "tuple-elim" $ do
       it "\\c -> let (a,b) = c in a" $ do
-        let trm = [term|\c -> let (a,b) = c in a|]
+        let trm = [unsafeTerm|\c -> let (a,b) = c in a|]
         inferTerm' trm `shouldSolve`
           (Forall ["0a", "0b"] $ "0a" .*. "0b" |-> "0a")
 
       it "\\c -> let (a,b) = c in b" $ do
-        let trm = [term|\c -> let (a,b) = c in b|]
+        let trm = [unsafeTerm|\c -> let (a,b) = c in b|]
         inferTerm' trm `shouldSolve`
           (Forall ["0a", "0b"] $ "0a" .*. "0b" |-> "0b")
 
       it "\\c -> let (a,b) = c in a b" $ do
-        let trm = [term|\c -> let (a,b) = c in a b|]
+        let trm = [unsafeTerm|\c -> let (a,b) = c in a b|]
         inferTerm' trm `shouldSolve`
           (Forall ["0a", "0b"] $ ("0a" |-> "0b") .*. "0a" |-> "0b")
 
       it "\\c -> let (a,b) = c in let x = a 10 in a b" $ do
-        let trm = [term|\c -> let (a,b) = c in let x = a 10 in a b|]
+        let trm = [unsafeTerm|\c -> let (a,b) = c in let x = a 10 in a b|]
         inferTerm' trm `shouldSolve`
           (Forall ["0a"] $ (tynat |-> "0a") .*. tynat |-> "0a")
 
       it "fails \\c -> let (a,b) = c in let x = a 10 in a True" $ do
-        let trm = [term|\c -> let (a,b) = c in let x = a 10 in a True|]
+        let trm = [unsafeTerm|\c -> let (a,b) = c in let x = a 10 in a True|]
         shouldTyErr (inferTerm' trm)
 
     describe "fixpoint" $ do
       it "fix f. 10 : Nat" $ do
-        inferTerm' [term|fix f. 10|] `shouldSolve`
+        inferTerm' [unsafeTerm|fix f. 10|] `shouldSolve`
           (toScheme $ tynat)
 
       it "fix f. \\x -> 10 : a -> Nat" $ do
-        inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
+        inferTerm' [unsafeTerm|fix f. \x -> 10|] `shouldSolve`
           (Forall ["0a"] $ "0a" |-> tynat)
 
       it "fix f. \\x y -> 10 : a -> Nat" $ do
-        inferTerm' [term|fix f. \x -> 10|] `shouldSolve`
+        inferTerm' [unsafeTerm|fix f. \x -> 10|] `shouldSolve`
           (Forall ["0a"] $ "0a" |-> tynat)
 
     describe "out" $ do
 
-      let trm = [term|\x -> let y = out (mu a. Nat * a) x in y|]
+      let trm = [unsafeTerm|\x -> let y = out (mu a. Nat * a) x in y|]
       let typ = tyrec "a" (tynat .*. "a")
             |-> tynat .*. tylater (tyrec "a" (tynat .*. "a"))
       it (ppshow trm) $
         inferTerm' trm `shouldSolve`
           (toScheme $ typ)
 
-      let trm = [term|\x -> let (y,z) = out (mu a. Nat * a) x in y|]
+      let trm = [unsafeTerm|\x -> let (y,z) = out (mu a. Nat * a) x in y|]
       let typ = tyrec "a" (tynat .*. "a")
             |-> tynat
       it (ppshow trm) $
         inferTerm' trm `shouldSolve`
           (toScheme $ typ)
 
-      let trm = [term|\x -> let (y,z) = out (mu a. b * a) x in y|]
+      let trm = [unsafeTerm|\x -> let (y,z) = out (mu a. b * a) x in y|]
       let typ = Forall ["0a"] $   tyrec "a" ("0a" .*. "a")
                           |-> "0a"
       it (ppshow trm) $
@@ -290,23 +290,23 @@ spec = do
           (typ)
 
     describe "into" $ do
-      let trm = [term|\x -> into (mu af. Nat) x|]
+      let trm = [unsafeTerm|\x -> into (mu af. Nat) x|]
       it (ppshow trm) $ do
         inferTerm' trm `shouldSolve`
           (toScheme $ tynat |-> tyrec "af" tynat)
 
-      let trm = [term|into (mu af. Nat) 10|]
+      let trm = [unsafeTerm|into (mu af. Nat) 10|]
       it (ppshow trm) $ do
         inferTerm' trm `shouldSolve`
           (toScheme $ tyrec "af" tynat)
 
-      let trm = [term|\x -> into (mu af. Nat * af) (10, x)|]
+      let trm = [unsafeTerm|\x -> into (mu af. Nat * af) (10, x)|]
       it (ppshow trm) $ do
         inferTerm' trm `shouldSolve`
           (toScheme $  tylater (tyrec "af" (tynat .*. "af"))
                    |-> tyrec "af" (tynat .*. "af"))
 
-      let trm = [term|
+      let trm = [unsafeTerm|
         \x -> let (y,z) = out (mu af. Nat * af) x in
               into (mu af. Nat * af) (y, z)
       |]
@@ -315,7 +315,7 @@ spec = do
           (toScheme $
             tyrec "af" (tynat .*. "af") |-> tyrec "af" (tynat .*. "af"))
 
-      let trm = [term|
+      let trm = [unsafeTerm|
         fix f. \us ->
           let (u, delay(us')) = out (mu af. tyalloc * af) us
           in into (mu af. tynat * af) (10, delay(u, f us'))
@@ -325,7 +325,7 @@ spec = do
           (toScheme $ tyrec "af" (tyalloc .*. "af")
                   |-> tyrec "af" (tynat .*. "af"))
 
-      let trm = [decl|
+      let trm = [unsafeDecl|
         nats : (mu af. alloc * af) -> Nat -> (mu af. Nat * af)
         nats us n =
           let (u, delay(us')) = out (mu af. alloc * af) us in
@@ -338,7 +338,7 @@ spec = do
                    |-> tynat
                    |-> tyrec "af" (tynat .*. "af"))
 
-      let trm = [decl|
+      let trm = [unsafeDecl|
         const : (mu af. alloc * af) -> Nat -> (mu af. Nat * af)
         const us n =
           let (u, delay(us')) = out (mu af. alloc * af) us in
@@ -352,7 +352,7 @@ spec = do
               |-> tynat
               |-> tyrec "af" (tynat .*. "af"))
 
-      let trm = [decl|
+      let trm = [unsafeDecl|
         tails : (mu af. alloc * af) -> (mu af. a * af) -> (mu af. (mu bf. a * bf) * af)
         tails us xs =
           let (u, delay(us')) = out (mu af. alloc * af) us in
@@ -367,7 +367,7 @@ spec = do
               |-> tyrec "af" ((tyrec "bf" $ "0a" .*. "bf") .*. "af"))
 
     describe "stable" $ do
-      let trm = [term|
+      let trm = [unsafeTerm|
                 \(fn : #(Nat -> Nat) -> Nat -> Nat) ->
                     let f = stable(\x -> x + 1) in
                     fn f 0
@@ -377,7 +377,7 @@ spec = do
         inferTerm' trm `shouldSolve`
           (toScheme $ (tystable (tynat |-> tynat) |-> tynat |-> tynat) |-> tynat)
 
-      let trm = [term|
+      let trm = [unsafeTerm|
                 \(fn : #(Nat -> Nat) -> Nat -> Nat) ->
                     let f = \x -> x + 1 in
                     fn f 0
@@ -390,29 +390,29 @@ spec = do
 
     describe "type annotations" $ do
       describe "lambdas" $ do
-        let trm = [term|\(x:Nat) -> x * 10|]
+        let trm = [unsafeTerm|\(x:Nat) -> x * 10|]
         it (ppshow trm) $
           inferTerm' trm `shouldSolve`
             (toScheme $ tynat |-> tynat)
 
-        let trm = [term|\(x:a) -> x * 10|]
+        let trm = [unsafeTerm|\(x:a) -> x * 10|]
         it (ppshow trm) $
           inferTerm' trm `shouldSolve`
             (toScheme $ tynat |-> tynat)
 
-        let trm = [term|\(x:Bool) (y:Nat) -> y < 10 && x|]
+        let trm = [unsafeTerm|\(x:Bool) (y:Nat) -> y < 10 && x|]
         it (ppshow trm) $
           inferTerm' trm `shouldSolve`
             (toScheme $ tybool |-> tynat |-> tybool)
 
-        let trm = [term|\(x : @(S Nat)) (y:Nat) -> cons(y, x)|]
+        let trm = [unsafeTerm|\(x : @(S Nat)) (y:Nat) -> cons(y, x)|]
         it (ppshow trm) $
           inferTerm' trm `shouldSolve`
             (toScheme $ tylater (tystream tynat) |-> tynat |-> tystream (tynat))
 
       describe "fixpoints" $ do
 
-        let trm = [term|
+        let trm = [unsafeTerm|
           fix (f : S alloc -> S Nat). \us ->
             let cons(u,delay(us')) = us in
             cons(10, delay(u, f us'))
@@ -421,7 +421,7 @@ spec = do
           inferTerm' trm `shouldSolve`
             (toScheme $ tystream tyalloc |-> tystream tynat)
 
-        let trm = [term|
+        let trm = [unsafeTerm|
           fix (f : S alloc -> #a -> S a). \us x ->
             let cons(u,delay(us')) = us in
             let stable(x') = x in
@@ -499,44 +499,44 @@ spec = do
 
 
   describe "negative cases" $ do
-    let trm = [term|\x -> x + 10 < (x && True)|]
+    let trm = [unsafeTerm|\x -> x + 10 < (x && True)|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
-    let trm = [term|\x -> x x|]
+    let trm = [unsafeTerm|\x -> x x|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
-    let trm = [term|\x -> x + 10 - (x x)|]
+    let trm = [unsafeTerm|\x -> x + 10 - (x x)|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
-    let trm = [term|\x -> let (y,z) = x in x + 10|]
+    let trm = [unsafeTerm|\x -> let (y,z) = x in x + 10|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
-    let trm = [term|\x -> let (y,z) = out (Nat * Nat) x in z + 10|]
+    let trm = [unsafeTerm|\x -> let (y,z) = out (Nat * Nat) x in z + 10|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
-    let trm = [term|
+    let trm = [unsafeTerm|
       \x -> let (y,z) = out (mu af. Nat * af) x in
             into (mu af. Bool * af) (y, z)
     |]
 
-    let trm = [term|\x -> let cons(y,cons(y',ys)) = x in cons(y,ys)|]
+    let trm = [unsafeTerm|\x -> let cons(y,cons(y',ys)) = x in cons(y,ys)|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
-    let trm = [term|\(x:Nat) -> x && False|]
+    let trm = [unsafeTerm|\(x:Nat) -> x && False|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
-    let trm = [term|\(x:Nat -> Bool) -> x 10 + 10|]
+    let trm = [unsafeTerm|\(x:Nat -> Bool) -> x 10 + 10|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 
-    let trm = [term|\x -> let stable(y) = promote(x) in True|]
+    let trm = [unsafeTerm|\x -> let stable(y) = promote(x) in True|]
     it (ppshow trm) $ do
       shouldTyErr (inferTerm' trm)
 

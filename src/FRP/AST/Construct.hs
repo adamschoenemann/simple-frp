@@ -1,4 +1,7 @@
-
+{-|
+Module      : FRP.AST.Construct
+Description : Helper functions to construct ASTs by hand
+-}
 module FRP.AST.Construct where
 
 import           FRP.AST
@@ -58,7 +61,7 @@ tmlet = TmLet ()
 tmlit :: Lit -> EvalTerm
 tmlit = TmLit ()
 
-tmint  = tmlit . LInt
+tmint  = tmlit . LNat
 tmbool = tmlit . LBool
 
 tmbinop :: BinOp -> EvalTerm -> EvalTerm -> EvalTerm

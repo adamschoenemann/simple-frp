@@ -14,7 +14,7 @@ frps = [ frp_nats, frp_sum_acc, frp_sum, frp_tails, frp_map
        , frp_unfold, frp_fib_wrong, frp_swap
        ]
 
-frp_const = unitFunc [decl|
+frp_const = unitFunc [unsafeDecl|
   const : S alloc -> Nat -> S Nat
   const us n =
     let cons(u, delay(us')) = us in
@@ -22,7 +22,7 @@ frp_const = unitFunc [decl|
     cons(x, delay(u, const us' x)).
 |]
 
-frp_const_fix = unitFunc [decl|
+frp_const_fix = unitFunc [unsafeDecl|
   const : S alloc -> Nat -> S Nat
   const = fix f. \us n ->
     let cons(u, delay(us')) = us in
@@ -31,7 +31,7 @@ frp_const_fix = unitFunc [decl|
 |]
 
 
-frp_nats = unitFunc [decl|
+frp_nats = unitFunc [unsafeDecl|
   nats : S alloc -> Nat -> S Nat
   nats us n =
     let cons(u, delay(us')) = us in
@@ -40,7 +40,7 @@ frp_nats = unitFunc [decl|
 |]
 
 frp_sum_acc :: Decl ()
-frp_sum_acc = unitFunc [decl|
+frp_sum_acc = unitFunc [unsafeDecl|
   sum_acc : S alloc -> S Nat -> Nat -> S Nat
   sum_acc us ns acc =
     let cons(u, delay(us')) = us in
@@ -50,14 +50,14 @@ frp_sum_acc = unitFunc [decl|
 |]
 
 frp_sum :: Decl ()
-frp_sum = unitFunc [decl|
+frp_sum = unitFunc [unsafeDecl|
   sum : S alloc -> S Nat -> S Nat
   sum us ns = sum_acc us ns 0.
 |]
 
 
 frp_tails :: Decl ()
-frp_tails = unitFunc [decl|
+frp_tails = unitFunc [unsafeDecl|
   tails : S alloc -> S a -> S (S a)
   tails us xs =
     let cons(u, delay(us')) = us in
@@ -69,7 +69,7 @@ frp_map :: Decl ()
 frp_map = unitFunc frp_map_sp
 
 -- frp_map_sp :: Decl ()
-frp_map_sp = [decl|
+frp_map_sp = [unsafeDecl|
   map : S alloc -> #(A -> B) -> S A -> S B
   map us h xs =
     let cons(u, delay(us')) = us in
@@ -79,7 +79,7 @@ frp_map_sp = [decl|
 |]
 
 
-frp_prog_1 = [prog|
+frp_prog_1 = [unsafeProg|
 
   map : S alloc -> #(A -> B) -> S A -> S B
   map us h xs =
@@ -99,7 +99,7 @@ frp_prog_1 = [prog|
 
 |]
 
-frp_unfold = unitFunc [decl|
+frp_unfold = unitFunc [unsafeDecl|
   unfold : S alloc -> #(X -> (A * @X)) -> X -> S A
   unfold us h x =
     let cons(u, delay(us')) = us in
@@ -127,7 +127,7 @@ frp_fib_wrong = Decl () ty name body where
           tmtup "f" (tmdelay "u" (tmtup (tmstable "b'") (tmstable "f'")))
 
 frp_natfn :: Decl ()
-frp_natfn = unitFunc [decl|
+frp_natfn = unitFunc [unsafeDecl|
   natfn : (S alloc * Nat) -> (Nat * @(S alloc * Nat))
   natfn x =
     let (us, n) = x in
@@ -136,7 +136,7 @@ frp_natfn = unitFunc [decl|
     (n, delay(u, (us', n' + 1))).
 |]
 
-frp_nats_unfold = unitFunc [decl|
+frp_nats_unfold = unitFunc [unsafeDecl|
   nats : S alloc -> S Nat
   nats us =
     let fn = stable(natfn) in
@@ -144,7 +144,7 @@ frp_nats_unfold = unitFunc [decl|
 |]
 
 frp_swap :: Decl ()
-frp_swap = unitFunc [decl|
+frp_swap = unitFunc [unsafeDecl|
   swap : S alloc -> Nat -> S A -> S A -> S A
   swap us n xs ys =
     if n == 0
@@ -158,7 +158,7 @@ frp_swap = unitFunc [decl|
 
 -- switch : S alloc -> S a -> E (S a) -> S a
 frp_switch :: Decl ()
-frp_switch = unitFunc [decl|
+frp_switch = unitFunc [unsafeDecl|
   switch : S alloc -> S a -> (mu b. (S a) + b) -> S a
   switch us xs e =
     let cons(u, delay(us')) = us in
@@ -170,7 +170,7 @@ frp_switch = unitFunc [decl|
 |]
 
 frp_bind :: Decl ()
-frp_bind = unitFunc [decl|
+frp_bind = unitFunc [unsafeDecl|
   bind : S alloc -> #(a -> (mu af. b + af)) -> (mu af. a + af) -> (mu af. b + af)
   bind us h e =
     let cons(u,delay(us')) = us in
@@ -186,24 +186,27 @@ frp_main :: EvalTerm -> Type () -> Decl ()
 frp_main bd retTy = Decl () ty "main" bd where
   ty = tystream tyalloc |-> retTy
 
-declTy_01 = [declTy|
+declTy_01 :: FRP TNat
+declTy_01 = [decl|
   ex01 : Nat
   ex01 = 10.
 |]
 
-declTy_02 = [declTy|
+declTy_02 :: FRP (TNat :->: TNat)
+declTy_02 = [decl|
   ex02 : Nat -> Nat
   ex02 x = x * 10.
 |]
 
-declTy_03 = [declTy|
+declTy_03 :: FRP ((TNat :*: TBool) :->: TNat)
+declTy_03 = [decl|
   ex03 : (Nat * Bool) -> Nat
   ex03 x =
     let (n, b) = x in if b then n * 2 else n + 2.
 |]
 
 frp_incr :: FRP (TStream TAlloc :->: TStream TNat :->: TStream TNat)
-frp_incr = [declTy|
+frp_incr = [decl|
   main : S alloc -> S Nat -> S Nat
   main us xs =
     let map = fix (map : S alloc -> #(a -> b) -> S a -> S b). \us h xs ->
@@ -215,7 +218,7 @@ frp_incr = [declTy|
 |]
 
 frp_incr_fails :: Decl ()
-frp_incr_fails = unitFunc [decl|
+frp_incr_fails = unitFunc [unsafeDecl|
   incr : S alloc -> S Nat -> S Nat
   incr allocs lst =
     let map = fix (map : S alloc -> #(a -> b) -> S a -> S b). \us h xs ->
@@ -227,7 +230,7 @@ frp_incr_fails = unitFunc [decl|
 |]
 
 frp_tails_ty :: FRP (TStream TAlloc :->: TStream TNat :->: TStream (TStream TNat))
-frp_tails_ty = [declTy|
+frp_tails_ty = [decl|
   tails : S alloc -> S Nat -> S (S Nat)
   tails us xs =
     let cons(u, delay(us')) = us in
@@ -236,7 +239,7 @@ frp_tails_ty = [declTy|
 |]
 
 frp_incr_prog_ty :: FRP (TStream TAlloc :->: TStream TNat :->: TStream TNat)
-frp_incr_prog_ty = [progTy|
+frp_incr_prog_ty = [prog|
   map : S alloc -> #(a -> b) -> S a -> S b
   map us h xs =
     let cons(u, delay(us')) = us in
@@ -251,7 +254,7 @@ frp_incr_prog_ty = [progTy|
 |]
 
 frp_scary_const_fails :: Decl ()
-frp_scary_const_fails = unitFunc [decl|
+frp_scary_const_fails = unitFunc [unsafeDecl|
   scary_const : S alloc -> S Nat -> S (S Nat)
   scary_const us ns =
     let cons(u, delay(us')) = us in
@@ -260,7 +263,7 @@ frp_scary_const_fails = unitFunc [decl|
 |]
 
 frp_scary_const :: FRP (TStream TAlloc :->: TStream (TStream TNat))
-frp_scary_const = [progTy|
+frp_scary_const = [prog|
   buffer : S alloc -> Nat -> S Nat -> S Nat
   buffer us n xs =
     let cons(u, delay(us')) = us in
@@ -290,3 +293,38 @@ frp_scary_const = [progTy|
   main : S alloc -> S (S Nat)
   main us = scary_const us (nats us 0).
 |]
+
+prog_tails :: Program ()
+prog_tails =
+  let mainbd = "us" -->
+              ("tails" <| "us") <| ("nats" <| "us" <| 0)
+      mainfn = frp_main mainbd (tystream (tystream tynat))
+  in  Program [] [mainfn, frp_nats, frp_tails]
+
+prog_map :: Program ()
+prog_map =
+  let mainfn = frp_main mainbd (tystream tynat)
+      mainbd =
+          "us" -->
+          ("map" <| "us" <| tmstable ("y" --> 2 * "y")) <|
+          ("nats" <| "us" <| 0)
+
+  in Program [] [mainfn, frp_map, frp_nats]
+
+prog_unfold :: Program ()
+prog_unfold =
+  let mainfn = frp_main (_body frp_nats_unfold) (tystream tynat)
+  in Program [] [mainfn, frp_unfold, frp_natfn, frp_nats_unfold]
+
+prog_swap_const_nats = Program [] [mainfn, frp_unfold, frp_const, frp_nats, frp_swap]
+  where
+    mainfn = frp_main mainbd (tystream tynat)
+    mainbd =
+      "us" -->
+      "swap" <| "us" <| 10 <|
+      ("nats" <| "us" <| 0) <| ("const" <| "us" <| 42)
+
+prog_sum = Program [] [mainfn, frp_nats, frp_sum_acc, frp_sum] where
+  mainbd = "us" -->
+              ("sum" <| "us") <| ("nats" <| "us" <| 0)
+  mainfn = frp_main mainbd (tystream tynat)

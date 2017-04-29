@@ -1,3 +1,8 @@
+{-|
+Module      : FRP.AST.Reflect
+Description : Reflecting FRP-Types into the Haskell type-system
+
+-}
 {-# LANGUAGE AutoDeriveTypeable  #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
@@ -13,8 +18,8 @@
 
 module FRP.AST.Reflect where
 
-import           Language.Haskell.TH (Exp (..), ExpQ, Lit (..), Pat (..), Q,
-                                      mkName, runQ)
+import           Language.Haskell.TH ( Exp (..), ExpQ, Lit (..), Pat (..), Q
+                                     , mkName, runQ)
 
 import           FRP.AST
 import           FRP.AST.Construct
@@ -22,6 +27,11 @@ import qualified Language.Haskell.TH as T
 
 import           Data.Data
 
+-- -----------------------------------------------------------------------------
+-- Ty
+-- -----------------------------------------------------------------------------
+
+-- | The type of FRP-types that can be reflected
 data Ty
   = TNat
   | TBool
@@ -37,6 +47,12 @@ infixr 0 :->:
 infixr 6 :*:
 infixr 5 :+:
 
+-- -----------------------------------------------------------------------------
+-- Sing
+-- -----------------------------------------------------------------------------
+
+-- |Singleton representation to lift Ty into types
+-- using kind-promotion
 data Sing :: Ty -> * where
   SNat    :: Sing TNat
   SBool   :: Sing TBool
@@ -50,7 +66,7 @@ deriving instance Eq (Sing a)
 deriving instance Show (Sing a)
 deriving instance Typeable (Sing a)
 
-
+-- |Reify a singleton back into an FRP type
 reify :: Sing t -> Type ()
 reify = \case
   SNat    -> tynat
@@ -62,13 +78,19 @@ reify = \case
   SArr    t1 t2 -> reify t1 |-> reify t2
   SStream t -> reify t
 
+-- -----------------------------------------------------------------------------
+-- FRP
+-- -----------------------------------------------------------------------------
+
+-- |An FRP program of a type, executed in an environment
 data FRP :: Ty -> * where
   FRP :: Env -> Term () -> Sing t -> FRP t
 
 deriving instance Typeable (FRP t)
 deriving instance Show (FRP t)
 
-
+-- |Use template haskell to generate a singleton value that represents
+-- an FRP type
 typeToSingExp :: Type a -> ExpQ
 typeToSingExp typ = case typ of
   TyPrim _ TyNat  -> runQ [| SNat |]

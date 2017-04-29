@@ -10,7 +10,7 @@ import           Test.QuickCheck
 type TestTerm = Term ()
 
 genInt :: Gen TestTerm
-genInt = tmlit . LInt <$> arbitrary
+genInt = tmlit . LNat <$> arbitrary
 
 genBool :: Gen TestTerm
 genBool = tmlit . LBool <$> arbitrary

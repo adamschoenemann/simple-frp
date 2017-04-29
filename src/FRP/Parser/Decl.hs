@@ -16,6 +16,6 @@ decl = do
   params <- map (\x -> (x, Nothing)) <$> many identifier <* ws <* reservedOp "="
   bod <- term <* char '.' <* ws
   p <- getPosition
-  let body = paramsToLams' p params bod
+  let body = paramsToLams p params bod
   return $ fixifyDecl $ Decl p typ nam body
 

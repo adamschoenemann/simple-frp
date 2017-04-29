@@ -330,8 +330,8 @@ spec = do
       parse P.term "txt_frp_bind" (unpack txt_frp_bind) `shouldParse` (txt_frp_bind_ast)
 
     it "parses negative numbers" $ do
-      parse P.term "neg" "-(10)" `shouldParse` (tmlit (LInt (-10)))
-      parse P.term "neg" "10 * -(10)" `shouldParse` (10 * (tmlit (LInt (-10))))
+      parse P.term "neg" "-(10)" `shouldParse` (tmlit (LNat (-10)))
+      parse P.term "neg" "10 * -(10)" `shouldParse` (10 * (tmlit (LNat (-10))))
 
   describe "type parsing" $ do
     it "parses Nat" $ do
@@ -527,7 +527,7 @@ spec = do
               { _ann  = ()
               , _type = tyarr (tystream tyalloc) (tystream tynat)
               , _name = "main"
-              , _body = tmlam "us" (tmapp (tmapp (tmvar "const") (tmvar "us")) (tmlit (LInt 10)))
+              , _body = tmlam "us" (tmapp (tmapp (tmvar "const") (tmvar "us")) (tmlit (LNat 10)))
               }
             ]
           }
@@ -577,7 +577,7 @@ spec = do
                                                     (tmapp
                                                        (tmapp (tmvar "nats") (tmvar "us'"))
                                                        (tmbinop Add (tmvar "x")
-                                                          (tmlit (LInt 1)))))))))
+                                                          (tmlit (LNat 1)))))))))
                          }
                        , Decl
                          { _ann  = ()
@@ -616,7 +616,7 @@ spec = do
                                         (tmapp
                                            (tmapp (tmapp (tmvar "sum_acc") (tmvar "us"))
                                               (tmvar "ns"))
-                                           (tmlit (LInt 0))))
+                                           (tmlit (LNat 0))))
                          }
                        , Decl
                           { _ann  = ()
@@ -627,7 +627,7 @@ spec = do
                                          (tmapp
                                             (tmapp (tmapp (tmvar "sum") (tmvar "us")) (tmvar "nats"))
                                             (tmvar "us"))
-                                         (tmlit (LInt 0)))
+                                         (tmlit (LNat 0)))
                           }
                        ]
             }

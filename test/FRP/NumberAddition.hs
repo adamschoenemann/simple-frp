@@ -10,7 +10,7 @@ import FRP.AST.QuasiQuoter
 import FRP.TestFunctions (frp_tails_ty)
 
 frp_add :: FRP (TStream TAlloc :->: TStream (TNat :*: TNat) :->: TStream TNat)
-frp_add = [progTy|
+frp_add = [prog|
   main : S alloc -> S (Nat * Nat) -> S Nat
   main us ps =
     let cons(u, delay(us')) = us in

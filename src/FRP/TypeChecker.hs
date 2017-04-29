@@ -1,3 +1,11 @@
+{-|
+Module      : FRP.TypeChecker
+Description : A "reference" implementation of a type-checker for FRP
+
+This module is DEPRECATED. This was the first implementation of the type-checker
+that requires fully annotated lambdas as so forth, i.e. it does /not/ do
+any inference.
+-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -250,7 +258,7 @@ checkTerm ctx term = case term of
     ctx2 <- checkPtn ctx ptn t
     checkTerm ctx2 trm2
   TmLit a l              -> case l of
-    LInt  _ -> return (TyPrim a TyNat,  QNow)
+    LNat  _ -> return (TyPrim a TyNat,  QNow)
     LBool _ -> return (TyPrim a TyBool, QNow)
   TmBinOp a op l r       -> do
     let (retty, lty, rty) = binOpTy a op

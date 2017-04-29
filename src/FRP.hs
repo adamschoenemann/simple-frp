@@ -1,3 +1,10 @@
+{-|
+Module      : FRP
+Description : Entry-point for the library
+
+Exports functions to execute FRP programs, and use them as
+stream transformers
+-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -10,32 +17,36 @@
 module FRP
   ( module FRP.AST
   , module FRP.Semantics
+  , module FRP.AST.QuasiQuoter
   , transform
   , execute
   , FRPHask
   )
   where
 
-import           FRP.AST
-import           FRP.AST.Construct
-import           FRP.AST.Reflect
-import           FRP.Semantics
+import FRP.AST
+import FRP.AST.Construct
+import FRP.AST.Reflect
+import FRP.AST.QuasiQuoter
+import FRP.Semantics
 
-
-
-haskErr :: String -> Sing t -> Value -> a
-haskErr msg sing v =
-  error $ msg ++ " but got (" ++ show sing ++ ") (" ++ show v ++ ")"
-
+-- |Type-class that represents a conversion from a FRP value of
+-- a type to a Haskell value of a type
 class FRPHask (t :: Ty) (a :: *) | t -> a where
   toHask :: Sing t -> Value -> a
   toFRP :: Sing t -> a -> Value
 
+-- |An error when converting a FRP value to a Haskell value
+haskErr :: String -> Sing t -> Value -> a
+haskErr msg sing v =
+  error $ msg ++ " but got (" ++ show sing ++ ") (" ++ show v ++ ")"
+
+
 instance FRPHask TNat Int where
-  toHask sing (VLit (LInt x)) = x
+  toHask sing (VLit (LNat x)) = x
   toHask sing v               = haskErr "expected nat value" sing v
 
-  toFRP _ x = VLit . LInt $ x
+  toFRP _ x = VLit . LNat $ x
 
 instance FRPHask TBool Bool where
   toHask sing (VLit (LBool x)) = x
@@ -71,36 +82,32 @@ instance FRPHask t1 a => FRPHask (TStream t1) [a] where
   toFRP (SStream s) (x : xs) = VCons (toFRP s x) (toFRP (SStream s) xs)
 
 
+-- |Use a FRP program to transform a Haskell stream @[a]@ to @[b]@
 -- lazy evaluation allows us to do this, where we construct the possibly infinite
 -- term of conses from the input list that is not fully evaluated until
 -- the ith iteration
 transform :: (FRPHask t1 a, FRPHask t2 b)
           => FRP (TStream TAlloc :->: TStream t1 :->: TStream t2)
           -> [a] -> [b]
-transform frp@(FRP env trm sing@(SArr us (SArr (SStream s1) (SStream s2)))) as =
+transform (FRP env trm (SArr us (SArr (SStream s1) (SStream s2)))) as =
   map (toHask s2) $ toHaskList $ runTermInEnv env $ mkExpr trm s1 as
   where
-    -- unused right now
-    help st tm = \case
-      [] -> []
-      (x : xs) ->
-          let r@((VCons v (VPntr l)), st1) = runExpr st initEnv tm
-          in  toHask s2 v : help (tick st1) (tmpntrderef l) xs
     mkExpr :: (FRPHask t a) => Term () -> Sing t -> [a] -> Term ()
     mkExpr tm s xs = tm <| fixed tmalloc <| streamed s xs
 
     streamed s [] = error "input stream terminated"
     streamed s (x : xs) = tmcons (valToTerm . toFRP s $ x) (tmdelay tmalloc $ streamed s xs)
-    uncons ((VCons x l), s') = x
 
 
+-- |Execute a FRP program that produces a stream of @[a]@s
 execute :: (FRPHask t a) => FRP (TStream TAlloc :->: TStream t) -> [a]
 execute frp@(FRP env trm sing@(SArr us (SStream s))) =
   map (toHask s) $ toHaskList $ runTermInEnv env $ mkExpr trm
   where
     mkExpr tm = tm <| fixed tmalloc
 
-
+-- |Take a term and put it in an infinite fixpoint
 fixed :: Term () -> Term ()
 fixed e = tmfix "_xs" (tystream $ tyalloc)
           $ tmcons e (tmdelay tmalloc "_xs")
+
