@@ -5,6 +5,7 @@ Description : Operational Semantics
 This module implements the operational semantics from the paper
 -}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module FRP.Semantics (
     StoreVal(..)
@@ -72,7 +73,8 @@ instance Pretty EvalState where
     $$ ppr n s
 
 -- |The Eval monad handles evaluation of programs
-type EvalM a = StateT EvalState (Reader Env) a
+newtype EvalM a = EvalM {unEvalM :: StateT EvalState (Reader Env) a}
+  deriving (Functor, Applicative, Monad, MonadState EvalState, MonadReader Env)
 
 -- |the initial state for the evaluator is with an empty Store and
 -- a label generator at 0
@@ -142,7 +144,7 @@ evalExpr' s env term = fst $ runExpr s env term
 -- |Run an expression\/term in a given state and environment
 runExpr :: EvalState -> Env -> EvalTerm -> (Value, EvalState)
 runExpr initState initEnv term =
-  let (v, s) = runReader (runStateT (eval term) initState) initEnv
+  let (v, s) = runReader (runStateT (unEvalM $ eval term) initState) initEnv
   in  -- trace ("runExpr " ++ ppshow term ++ " with lg " ++ show (_labelGen initState) ++ " = " ++ ppshow v) $
       (v,s)
 

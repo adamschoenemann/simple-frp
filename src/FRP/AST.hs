@@ -1,3 +1,9 @@
+{-|
+Module      : FRP.AST
+Description : Abstract Syntax Tree
+
+This module implements the AST of FRP programs
+-}
 {-# LANGUAGE DeriveFunctor             #-}
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE DeriveDataTypeable        #-}
@@ -5,7 +11,6 @@
 
 
 module FRP.AST where
-
 
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
@@ -17,14 +22,23 @@ import           Data.String     (IsString (..))
 import           FRP.Pretty
 import           Data.Data
 
+-- |A Name is just a String for now
 type Name = String
+-- |A pointer label is just an Int
 type Label = Int
+-- |A Term for evaluation is just annotated with unit
 type EvalTerm = Term ()
+-- |An evaluation environment is map from name to either
+-- a term (lazy eval) or a value (strict)
 type Env = Map String (Either EvalTerm Value)
 
+
+-- |The initial environment
 initEnv :: Env
 initEnv = M.empty
 
+-- |A Qualifier qualifies a value as being available now,
+-- always (stable) or later
 data Qualifier
   = QNow
   | QStable
@@ -39,19 +53,31 @@ instance Pretty Qualifier where
 
 infixr 9 `TyArr`
 
+-- |A Type in the FRP language
 data Type a
+  -- |Type variable
   = TyVar    a Name
+  -- |Product type
   | TyProd   a (Type a) (Type a)
+  -- |Sum type
   | TySum    a (Type a) (Type a)
+  -- |Arrow (function) type
   | TyArr    a (Type a) (Type a)
+  -- |Later type
   | TyLater  a (Type a)
+  -- |Stable type
   | TyStable a (Type a)
+  -- |Type of streams
   | TyStream a (Type a)
+  -- |Recursive types
   | TyRec    a Name (Type a)
+  -- |Type of allocator tokens
   | TyAlloc  a
+  -- |Primitive types
   | TyPrim   a TyPrim
   deriving (Show, Eq, Functor, Data, Typeable)
 
+-- |Primitive types (bool or nat)
 data TyPrim = TyBool | TyNat deriving (Show, Eq, Data, Typeable)
 
 instance Pretty (Type a) where
