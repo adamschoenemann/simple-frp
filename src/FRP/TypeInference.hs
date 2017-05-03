@@ -34,6 +34,7 @@ module FRP.TypeInference (
   , inferProg
   , runInfer
   , runInfer'
+  , solveInfer
   ) where
 
 import           Control.Monad.Except
@@ -343,6 +344,8 @@ runInfer' inf = noSnd <$> runInfer emptyCtx inf
     noSnd (a,b,c) = (a,c)
 
 -- |Run an infer in a given context
+-- Remember that the InferState returned is going to be infinite, so don't try
+-- to print it ;)
 runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, InferState, InferWrite t)
 runInfer ctx inf =
   runExcept (runRWST (unInfer inf) ctx letters)
@@ -672,11 +675,15 @@ infer term = case term of
   TmBinOp a op e1 e2 -> do
     t1 <- inferNow e1
     t2 <- inferNow e2
-    tv <- TyVar a <$> freshName
-    let u1 = TyArr a t1 (TyArr a t2 tv)
-    u2 <- binOpTy a op
-    uni u1 u2
-    return tv
+    (ret, left, right) <- binOpTy a op
+    uni t1 left
+    uni t2 right
+    return ret
+    -- tv <- TyVar a <$> freshName
+    -- let u1 = TyArr a t1 (TyArr a t2 tv)
+    -- u2 <- binOpTy a op
+    -- uni u1 u2
+    -- return tv
 
   TmITE a cond tr fl -> do
     t1 <- inferNow cond
@@ -761,27 +768,29 @@ infer term = case term of
 
   where
     -- infer the type of a binary-operator expression
-    binOpTy :: a -> BinOp -> Infer a (Type a)
+    -- stupidly returns (resultType, leftType, rightType)
+    binOpTy :: a -> BinOp -> Infer a (Type a, Type a, Type a)
     binOpTy a =
       let fromPrim (x,y,z) = (TyPrim a x, TyPrim a y, TyPrim a z)
-          toArr (x,y,z)    = TyArr a y (TyArr a z x)
-          primArr = toArr . fromPrim
+          -- toArr (x,y,z)    = TyArr a y (TyArr a z x)
+          -- primArr = toArr . fromPrim
       in  \case
-        --               ret     left    right
-        Add  -> return $ primArr (TyNat , TyNat , TyNat )
-        Sub  -> return $ primArr (TyNat , TyNat , TyNat )
-        Mult -> return $ primArr (TyNat , TyNat , TyNat )
-        Div  -> return $ primArr (TyNat , TyNat , TyNat )
-        And  -> return $ primArr (TyBool, TyBool, TyBool)
-        Or   -> return $ primArr (TyBool, TyBool, TyBool)
-        Leq  -> return $ primArr (TyBool, TyNat , TyNat )
-        Lt   -> return $ primArr (TyBool, TyNat , TyNat )
-        Geq  -> return $ primArr (TyBool, TyNat , TyNat )
-        Gt   -> return $ primArr (TyBool, TyNat , TyNat )
+        --                        ret     left    right
+        Add  -> return $ fromPrim (TyNat , TyNat , TyNat )
+        Sub  -> return $ fromPrim (TyNat , TyNat , TyNat )
+        Mult -> return $ fromPrim (TyNat , TyNat , TyNat )
+        Div  -> return $ fromPrim (TyNat , TyNat , TyNat )
+        And  -> return $ fromPrim (TyBool, TyBool, TyBool)
+        Or   -> return $ fromPrim (TyBool, TyBool, TyBool)
+        Leq  -> return $ fromPrim (TyBool, TyNat , TyNat )
+        Lt   -> return $ fromPrim (TyBool, TyNat , TyNat )
+        Geq  -> return $ fromPrim (TyBool, TyNat , TyNat )
+        Gt   -> return $ fromPrim (TyBool, TyNat , TyNat )
         Eq   -> do
           tv <- TyVar a <$> freshName
-          let (|->) = TyArr a
-          return (tv |-> (tv |-> TyPrim a TyBool))
+          return $ (TyPrim a TyBool, tv, tv)
+          -- let (|->) = TyArr a
+          -- return (tv |-> (tv |-> TyPrim a TyBool))
 
 -- |"Type check" a pattern. Basically, it unfold the pattern, makes sure
 -- it matches the term, and then returns a context with all the bound names

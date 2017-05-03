@@ -372,11 +372,11 @@ instance Pretty Value where
 
 -- |A Pattern used in a let binding
 data Pattern
-  = PBind Name
-  | PDelay Name
-  | PCons Pattern Pattern
-  | PStable Pattern
-  | PTup Pattern Pattern
+  = PBind Name            -- ^Bind a name
+  | PDelay Name           -- ^Bind a delayed name
+  | PCons Pattern Pattern -- ^Match on a Cons cell
+  | PStable Pattern       -- ^Match on a stable value
+  | PTup Pattern Pattern  -- ^Match on tuple
   deriving (Show, Eq, Data, Typeable)
 
 instance Pretty Pattern where

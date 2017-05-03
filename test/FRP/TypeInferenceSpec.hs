@@ -80,7 +80,7 @@ spec = do
     describe "binary ops" $ do
       it "should infer 10 + 10" $ do
        runInfer' (infer [unsafeTerm|10 + 10|]) `shouldInfer`
-        ("0a", [tynat |-> tynat |-> "0a" .=. tynat |-> tynat |-> tynat])
+        (tynat, [tynat .=. tynat, tynat .=. tynat])
 
       it "should infer \\x y z -> x + y == z : Nat -> Nat -> Nat -> Bool" $ do
         inferTerm' [unsafeTerm|\x y z -> x + y == z|] `shouldSolve`
