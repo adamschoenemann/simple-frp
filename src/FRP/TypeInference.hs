@@ -567,7 +567,7 @@ laterCtx (Ctx c1) =
 -- This deletes all types in the context that are not stable
 stableCtx :: Context t -> Context t
 stableCtx (Ctx c1) =
-  Ctx $ M.map (maybe (error "laterCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
+  Ctx $ M.map (maybe (error "stableCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
     mapper (t,q) = case q of
       QNow    -> Nothing
       QStable -> Just (t, QStable)
