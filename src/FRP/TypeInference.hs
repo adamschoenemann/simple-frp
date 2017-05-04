@@ -373,7 +373,7 @@ instance Substitutable (Constraint a) a where
 
 
 -- -----------------------------------------------------------------------------
--- |A 'StableTy' represents that a type should be stable
+-- |A 'StableTy' represents a constraint that a type should be stable
 newtype StableTy t = StableTy { unStableTy :: (Type t) }
   deriving (Eq)
 
