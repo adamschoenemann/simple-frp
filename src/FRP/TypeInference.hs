@@ -475,11 +475,17 @@ solveInfer :: Context t -> Infer t (Type t) -> Either (TyExcept t) (Scheme t)
 solveInfer ctx inf = do
   (ty, fnms, (cs, sts)) <- runInfer ctx inf
   (subst, unies) <- runSolve fnms (un cs)
-  case find (not . isStable) $ map unStableTy $ apply subst sts of
-    Nothing -> Right (closeOver $ apply subst ty)
-    Just notStable -> Left $ TyExcept (NotStableTy notStable, emptyCtx)
+  _ <- stableCheck sts subst
+  return (closeOver $ apply subst ty)
   where
     closeOver = normalize . generalize emptyCtx
+  -- check if all types constrained to be stable are actually sable
+    stableCheck sts subst =
+        let wrong = find (not . isStable) $ map unStableTy $ apply subst sts
+        in  case wrong of
+          Nothing -> return ()
+          Just notStable ->
+            Left $ TyExcept (NotStableTy notStable, emptyCtx)
     un cs = Unifier (nullSubst, cs)
 
 
