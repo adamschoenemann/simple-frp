@@ -479,6 +479,7 @@ solveInfer ctx inf = do
   return (closeOver $ apply subst ty)
   where
     closeOver = normalize . generalize emptyCtx
+
   -- check if all types constrained to be stable are actually sable
     stableCheck sts subst =
         let wrong = find (not . isStable) $ map unStableTy $ apply subst sts
@@ -486,6 +487,7 @@ solveInfer ctx inf = do
           Nothing -> return ()
           Just notStable ->
             Left $ TyExcept (NotStableTy notStable, emptyCtx)
+
     un cs = Unifier (nullSubst, cs)
 
 
