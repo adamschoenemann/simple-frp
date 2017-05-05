@@ -498,7 +498,7 @@ unifies t1 t2 | unitFunc t1 == unitFunc t2 = return emptyUnifier
 -- Any type unifies to a type-variable by binding the type to the name
 unifies (TyVar _ v) t = v `bind` t
 unifies t (TyVar _ v) = v `bind` t
--- Two function types unifies their domains and codomains unifies
+-- Two function types unifies if their domains and codomains unifies
 unifies (TyArr _ t1 t2)  (TyArr _ t3 t4)  = unifyMany [t1,t2] [t3,t4]
 unifies (TyProd _ t1 t2) (TyProd _ t3 t4) = unifyMany [t1,t2] [t3,t4]
 unifies (TySum _ t1 t2)  (TySum _ t3 t4)  = unifyMany [t1,t2] [t3,t4]
