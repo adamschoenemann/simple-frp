@@ -664,8 +664,8 @@ infer term = case term of
     return tv
 
   TmBinOp a op e1 e2 -> do
-    t1 <- inferNow e1
-    t2 <- inferNow e2
+    t1 <- infer e1
+    t2 <- infer e2
     (ret, left, right) <- binOpTy a op
     uni t1 left
     uni t2 right
@@ -754,21 +754,21 @@ infer term = case term of
 
   where
     -- infer the type of a binary-operator expression
-    binOpTy :: a -> BinOp -> Infer a (Type a)
+    binOpTy :: a -> BinOp -> Infer a (Type a, Type a, Type a)
     binOpTy a =
       let fromPrim (x,y,z) = (TyPrim a x, TyPrim a y, TyPrim a z)
       in  \case
         --               ret     left    right
-        Add  -> return $ primArr (TyNat , TyNat , TyNat )
-        Sub  -> return $ primArr (TyNat , TyNat , TyNat )
-        Mult -> return $ primArr (TyNat , TyNat , TyNat )
-        Div  -> return $ primArr (TyNat , TyNat , TyNat )
-        And  -> return $ primArr (TyBool, TyBool, TyBool)
-        Or   -> return $ primArr (TyBool, TyBool, TyBool)
-        Leq  -> return $ primArr (TyBool, TyNat , TyNat )
-        Lt   -> return $ primArr (TyBool, TyNat , TyNat )
-        Geq  -> return $ primArr (TyBool, TyNat , TyNat )
-        Gt   -> return $ primArr (TyBool, TyNat , TyNat )
+        Add  -> return $ fromPrim (TyNat , TyNat , TyNat )
+        Sub  -> return $ fromPrim (TyNat , TyNat , TyNat )
+        Mult -> return $ fromPrim (TyNat , TyNat , TyNat )
+        Div  -> return $ fromPrim (TyNat , TyNat , TyNat )
+        And  -> return $ fromPrim (TyBool, TyBool, TyBool)
+        Or   -> return $ fromPrim (TyBool, TyBool, TyBool)
+        Leq  -> return $ fromPrim (TyBool, TyNat , TyNat )
+        Lt   -> return $ fromPrim (TyBool, TyNat , TyNat )
+        Geq  -> return $ fromPrim (TyBool, TyNat , TyNat )
+        Gt   -> return $ fromPrim (TyBool, TyNat , TyNat )
         Eq   -> do
           tv <- TyVar a <$> freshName
           return $ (TyPrim a TyBool, tv, tv)
