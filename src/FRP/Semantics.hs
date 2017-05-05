@@ -56,18 +56,18 @@ type Store = Map Label StoreVal
 
 instance Pretty Store where
   ppr n m = vcat . M.elems $ M.mapWithKey mapper m where
-    mapper k v = char '{' <> int k <+> ppr n v <> char '}'
+    mapper k v = char '{' <> integer k <+> ppr n v <> char '}'
 
 -- |The state for the Eval monad is a store and a counter
 -- that generates pointer labels
 data EvalState = EvalState
   { _store    :: Store
-  , _labelGen :: Int
+  , _labelGen :: Integer
   } deriving (Show, Eq)
 
 instance Pretty EvalState where
   ppr n (EvalState {_store = s, _labelGen = lg}) =
-    text "labelGen =" <+> int lg
+    text "labelGen =" <+> integer lg
     $$ ppr n s
 
 -- |The Eval monad handles evaluation of programs

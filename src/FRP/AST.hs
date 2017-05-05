@@ -46,8 +46,9 @@ import           Data.Data
 
 -- |A Name is just a String for now
 type Name = String
--- |A pointer label is just an Int
-type Label = Int
+
+-- |A pointer label is just an Integer
+type Label = Integer
 -- -----------------------------------------------------------------------------
 -- EvalTerm
 -- -----------------------------------------------------------------------------
@@ -268,8 +269,8 @@ instance Pretty (Term a) where
         $$ nest 2 (text "then" <+> ppr (n+1) trmt)
         $$ nest 2 (text "else" <+> ppr (n+1) trmf)
 
-    TmPntr _a pntr          -> text "&[" <> int pntr <> text "]"
-    TmPntrDeref _a pntr     -> text "*[" <> int pntr <> text "]"
+    TmPntr _a pntr          -> text "&[" <> integer pntr <> text "]"
+    TmPntrDeref _a pntr     -> text "*[" <> integer pntr <> text "]"
     TmAlloc _a              -> text "<>"
 
     TmOut  _a ty trm        -> text "out" <+> parens (ppr 0 ty)
