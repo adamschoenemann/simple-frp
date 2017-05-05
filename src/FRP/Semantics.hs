@@ -10,7 +10,6 @@ This module implements the operational semantics from the paper
 module FRP.Semantics (
     StoreVal(..)
   , globalEnv
-  , Scope
   , Store
   , tick
   , EvalState(..)
@@ -52,8 +51,6 @@ instance Pretty StoreVal where
     SVLater e env -> text "->later" <+> ppr n e
                    $$ text ", env" <> parens (ppr n env)
 
--- |A scope is a map from names to evaluable terms
-type Scope = Map Name EvalTerm
 -- |A store is a map from pointer-labels to store values
 type Store = Map Label StoreVal
 
@@ -105,7 +102,7 @@ lookupPntr lbl = do
     Nothing -> error $ "pntr " ++ show lbl ++ " not in store " ++ show store
     Just x  -> return x
 
--- |Get a Value from the Scope
+-- |Get a Value from the Env
 useVar :: String -> EvalM Value
 useVar x = do
   env <- ask
