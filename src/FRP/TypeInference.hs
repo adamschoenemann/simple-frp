@@ -34,7 +34,6 @@ module FRP.TypeInference (
   , inferProg
   , runInfer
   , runInfer'
-  , solveInfer
   ) where
 
 import           Control.Monad.Except
@@ -344,8 +343,6 @@ runInfer' inf = noSnd <$> runInfer emptyCtx inf
     noSnd (a,b,c) = (a,c)
 
 -- |Run an infer in a given context
--- Remember that the InferState returned is going to be infinite, so don't try
--- to print it ;)
 runInfer :: Context t -> Infer t a -> Either (TyExcept t) (a, InferState, InferWrite t)
 runInfer ctx inf =
   runExcept (runRWST (unInfer inf) ctx letters)
@@ -373,7 +370,7 @@ instance Substitutable (Constraint a) a where
 
 
 -- -----------------------------------------------------------------------------
--- |A 'StableTy' represents a constraint that a type should be stable
+-- |A 'StableTy' represents that a type should be stable
 newtype StableTy t = StableTy { unStableTy :: (Type t) }
   deriving (Eq)
 
@@ -567,7 +564,7 @@ laterCtx (Ctx c1) =
 -- This deletes all types in the context that are not stable
 stableCtx :: Context t -> Context t
 stableCtx (Ctx c1) =
-  Ctx $ M.map (maybe (error "stableCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
+  Ctx $ M.map (maybe (error "laterCtx") (id)) $ M.filter isJust $ M.map mapper c1 where
     mapper (t,q) = case q of
       QNow    -> Nothing
       QStable -> Just (t, QStable)
@@ -584,15 +581,6 @@ inStableCtx :: (Name, QualSchm t) -> Infer t a -> Infer t a
 inStableCtx (x, sc) m = local scope m where
   scope ctx = (stableCtx . remove ctx $ x) `extend` (x, sc)
 
--- |Infer a term to be /now/
-inferNow :: Term t -> Infer t (Type t)
-inferNow expr = do
-  t <- infer expr
-  return t
-  -- ctx <- ask
-  -- if (q == QNow || q == QStable)
-  --   then return (t,QNow)
-  --   else typeErr (NotNow expr) ctx
 
 -- |Infer a term to be /later/
 inferLater :: Term t -> Infer t (Type t)
@@ -625,22 +613,22 @@ infer term = case term of
   TmPntrDeref a l   -> typeErrM (NotSyntax term)
 
   TmFst a e -> do
-    t1 <- inferNow e
+    t1 <- infer e
     tv1 <- TyVar a <$> freshName
     tv2 <- TyVar a <$> freshName
     uni t1 (TyProd a tv1 tv2)
     return tv1
 
   TmSnd a e -> do
-    t1 <- inferNow e
+    t1 <- infer e
     tv1 <- TyVar a <$> freshName
     tv2 <- TyVar a <$> freshName
     uni t1 (TyProd a tv1 tv2)
     return tv2
 
   TmTup a e1 e2 -> do
-    t1 <- inferNow e1
-    t2 <- inferNow e2
+    t1 <- infer e1
+    t2 <- infer e2
     return (TyProd a t1 t2)
 
   TmVar a x -> do
@@ -649,60 +637,56 @@ infer term = case term of
 
   TmLam a x mty e -> do
     tv <- TyVar a <$> freshName
-    t <- inCtx (x, (Forall [] tv, QNow)) (inferNow e)
+    t <- inCtx (x, (Forall [] tv, QNow)) (infer e)
     maybe (return ()) (uni tv) mty -- unify with type ann
     return (TyArr a tv t)
 
   TmApp a e1 e2 -> do
-    t1 <- inferNow e1
-    t2 <- inferNow e2
+    t1 <- infer e1
+    t2 <- infer e2
     tv <- TyVar a <$> freshName
     uni t1 (TyArr a t2 tv)
     return tv
 
   TmLet a p e1 e2 -> do
-    t1 <- inferNow e1
+    t1 <- infer e1
     ctx2 <- inferPtn p t1
-    local (`unionCtx` ctx2) (inferNow e2)
+    local (`unionCtx` ctx2) (infer e2)
 
   TmFix a x mty e -> do
     tv <- TyVar a <$> freshName
-    t <- inStableCtx (x, (Forall [] tv, QLater)) (inferNow e)
+    t <- inStableCtx (x, (Forall [] tv, QLater)) (infer e)
     uni tv t
     maybe (return ()) (uni tv) mty -- unify with type ann
     return tv
 
   TmBinOp a op e1 e2 -> do
-    t1 <- inferNow e1
-    t2 <- inferNow e2
-    (ret, left, right) <- binOpTy a op
-    uni t1 left
-    uni t2 right
-    return ret
-    -- tv <- TyVar a <$> freshName
-    -- let u1 = TyArr a t1 (TyArr a t2 tv)
-    -- u2 <- binOpTy a op
-    -- uni u1 u2
-    -- return tv
+    t1 <- infer e1
+    t2 <- infer e2
+    tv <- TyVar a <$> freshName
+    let u1 = TyArr a t1 (TyArr a t2 tv)
+    u2 <- binOpTy a op
+    uni u1 u2
+    return tv
 
   TmITE a cond tr fl -> do
-    t1 <- inferNow cond
-    t2 <- inferNow tr
-    t3 <- inferNow fl
+    t1 <- infer cond
+    t2 <- infer tr
+    t3 <- infer fl
     uni t1 (TyPrim a TyBool)
     uni t2 t3
     return t2
 
   TmCons a hd tl -> do
-    t1 <- inferNow hd
-    t2 <- inferNow tl
+    t1 <- infer hd
+    t2 <- infer tl
     tv <- TyVar a <$> freshName
     uni t2 (TyLater a (TyStream a t1))
     uni tv (TyStream a t1)
     return tv
 
   TmPromote a e -> do
-    t1 <- inferNow e
+    t1 <- infer e
     stable t1
     return (TyStable a t1)
 
@@ -711,28 +695,28 @@ infer term = case term of
     return (TyStable a t1)
 
   TmDelay a u e -> do
-    tu <- inferNow u
+    tu <- infer u
     uni tu (TyAlloc a)
     te <- inferLater e
     return (TyLater a te)
 
   TmInl a e -> do
-    ty <- inferNow e
+    ty <- infer e
     tvr <- TyVar a <$> freshName
     return (TySum a ty tvr)
 
   TmInr a e -> do
-    ty <- inferNow e
+    ty <- infer e
     tvl <- TyVar a <$> freshName
     return (TySum a tvl ty)
 
   TmCase a e (nm1, c1) (nm2, c2) -> do
-    ty <- inferNow e
+    ty <- infer e
     tvl <- TyVar a <$> freshName
     tvr <- TyVar a <$> freshName
     uni ty (TySum a tvl tvr)
-    t1 <- inCtx (nm1, (Forall [] tvl, QNow)) $ inferNow c1
-    t2 <- inCtx (nm2, (Forall [] tvr, QNow)) $ inferNow c2
+    t1 <- inCtx (nm1, (Forall [] tvl, QNow)) $ infer c1
+    t2 <- inCtx (nm2, (Forall [] tvr, QNow)) $ infer c2
     uni t1 t2
     return t1
 
@@ -740,7 +724,7 @@ infer term = case term of
   TmInto ann tyann e -> do
     case tyann of
       TyRec a alpha tau -> do
-        ty <- inferNow e
+        ty <- infer e
         let substwith = (TyLater a $ TyRec a alpha tau)
         uni ty (apply (M.singleton alpha substwith) tau)
         return (TyRec a alpha tau)
@@ -754,7 +738,7 @@ infer term = case term of
   TmOut ann tyann e ->
     case tyann of
       TyRec a alpha tau' -> do
-        tau <- inferNow e
+        tau <- infer e
         uni tyann tau
         let substwith = (TyLater ann tau)
         let tau'' = apply (M.singleton alpha substwith) tau'
@@ -768,29 +752,27 @@ infer term = case term of
 
   where
     -- infer the type of a binary-operator expression
-    -- stupidly returns (resultType, leftType, rightType)
-    binOpTy :: a -> BinOp -> Infer a (Type a, Type a, Type a)
+    binOpTy :: a -> BinOp -> Infer a (Type a)
     binOpTy a =
       let fromPrim (x,y,z) = (TyPrim a x, TyPrim a y, TyPrim a z)
-          -- toArr (x,y,z)    = TyArr a y (TyArr a z x)
-          -- primArr = toArr . fromPrim
+          toArr (x,y,z)    = TyArr a y (TyArr a z x)
+          primArr = toArr . fromPrim
       in  \case
-        --                        ret     left    right
-        Add  -> return $ fromPrim (TyNat , TyNat , TyNat )
-        Sub  -> return $ fromPrim (TyNat , TyNat , TyNat )
-        Mult -> return $ fromPrim (TyNat , TyNat , TyNat )
-        Div  -> return $ fromPrim (TyNat , TyNat , TyNat )
-        And  -> return $ fromPrim (TyBool, TyBool, TyBool)
-        Or   -> return $ fromPrim (TyBool, TyBool, TyBool)
-        Leq  -> return $ fromPrim (TyBool, TyNat , TyNat )
-        Lt   -> return $ fromPrim (TyBool, TyNat , TyNat )
-        Geq  -> return $ fromPrim (TyBool, TyNat , TyNat )
-        Gt   -> return $ fromPrim (TyBool, TyNat , TyNat )
+        --               ret     left    right
+        Add  -> return $ primArr (TyNat , TyNat , TyNat )
+        Sub  -> return $ primArr (TyNat , TyNat , TyNat )
+        Mult -> return $ primArr (TyNat , TyNat , TyNat )
+        Div  -> return $ primArr (TyNat , TyNat , TyNat )
+        And  -> return $ primArr (TyBool, TyBool, TyBool)
+        Or   -> return $ primArr (TyBool, TyBool, TyBool)
+        Leq  -> return $ primArr (TyBool, TyNat , TyNat )
+        Lt   -> return $ primArr (TyBool, TyNat , TyNat )
+        Geq  -> return $ primArr (TyBool, TyNat , TyNat )
+        Gt   -> return $ primArr (TyBool, TyNat , TyNat )
         Eq   -> do
           tv <- TyVar a <$> freshName
-          return $ (TyPrim a TyBool, tv, tv)
-          -- let (|->) = TyArr a
-          -- return (tv |-> (tv |-> TyPrim a TyBool))
+          let (|->) = TyArr a
+          return (tv |-> (tv |-> TyPrim a TyBool))
 
 -- |"Type check" a pattern. Basically, it unfold the pattern, makes sure
 -- it matches the term, and then returns a context with all the bound names
