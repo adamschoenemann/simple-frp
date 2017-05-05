@@ -87,11 +87,10 @@ getStore = _store <$> get
 allocVal :: StoreVal -> EvalM Label
 allocVal v = do
   label <- genLabel
-  let change st@(EvalState {_store = s}) =
-        let s' = M.insert label v s
-        in st {_store = s'}
-  modify change
+  modify (change label)
   return label
+  where
+    change label st = st { _store = M.insert label v (_store st) }
 
 
 -- |Lookup a pointer in the store
