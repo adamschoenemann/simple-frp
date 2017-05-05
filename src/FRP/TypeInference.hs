@@ -473,22 +473,20 @@ inferProg ctx (Program {_decls = decls}) =
 -- |Run an inference computation and solve it
 solveInfer :: Context t -> Infer t (Type t) -> Either (TyExcept t) (Scheme t)
 solveInfer ctx inf = do
-  (ty, fnms, (cs, sts)) <- runInfer ctx inf
-  (subst, unies) <- runSolve fnms (un cs)
-  _ <- stableCheck sts subst
-  return (closeOver $ apply subst ty)
+  (goalTy, freshNames, (constraints, stables)) <- runInfer ctx inf
+  (subst, _) <- runSolve freshNames (Unifier (nullSubst, constraints))
+  _ <- stableCheck stables subst
+  return (closeOver $ apply subst goalTy)
   where
     closeOver = normalize . generalize emptyCtx
 
   -- check if all types constrained to be stable are actually sable
-    stableCheck sts subst =
-        let wrong = find (not . isStable) $ map unStableTy $ apply subst sts
+    stableCheck stables subst =
+        let wrong = find (not . isStable) $ map unStableTy $ apply subst stables
         in  case wrong of
           Nothing -> return ()
           Just notStable ->
             Left $ TyExcept (NotStableTy notStable, emptyCtx)
-
-    un cs = Unifier (nullSubst, cs)
 
 
 -- |Attempt to unify two types
