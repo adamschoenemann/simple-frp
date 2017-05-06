@@ -24,14 +24,16 @@ tytable = [ [ prefix' "S"  (withPos TyStream)
           , [binary' "->" (withPos TyArr)  AssocRight]
           ]
 
-tyexpr = tynat
+tyexpr = tyunit
+     <|> tynat
      <|> tybool
      <|> tyalloc
      <|> tyvar
      <|> parens ty
 
-tynat = reserved "Nat"   >> withPos (\p -> TyPrim p TyNat)
-tybool = reserved "Bool" >> withPos (\p -> TyPrim p TyBool)
+tyunit  = reserved "()" >> withPos (flip TyPrim $ TyUnit)
+tynat   = reserved "Nat"   >> withPos (\p -> TyPrim p TyNat)
+tybool  = reserved "Bool" >> withPos (\p -> TyPrim p TyBool)
 tyalloc = reserved "alloc" >> withPos TyAlloc
 tyvar = withPos TyVar <*> identifier
 tyrec = do

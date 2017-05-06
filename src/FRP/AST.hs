@@ -148,6 +148,7 @@ instance Pretty (Type a) where
     TyAlloc  _a        -> text "alloc"
     TyPrim   _a TyNat  -> text "Nat"
     TyPrim   _a TyBool -> text "Bool"
+    TyPrim   _a TyUnit -> text "()"
     where
       prns = if (n > 0)
              then parens
@@ -175,8 +176,8 @@ isStable (TySum  _ a b) = isStable a && isStable b
 isStable (TyStable _ _) = True
 isStable _              = False
 
--- |Primitive types (bool or nat)
-data TyPrim = TyBool | TyNat deriving (Show, Eq, Data, Typeable)
+-- |Primitive types (bool, nat or unit)
+data TyPrim = TyBool | TyNat | TyUnit deriving (Show, Eq, Data, Typeable)
 
 -- -----------------------------------------------------------------------------
 -- Term
@@ -234,11 +235,11 @@ data Term a
 
 instance Pretty (Term a) where
   ppr n term = case term of
-    TmFst _a trm            -> text "fst" <+> ppr (n+1) trm
-    TmSnd _a trm            -> text "snd" <+> ppr (n+1) trm
-    TmTup _a trm trm'       -> parens $ ppr (n+1) trm <> comma <+> ppr (n+1) trm'
-    TmInl _a trm            -> text "inl" <+> prns (ppr (n+1) trm)
-    TmInr _a trm            -> text "inr" <+> prns (ppr (n+1) trm)
+    TmFst  _a trm            -> text "fst" <+> ppr (n+1) trm
+    TmSnd  _a trm            -> text "snd" <+> ppr (n+1) trm
+    TmTup  _a trm trm'       -> parens $ ppr (n+1) trm <> comma <+> ppr (n+1) trm'
+    TmInl  _a trm            -> text "inl" <+> prns (ppr (n+1) trm)
+    TmInr  _a trm            -> text "inr" <+> prns (ppr (n+1) trm)
 
     TmCase _a trm (vl, trml) (vr, trmr) ->
       text "case" <+> ppr 0 trm <+> text "of"
@@ -431,12 +432,14 @@ instance Pretty BinOp where
 data Lit
   = LNat Int
   | LBool Bool
+  | LUnit
   deriving (Show, Eq, Data, Typeable)
 
 instance Pretty Lit where
   ppr _ lit = case lit of
     LNat  i -> if (i >= 0) then int i else parens (int i)
     LBool b -> text $ show b
+    LUnit   -> text "()"
 
 -- -----------------------------------------------------------------------------
 -- Decl
