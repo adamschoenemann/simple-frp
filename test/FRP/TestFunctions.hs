@@ -28,6 +28,7 @@ frp_const_fix = unitFunc [unsafeDecl|
     let cons(u, delay(us')) = us in
     let stable(x) = promote(n) in
     cons(x, delay(u, f us' x)).
+
 |]
 
 

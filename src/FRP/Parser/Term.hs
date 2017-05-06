@@ -161,7 +161,7 @@ tmcons = reserved "cons" *> parens
 
 var, tmunit, int, bool :: Parser ParsedTerm
 var  = C.tmvar <*> identifier
-tmunit = C.tmlit <*> return LUnit
+tmunit = reserved "()" >> C.tmlit <*> return LUnit
 int = C.tmlit <*> (LNat . fromInteger <$> natural)
 bool = C.tmlit <*> (LBool <$> (true <|> false)) where
   true = reserved "True" >> return True

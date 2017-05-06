@@ -611,7 +611,7 @@ infer :: Term t -> Infer t (Type t)
 infer term = case term of
   TmLit a (LNat _)  -> return (TyPrim a TyNat)
   TmLit a (LBool _) -> return (TyPrim a TyBool)
-  TmLit a (LUnit _) -> return (TyPrim a TyUnit)
+  TmLit a (LUnit) -> return (TyPrim a TyUnit)
   TmAlloc a         -> return (TyAlloc a)
   TmPntr a l        -> typeErrM (NotSyntax term)
   TmPntrDeref a l   -> typeErrM (NotSyntax term)
