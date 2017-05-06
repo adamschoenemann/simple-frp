@@ -33,7 +33,8 @@ import           Data.Data
 
 -- | The type of FRP-types that can be reflected
 data Ty
-  = TNat
+  = TUnit
+  | TNat
   | TBool
   | TAlloc
   | Ty :*: Ty
@@ -55,6 +56,7 @@ infixr 5 :+:
 -- using kind-promotion
 data Sing :: Ty -> * where
   SNat    :: Sing TNat
+  SUnit   :: Sing TUnit
   SBool   :: Sing TBool
   SAlloc  :: Sing TAlloc
   SProd   :: Sing t1 -> Sing t2 -> Sing (t1 :*: t2)
@@ -70,6 +72,7 @@ deriving instance Typeable (Sing a)
 reify :: Sing t -> Type ()
 reify = \case
   SNat    -> tynat
+  SUnit   -> tyunit
   SBool   -> tybool
   SAlloc  -> tyalloc
 
@@ -95,6 +98,7 @@ typeToSingExp :: Type a -> ExpQ
 typeToSingExp typ = case typ of
   TyPrim _ TyNat  -> T.conE 'SNat
   TyPrim _ TyBool -> T.conE 'SBool
+  TyPrim _ TyUnit -> T.conE 'SUnit
   TyAlloc _       -> T.conE 'SAlloc
   TySum _ t1 t2 ->
     let e1 = typeToSingExp t1

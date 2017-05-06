@@ -62,6 +62,7 @@ tmlit :: Lit -> EvalTerm
 tmlit = TmLit ()
 
 tmint  = tmlit . LNat
+tmunit  = tmlit $ LUnit
 tmbool = tmlit . LBool
 
 tmbinop :: BinOp -> EvalTerm -> EvalTerm -> EvalTerm
@@ -120,6 +121,7 @@ tyrec = TyRec ()
 tyalloc = TyAlloc ()
 tynat  = TyPrim () TyNat
 tybool = TyPrim () TyBool
+tyunit = TyPrim () TyUnit
 
 (.*.) :: Type () -> Type () -> Type ()
 (.*.) = TyProd ()

@@ -160,6 +160,11 @@ spec = do
       parse P.term "term" "cons ( 10  , 20  )  " `shouldParse`
         (tmcons 10 20)
 
+    it "should parse unit" $ do
+      parse P.term "unit1" "()" `shouldParse` (tmunit)
+      parse P.term "unit2" "((),())" `shouldParse` (tmtup tmunit tmunit)
+      parse P.term "unit2" "(\\x -> (()))" `shouldParse` (tmlam "x" tmunit)
+
     it "should parse tuples" $ do
       parse P.term "tup1" "(x,y)" `shouldParse` (tmtup "x" "y")
       parse P.term "tup2" "(x,(y, x+y))" `shouldParse` (tmtup "x" (tmtup "y" ("x" + "y")))
@@ -338,6 +343,11 @@ spec = do
       parse P.ty "nat" "Nat" `shouldParse` tynat
     it "parses alloc" $ do
       parse P.ty "alloc" "alloc" `shouldParse` tyalloc
+    it "parses unit" $ do
+      parse P.ty "unit" "()" `shouldParse` tyunit
+      parse P.ty "unit" "() -> ()" `shouldParse` (tyunit |-> tyunit)
+      parse P.ty "unit" "(()) -> ((()))" `shouldParse` (tyunit |-> tyunit)
+      parse P.ty "unit" "S ()" `shouldParse` (tystream tyunit)
     it "parses streams" $ do
       parse P.ty "stream of nats" "S Nat" `shouldParse`
         (tystream tynat)
