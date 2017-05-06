@@ -1,6 +1,8 @@
 # ModalFRP
 Implementation of Krishnaswami's [simple-frp](https://people.mpi-sws.org/~neelk/simple-frp.pdf) paper in Haskell as as DSL embedded with QuasiQuoters.
 
+It is very much research-grade software!
+
 ## Installation
 Using Stack
 
