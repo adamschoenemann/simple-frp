@@ -48,9 +48,9 @@ unsafeDecl = QuasiQuoter
 decl :: QuasiQuoter
 decl = QuasiQuoter
   { quoteExp = quoteFRPDecl
-  , quotePat = undefined
-  , quoteDec = undefined
-  , quoteType = undefined
+  , quotePat = undefined  -- we don't use it in pattern positions
+  , quoteDec = undefined  -- we don't use it in declaration positions
+  , quoteType = undefined -- we don't use it in type positions
   }
 
 -- |Quote and type-check a program
@@ -93,9 +93,11 @@ quoteFRPDecl s = do
   case inferDecl' dcl of
     Left err -> fail . show $ err
     Right ty -> do
-          let sing = typeToSingExp (_type dcl)
-          let trm = dataToExpQ (const Nothing) (unitFunc $ _body dcl)
-          runQ [| FRP initEnv $(trm) $(sing) |]
+      sing <- typeToSingExp (_type dcl)
+      trm  <- dataToExpQ (const Nothing) (unitFunc $ _body dcl)
+      env  <- dataToExpQ (const Nothing) initEnv
+      return $ ConE 'FRP `AppE` env `AppE` trm `AppE` sing
+          -- runQ [| FRP initEnv $(trm) $(sing) |]
 
 -- |Quotes an FRP program.
 -- The resulting type reflects the type of the definition named "main" or,
@@ -114,7 +116,7 @@ quoteProg s = do
       sing    <- typeToSingExp ty
       trm     <- dataToExpQ (const Nothing) (unitFunc $ _body mainDecl)
       globals <- dataToExpQ (const Nothing) (globalEnv decls)
-      return (ConE (mkName "FRP") `AppE` globals `AppE` trm `AppE` sing)
+      return (ConE 'FRP `AppE` globals `AppE` trm `AppE` sing)
 
 -- stuff related to attempting to implement imports. Didn't work :/
 {- let imports = expsToExp <$> (sequence $ map getImport $ _imports prog)

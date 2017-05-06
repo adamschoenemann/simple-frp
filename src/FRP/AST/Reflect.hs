@@ -93,13 +93,13 @@ deriving instance Show (FRP t)
 -- an FRP type
 typeToSingExp :: Type a -> ExpQ
 typeToSingExp typ = case typ of
-  TyPrim _ TyNat  -> runQ [| SNat |]
-  TyPrim _ TyBool -> runQ [| SBool |]
-  TyAlloc _       -> runQ [| SAlloc |]
+  TyPrim _ TyNat  -> T.conE 'SNat
+  TyPrim _ TyBool -> T.conE 'SBool
+  TyAlloc _       -> T.conE 'SAlloc
   TySum _ t1 t2 ->
     let e1 = typeToSingExp t1
         e2 = typeToSingExp t2
-    in  runQ [| SSum $(e1) $(e2) |]
+    in  T.conE 'SSum `T.appE` e1 `T.appE` e2
   TyProd _ t1 t2    ->
     let e1 = typeToSingExp t1
         e2 = typeToSingExp t2
