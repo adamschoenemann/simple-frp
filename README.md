@@ -56,9 +56,42 @@ In all, the implementation measures two-thousand source-lines of Haskell code.
 
 ## Usage
 Mainly, one would use the QuasiQuoters re-exported is `AST.QuasiQuoter` (re-exported in `FRP`)
-to write and type-check `ModalFRP` programs. `transform` and `execute` from `FRP`
+to write and type-check `ModalFRP` programs. They are called
+`decl` and `prog` for declarations and programs respectively.
+`transform` and `execute` from `FRP`
 can then be used to apply the programs as stream-transformers or stream-producers.
 
+## Syntax
+The syntax closely resembles the syntax from the paper, but with some additions
+and discrepancies. In `test/FRP/TestFunctions.hs` there are several
+functions and small programs that showcase how to write and use programs.
+
+The parser is not white-space or indentation sensitive. Thus, declarations
+must be ended with a `.` (dot) as in `Coq`.
+
+## Example
+The program below simply takes a stream of natural numbers and increases
+them by one.
+
+    frp_incr :: FRP (TStream TAlloc :->: TStream TNat :->: TStream TNat)
+    frp_incr = [prog|
+      map : S alloc -> #(a -> b) -> S a -> S b
+      map us h xs =
+        let cons(u, delay(us')) = us in
+        let cons(x, delay(xs')) = xs in
+        let stable(f) = h in
+        cons(f x, delay(u, (((map us') stable(f)) xs'))).
+
+
+      main : S alloc -> S Nat -> S Nat
+      main allocs lst =
+        map allocs stable(\x -> x + 1) lst.
+    |]
+
+You can then run this program on a Haskell stream like so:
+
+    take 10 $ transform [0..] frp_incr
+    >> [1,2,3,4,5,6,7,8,9,10]
 
 ## Gotcha's
 Recursive top-level declarations are converted to fixpoints, so beware of this
