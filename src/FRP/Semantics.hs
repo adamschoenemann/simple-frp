@@ -280,7 +280,7 @@ eval term = case term of
 -- all later terms are promoted to now by eval'ing it in the
 -- so-far-ticked store.
 -- There is an implicit ordering imposed here, so we evaluate the
--- points from smallest-to-biggest since allocated values can
+-- pointers from smallest-to-biggest since allocated values can
 -- only depend on other allocations with a pointer label that is
 -- smaller than their own.
 tick :: EvalState -> EvalState
@@ -288,8 +288,7 @@ tick st
   | M.null (_store st) = st
   | otherwise = M.foldlWithKey' tock st (_store st) where
       tock acc k (SVLater e env) =
-          let (v, st') =
-                  runExpr acc env e
+          let (v, st') = runExpr acc env e
               s = _store st'
           in  st' { _store  = M.insert k (SVNow v) s }
       tock acc k (SVNow _)  = acc { _store = M.delete k (_store acc) }
