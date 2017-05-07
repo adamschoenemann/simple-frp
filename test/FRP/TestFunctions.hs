@@ -295,6 +295,23 @@ frp_scary_const = [prog|
   main us = scary_const us (nats us 0).
 |]
 
+-- w : S alloc -> @(mu af. S alloc -> af -> a) -> a
+-- into stable(w) : mu af. #(S alloc -> af -> a)
+-- let delay(y) = delay(u, w us' x) in
+frp_fixedpoint = [prog|
+  selfapp : (@a -> a) -> S alloc -> (mu af. #(S alloc -> af -> a)) -> a
+  selfapp f us v =
+    let cons(u, delay(us')) = us in
+    let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
+    let y = delay(u, into (mu af. #(S alloc -> af -> a)) stable(w)) in
+    w us y.
+    -- True + 2.
+    --f delay(u, w us' y).
+
+  main : Nat
+  main = 5.
+|]
+
 prog_tails :: Program ()
 prog_tails =
   let mainbd = "us" -->

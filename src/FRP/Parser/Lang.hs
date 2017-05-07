@@ -13,7 +13,13 @@ module FRP.Parser.Lang (
 import Text.Parsec.String
 import Text.Parsec
 import Text.Parsec.Expr
+import FRP.Pretty
 import qualified Text.Parsec.Token as Tok
+
+
+instance Pretty SourcePos where
+  ppr n sp =
+    text "line" <+> int (sourceLine sp) <+> "column" <+> int (sourceColumn sp)
 
 opNames :: [String]
 opNames    = [ "+", "-", "*", "/", "=", "==", "&&", "||"

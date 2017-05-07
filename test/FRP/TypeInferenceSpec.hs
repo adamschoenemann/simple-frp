@@ -6,7 +6,7 @@ module FRP.TypeInferenceSpec where
 import           FRP.AST
 import           FRP.TypeInference
 import           FRP.AST.Construct
-import           FRP.Pretty          (ppputStrLn, ppshow)
+import           FRP.Pretty          (ppputStrLn, ppshow, Pretty)
 import           Test.Hspec
 
 import           Control.Monad.State
@@ -27,7 +27,7 @@ import           FRP.AST.QuasiQuoter
 main :: IO ()
 main = hspec spec
 
-shouldInfer :: (Eq (f ()), Show (f ()), Functor f, Show t, Eq t)
+shouldInfer :: (Eq (f ()), Show (f ()), Functor f, Show t, Pretty t, Eq t)
             => Either (TyExcept t) (f a, InferWrite t)
             -> (f (), [Constraint ()])
             -> Expectation
@@ -40,7 +40,7 @@ shouldTyErr = \case
   Left err -> return ()
   Right t -> expectationFailure $ show t
 
-shouldSolve :: Either (TyExcept t) (Scheme t)
+shouldSolve :: Pretty t => Either (TyExcept t) (Scheme t)
             -> Scheme ()
             -> Expectation
 shouldSolve eith expect = case eith of

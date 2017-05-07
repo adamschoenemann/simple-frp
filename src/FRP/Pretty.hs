@@ -22,6 +22,9 @@ class Pretty p where
   ppputStrLn :: p -> IO ()
   ppputStrLn = putStrLn . ppshow
 
+instance Pretty () where
+  ppr n _ = text "()"
+
 instance (Pretty a, Pretty b) => Pretty (Either a b) where
   ppr n = \case
     Left l  -> ppr n l

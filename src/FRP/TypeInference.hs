@@ -1,4 +1,5 @@
 {-|
+
 Module      : FRP.TypeInference
 Description : Type inference
 
@@ -38,6 +39,7 @@ module FRP.TypeInference (
 
 import           Control.Monad.Except
 import           Control.Monad.Identity
+import           Control.Monad.Reader
 import           Control.Monad.RWS      ( MonadReader, RWST, ask, local, runRWST
                                         , tell, MonadWriter)
 import           Control.Monad.State
@@ -79,7 +81,7 @@ type Subst t = Map TVar (Type t)
 
 instance Pretty (Subst a) where
   ppr n map = vcat $ fmap mapper $ M.toList map where
-    mapper (k, v) = text k <+> char ':' <+> ppr 0 v
+    mapper (k, v) = text k <+> text "|->" <+> ppr 0 v
 
 -- |The empty substitution
 nullSubst :: Subst a
@@ -224,10 +226,10 @@ lookupCtx nm = do
 newtype TyExcept t = TyExcept (TyErr t, Context t)
   deriving (Eq)
 
-instance Show (TyExcept t) where
+instance Pretty t => Show (TyExcept t) where
   show = ppshow
 
-instance Pretty (TyExcept t) where
+instance Pretty t => Pretty (TyExcept t) where
   ppr n (TyExcept (err, ctx)) = ppr n err $$ text "in context: " $$ ppr n ctx
 
 -- |An error that can happen during type inference
@@ -245,7 +247,7 @@ data TyErr t
   | DelayedUse Name
   deriving (Show, Eq)
 
-instance Pretty (TyErr t) where
+instance Pretty t => Pretty (TyErr t) where
   ppr n = \case
     CannotUnify t1 t2 unif ->
       text "Cannot unify expected type"
@@ -253,6 +255,7 @@ instance Pretty (TyErr t) where
             <+> text "with"
             <+> ppr 0 t2
             <+> text "at" $$ ppr 0 unif
+            $$  ppr n (typeAnn t1)
 
     UnificationMismatch t1 t2 ->
       text "UnificationMismatch: "
@@ -297,7 +300,8 @@ bind :: TVar -> Type a -> Solve a (Unifier a)
 bind a t | unitFunc t == TyVar () a = return emptyUnifier
          | occursCheck a t = do
               unif <- getUni
-              typeErr (OccursCheckFailed a t unif) emptyCtx
+              ctx <- ask
+              typeErr (OccursCheckFailed a t unif) ctx
          | otherwise       = return $ Unifier (M.singleton a t, [])
 
 -- |Instantiates a 'Scheme' with fresh type variables, making a mono-type
@@ -349,14 +353,15 @@ runInfer ctx inf =
 
 -- -----------------------------------------------------------------------------
 -- | A 'Constraint' represents that two types should unify
-newtype Constraint t = Constraint (Type t, Type t)
+newtype Constraint t = Constraint (Type t, Type t, Context t)
   deriving (Eq)
 
 instance Functor Constraint where
-  fmap f (Constraint (a,b)) = Constraint (fmap f a, fmap f b)
+  fmap f (Constraint (a,b,Ctx ctx)) = Constraint (fmap f a, fmap f b, Ctx $ M.map mapf ctx)
+    where mapf (t,q) = (fmap f t, q)
 
 instance Pretty (Constraint a) where
-  ppr n (Constraint (t1, t2)) = ppr n t1 <+> text ".=." <+> ppr n t2
+  ppr n (Constraint (t1, t2, ctx)) = ppr n t1 <+> text ".=." <+> ppr n t2
 
 instance Pretty [Constraint a] where
   ppr n cs = vcat $ map (ppr 0) cs
@@ -365,8 +370,8 @@ instance Show (Constraint a) where
   show = ppshow
 
 instance Substitutable (Constraint a) a where
-   apply s (Constraint (t1, t2)) = Constraint (apply s t1, apply s t2)
-   ftv (Constraint (t1, t2)) = ftv t1 +++ ftv t2
+   apply s (Constraint (t1, t2, ctx)) = Constraint (apply s t1, apply s t2, apply s ctx)
+   ftv (Constraint (t1, t2, _)) = ftv t1 +++ ftv t2
 
 
 -- -----------------------------------------------------------------------------
@@ -393,7 +398,7 @@ instance Substitutable (StableTy a) a where
 -- |Infix constructor for unification constraints
 infixr 0 .=.
 (.=.) :: Type t -> Type t -> Constraint t
-t1 .=. t2 = Constraint (t1, t2)
+t1 .=. t2 = Constraint (t1, t2, emptyCtx)
 
 
 -- -----------------------------------------------------------------------------
@@ -416,8 +421,8 @@ type SolveState t = (Unifier t, [Name])
 
 -- |The 'Solve' monad is a stack of a state-monad with 'SolveState' and
 -- an exception monad that throws 'TyExcept's
-newtype Solve t a = Solve (StateT (SolveState t) (Except (TyExcept t)) a)
-  deriving ( Functor, Monad, MonadState (SolveState t)
+newtype Solve t a = Solve (ReaderT (Context t) (StateT (SolveState t) (Except (TyExcept t))) a)
+  deriving ( Functor, Monad, MonadReader (Context t), MonadState (SolveState t)
            , MonadError (TyExcept t), Applicative
            )
 
@@ -430,7 +435,9 @@ instance NameGen (Solve t) where
 
 -- |Run a Solve monad. Supply list of fresh names and a starting unifier
 runSolve :: [String] -> Unifier t -> Either (TyExcept t) (Subst t, Unifier t)
-runSolve names un = bimap id rmNames $  runExcept (runStateT (unSolver solver) (un, names))
+runSolve names un =
+  bimap id rmNames $
+  runExcept (runStateT (runReaderT (unSolver solver) emptyCtx) (un, names))
   where
     rmNames e = let (s, (u, _)) = e in (s, u)
     unSolver (Solve m) = m
@@ -508,7 +515,8 @@ unifies (TyRec a af t1)  (TyRec _ bf t2)  = do
     apply (M.singleton bf (TyVar a fv)) t2
 unifies t1 t2 = do
   unif <- getUni
-  typeErr (CannotUnify t1 t2 unif) emptyCtx
+  ctx <- ask
+  typeErr (CannotUnify t1 t2 unif) ctx
 
 -- |Unify many types
 unifyMany :: [Type t] -> [Type t] -> Solve t (Unifier t)
@@ -517,7 +525,9 @@ unifyMany (t1 : ts1) (t2 : ts2) =
   do Unifier (su1, cs1) <- unifies t1 t2
      Unifier (su2, cs2) <- unifyMany (apply su1 ts1) (apply su1 ts2)
      return $ Unifier (su2 `compose` su1, cs1 ++ cs2)
-unifyMany t1 t2 = typeErr (UnificationMismatch t1 t2) emptyCtx
+unifyMany t1 t2 = do
+  ctx <- ask
+  typeErr (UnificationMismatch t1 t2) ctx
 
 -- |Solves a Solve monad, or fails if there are no solutions
 solver :: Solve t (Subst t)
@@ -525,8 +535,8 @@ solver = do
   Unifier (su, cs) <- getUni
   case cs of
     [] -> return su
-    (Constraint (t1,t2) : cs0) -> do
-      Unifier (su1, cs1) <- unifies t1 t2
+    (Constraint (t1,t2, ctx) : cs0) -> do
+      Unifier (su1, cs1) <- local (const ctx) $ unifies t1 t2
       putUni $ Unifier (su1 `compose` su, cs1 ++ (apply su1 cs0))
       solver
 
@@ -540,7 +550,9 @@ getUni = fst <$> get
 
 -- |Record that two types must unify
 uni :: Type t -> Type t -> Infer t ()
-uni t1 t2 = tell ([Constraint (t1, t2)], [])
+uni t1 t2 = do
+  ctx <- ask
+  tell ([Constraint (t1, t2, ctx)], [])
 
 -- |Record that a type must be stable
 stable :: Type t -> Infer t ()
@@ -611,7 +623,7 @@ infer :: Term t -> Infer t (Type t)
 infer term = case term of
   TmLit a (LNat _)  -> return (TyPrim a TyNat)
   TmLit a (LBool _) -> return (TyPrim a TyBool)
-  TmLit a (LUnit) -> return (TyPrim a TyUnit)
+  TmLit a (LUnit)   -> return (TyPrim a TyUnit)
   TmAlloc a         -> return (TyAlloc a)
   TmPntr a l        -> typeErrM (NotSyntax term)
   TmPntrDeref a l   -> typeErrM (NotSyntax term)
@@ -728,7 +740,7 @@ infer term = case term of
     case tyann of
       TyRec a alpha tau -> do
         ty <- infer e
-        let substwith = (TyLater a $ TyRec a alpha tau)
+        let substwith = (TyLater a $ TyRec ann alpha tau)
         uni ty (apply (M.singleton alpha substwith) tau)
         return (TyRec a alpha tau)
 
@@ -740,12 +752,12 @@ infer term = case term of
   -- Out must have a type annotation
   TmOut ann tyann e ->
     case tyann of
-      TyRec a alpha tau' -> do
-        tau <- infer e
-        uni tyann tau
-        let substwith = (TyLater ann tau)
-        let tau'' = apply (M.singleton alpha substwith) tau'
-        return (tau'')
+      TyRec a alpha tau -> do
+        ty <- infer e
+        uni tyann ty
+        let substwith = (TyLater ann (TyRec a alpha tau))
+        let tau' = apply (M.singleton alpha substwith) tau
+        return tau'
 
       _ -> do
         alpha <- freshName
