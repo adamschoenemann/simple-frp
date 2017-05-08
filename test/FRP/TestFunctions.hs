@@ -298,19 +298,34 @@ frp_scary_const = [prog|
 -- w : S alloc -> @(mu af. S alloc -> af -> a) -> a
 -- into stable(w) : mu af. #(S alloc -> af -> a)
 -- let delay(y) = delay(u, w us' x) in
-frp_fixedpoint = [prog|
-  selfapp : (@a -> a) -> S alloc -> (mu af. #(S alloc -> af -> a)) -> a
-  selfapp f us v =
-    let cons(u, delay(us')) = us in
-    let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
-    let y = delay(u, into (mu af. #(S alloc -> af -> a)) stable(w)) in
-    w us y.
-    -- True + 2.
-    --f delay(u, w us' y).
+-- selfapp : (@a -> a) -> S alloc -> (mu af. #(S alloc -> af -> a)) -> a
+-- selfapp f us v =
+--   let cons(u, delay(us')) = us in
+--   let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
+--   let y = delay(u, into (mu af. #(S alloc -> af -> a)) stable(w)) in
+--   w us y.
+-- frp_fixedpoint = [prog|
+--   selfapp : (@a -> a) -> S alloc -> (mu af. #(S alloc -> af -> a)) -> a
+--   selfapp f us v =
+--     let cons(u, delay(us')) = us in
+--     let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
+--     f delay(u,
+--       let cons(u', delay(us''))  = us' in
+--       let y = delay(u', into (mu af. #(S alloc -> af -> a)) stable(w)) in
+--       w us' y
+--     ).
 
-  main : Nat
-  main = 5.
-|]
+--   fixedpoint : #(@a -> a) -> S alloc -> a
+--   fixedpoint h us =
+--     let stable(f) = h in
+--     let y = into (mu af. #(S alloc -> af -> a)) stable(selfapp f) in
+--     True + 2.
+--     -- selfapp' f us y.
+
+
+--   main : Nat
+--   main = 5.
+-- |]
 
 prog_tails :: Program ()
 prog_tails =

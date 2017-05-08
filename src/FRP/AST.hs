@@ -146,9 +146,7 @@ instance Pretty (Type a) where
     TyStream _a ty     -> prns $ char 'S' <+> ppr (n+1) ty
     TyRec    _a nm ty  -> prns $ text "mu" <+> text nm <> char '.' <+> ppr 0 ty
     TyAlloc  _a        -> text "alloc"
-    TyPrim   _a TyNat  -> text "Nat"
-    TyPrim   _a TyBool -> text "Bool"
-    TyPrim   _a TyUnit -> text "()"
+    TyPrim   _a p      -> ppr n p
     where
       prns = if (n > 0)
              then parens
@@ -177,7 +175,14 @@ isStable (TyStable _ _) = True
 isStable _              = False
 
 -- |Primitive types (bool, nat or unit)
-data TyPrim = TyBool | TyNat | TyUnit deriving (Show, Eq, Data, Typeable)
+data TyPrim = TyBool | TyNat | TyUnit | TyBot deriving (Show, Eq, Data, Typeable)
+
+instance Pretty TyPrim where
+  ppr n = text . \case
+    TyBool -> "Bool"
+    TyNat  -> "Nat"
+    TyUnit -> "()"
+    TyBool -> "_|_"
 
 -- -----------------------------------------------------------------------------
 -- Term
@@ -433,6 +438,7 @@ data Lit
   = LNat Int
   | LBool Bool
   | LUnit
+  | LUndefined
   deriving (Show, Eq, Data, Typeable)
 
 instance Pretty Lit where
@@ -440,6 +446,7 @@ instance Pretty Lit where
     LNat  i -> if (i >= 0) then int i else parens (int i)
     LBool b -> text $ show b
     LUnit   -> text "()"
+    LUndefined   -> text "undefined"
 
 -- -----------------------------------------------------------------------------
 -- Decl

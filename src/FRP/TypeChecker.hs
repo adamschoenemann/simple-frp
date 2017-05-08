@@ -261,6 +261,7 @@ checkTerm ctx term = case term of
     LNat  _ -> return (TyPrim a TyNat,  QNow)
     LBool _ -> return (TyPrim a TyBool, QNow)
     LUnit   -> return (TyPrim a TyUnit, QNow)
+    LUndefined -> return (TyPrim a TyBot, QNow)
   TmBinOp a op l r       -> do
     let (retty, lty, rty) = binOpTy a op
     (lt, QNow) <- checkTerm ctx l

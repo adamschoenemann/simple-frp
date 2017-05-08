@@ -37,8 +37,9 @@ tmexpr = tmcons
      <|> int
      <|> bool
      <|> var
+     <|> undef
      <|> try tmtup
-     <|> tmunit
+     <|> unit
      <|> parens term
      <?> "simple expression"
 
@@ -159,9 +160,10 @@ tmcons :: Parser ParsedTerm
 tmcons = reserved "cons" *> parens
               (C.tmcons <*> (ws *> term) <*> (comma *> term)) <* ws
 
-var, tmunit, int, bool :: Parser ParsedTerm
+var, unit, int, bool, undef :: Parser ParsedTerm
 var  = C.tmvar <*> identifier
-tmunit = reserved "()" >> C.tmlit <*> return LUnit
+unit = reserved "()" >> C.tmlit <*> return LUnit
+undef  = reserved "undefined" >> C.tmlit <*> return LUndefined
 int = C.tmlit <*> (LNat . fromInteger <$> natural)
 bool = C.tmlit <*> (LBool <$> (true <|> false)) where
   true = reserved "True" >> return True

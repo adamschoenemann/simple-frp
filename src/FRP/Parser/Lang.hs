@@ -63,6 +63,7 @@ languageDef = Tok.LanguageDef
                           , "fix"
                           , "mu"
                           , "()"
+                          , "undefined"
                           ]
   , Tok.reservedOpNames = opNames
   , Tok.caseSensitive   = True
