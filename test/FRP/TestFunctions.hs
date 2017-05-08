@@ -69,7 +69,6 @@ frp_tails = unitFunc [unsafeDecl|
 frp_map :: Decl ()
 frp_map = unitFunc frp_map_sp
 
--- frp_map_sp :: Decl ()
 frp_map_sp = [unsafeDecl|
   map : S alloc -> #(A -> B) -> S A -> S B
   map us h xs =
@@ -295,25 +294,6 @@ frp_scary_const = [prog|
   main us = scary_const us (nats us 0).
 |]
 
--- w : S alloc -> @(mu af. S alloc -> af -> a) -> a
--- into stable(w) : mu af. #(S alloc -> af -> a)
--- let delay(y) = delay(u, w us' x) in
--- selfapp : (@a -> a) -> S alloc -> (mu af. #(S alloc -> af -> a)) -> a
--- selfapp f us v =
---   let cons(u, delay(us')) = us in
---   let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
---   let y = delay(u, into (mu af. #(S alloc -> af -> a)) stable(w)) in
---   w us y.
-
--- selfapp : (@a -> a) -> S alloc -> (mu af. #(S alloc -> af -> a)) -> a
--- selfapp f us v =
---   let cons(u, delay(us')) = us in
---   let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
---   f delay(u,
---     let cons(u', delay(us''))  = us' in
---     let y = delay(u', into (mu af. #(S alloc -> af -> a)) stable(w)) in
---     w us' y
---   ).
 frp_fixedpoint = [prog|
   selfapp : (@a -> a) -> S alloc -> @(mu af. #(S alloc -> af -> a)) -> a
   selfapp f us v =
@@ -342,6 +322,50 @@ frp_fixedpoint = [prog|
 
   main : S alloc -> S Nat
   main us = ones us.
+|]
+
+frp_ones :: FRP (TStream TAlloc :->: TStream TNat)
+frp_ones = [prog|
+  const : S alloc -> Nat -> S Nat
+  const us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, const us' x)).
+
+  main : S alloc -> S Nat
+  main us = const us 1.
+|]
+
+frp_switch_safe :: FRP (TStream TAlloc :->: TStream TNat :->: TStream TNat)
+frp_switch_safe = [prog|
+  nats : S alloc -> Nat -> S Nat
+  nats us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats us' (x + 1))).
+
+  switch : S alloc -> S a -> (mu f. S a + f) -> S a
+  switch us xs e =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    case out (mu f. (S a) + f) e of
+      | inl ys -> ys
+      | inr t  -> let delay(e') = t in
+                  cons(x, delay (u, switch us' xs' e')).
+
+  eventually : S alloc -> Nat -> S a -> (mu f. S a + f)
+  eventually us n xs =
+    if n == 0
+      then into (mu f. S a + f) inl xs
+      else let cons(u, delay(us')) = us in
+           let cons(x, delay(xs')) = xs in
+           let stable(n') = promote(n)  in
+           into (mu f. S a + f) inr delay(u, eventually us' (n' - 1) xs').
+
+  main : S alloc -> S Nat -> S Nat
+  main us xs =
+    let e = eventually us 5 (nats us 0) in
+    switch us xs e.
 |]
 
 prog_tails :: Program ()
