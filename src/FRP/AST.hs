@@ -182,7 +182,7 @@ instance Pretty TyPrim where
     TyBool -> "Bool"
     TyNat  -> "Nat"
     TyUnit -> "()"
-    TyBool -> "_|_"
+    TyBot  -> "_|_"
 
 -- -----------------------------------------------------------------------------
 -- Term

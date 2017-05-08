@@ -304,28 +304,45 @@ frp_scary_const = [prog|
 --   let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
 --   let y = delay(u, into (mu af. #(S alloc -> af -> a)) stable(w)) in
 --   w us y.
--- frp_fixedpoint = [prog|
---   selfapp : (@a -> a) -> S alloc -> (mu af. #(S alloc -> af -> a)) -> a
---   selfapp f us v =
---     let cons(u, delay(us')) = us in
---     let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
---     f delay(u,
---       let cons(u', delay(us''))  = us' in
---       let y = delay(u', into (mu af. #(S alloc -> af -> a)) stable(w)) in
---       w us' y
---     ).
 
---   fixedpoint : #(@a -> a) -> S alloc -> a
---   fixedpoint h us =
---     let stable(f) = h in
---     let y = into (mu af. #(S alloc -> af -> a)) stable(selfapp f) in
---     True + 2.
---     -- selfapp' f us y.
+-- selfapp : (@a -> a) -> S alloc -> (mu af. #(S alloc -> af -> a)) -> a
+-- selfapp f us v =
+--   let cons(u, delay(us')) = us in
+--   let stable(w) = out (mu af. #(S alloc -> af -> a)) v in
+--   f delay(u,
+--     let cons(u', delay(us''))  = us' in
+--     let y = delay(u', into (mu af. #(S alloc -> af -> a)) stable(w)) in
+--     w us' y
+--   ).
+frp_fixedpoint = [prog|
+  selfapp : (@a -> a) -> S alloc -> @(mu af. #(S alloc -> af -> a)) -> a
+  selfapp f us v =
+    let cons(u, delay(us')) = us in
+    let delay(x) = v in
+    f delay(u,
+      let stable(w) = out (mu af. #(S alloc -> af -> a)) x in
+      let cons(u', us'') = us' in
+      let y = delay(u', into (mu af. #(S alloc -> af -> a)) stable(w)) in
+      w us' y
+    ).
 
 
---   main : Nat
---   main = 5.
--- |]
+  fixedpoint : #(@a -> a) -> S alloc -> a
+  fixedpoint h us =
+    let cons(u, delay(us')) = us in
+    let stable(f) = h in
+    let delay(y) = delay(u, into (mu af. #(S alloc -> af -> a)) stable(selfapp f)) in
+    selfapp f us delay(u,y).
+
+
+  ones : S alloc -> S Nat
+  ones us =
+    let fn = stable(\xs -> cons(1, xs)) in
+    fixedpoint fn us.
+
+  main : S alloc -> S Nat
+  main us = ones us.
+|]
 
 prog_tails :: Program ()
 prog_tails =
