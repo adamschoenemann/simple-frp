@@ -368,10 +368,44 @@ frp_switch_safe = [prog|
     switch us xs e.
 |]
 
--- wut!? unlifted types or smth
-hsterm_01 _ =
-  let x = [hsterm| 10 |]
-  in x
+hsterm_01 = [hsterm| \x -> x + x |]
+hsterm_02 = [hsterm|
+  fix nats. \us n ->
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats us' (x + 1)))
+|]
+
+[hsprog|
+  nats : S alloc -> Nat -> S Nat
+  nats us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats us' (x + 1))).
+
+  switch : S alloc -> S a -> (mu f. S a + f) -> S a
+  switch us xs e =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    case out (mu f. (S a) + f) e of
+      | inl ys -> ys
+      | inr t  -> let delay(e') = t in
+                  cons(x, delay (u, switch us' xs' e')).
+
+  eventually : S alloc -> Nat -> S a -> (mu f. S a + f)
+  eventually us n xs =
+    if n == 0
+      then into (mu f. S a + f) inl xs
+      else let cons(u, delay(us')) = us in
+           let cons(x, delay(xs')) = xs in
+           let stable(n') = promote(n)  in
+           into (mu f. S a + f) inr delay(u, eventually us' (n' - 1) xs').
+
+  fiveThenNats : S alloc -> S Nat -> S Nat
+  fiveThenNats us xs =
+    let e = eventually us 5 (nats us 0) in
+    switch us xs e.
+|]
 
 prog_tails :: Program ()
 prog_tails =

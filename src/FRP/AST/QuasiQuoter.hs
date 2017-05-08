@@ -4,6 +4,7 @@ Description : Quasi-Quoters for FRP programs
 -}
 {-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE NamedFieldPuns            #-}
 
 module FRP.AST.QuasiQuoter where
 
@@ -72,7 +73,6 @@ unsafeTerm = QuasiQuoter
   , quoteType = undefined
   }
 
--- |Quote a term without type-checking it
 hsterm :: QuasiQuoter
 hsterm = QuasiQuoter
   { quoteExp = quoteHsTerm
@@ -81,9 +81,23 @@ hsterm = QuasiQuoter
   , quoteType = undefined
   }
 
+hsprog :: QuasiQuoter
+hsprog = QuasiQuoter
+  { quoteExp = undefined
+  , quotePat = undefined
+  , quoteDec = quoteHsProg
+  , quoteType = undefined
+  }
+
 quoteHsTerm s = do
   ast <- parseFRP P.term s
-  termToHaskExpQ ast
+  exp <- termToHaskExpQ ast
+  return exp
+
+quoteHsProg s = do
+  ast <- parseFRP P.prog s
+  progToHaskDecls ast
+
 
 -- |Helper function for quoting the result of a parser
 parseFRP :: Monad m => Parser p -> String -> m p
@@ -150,6 +164,13 @@ getImport imp = do
 
 newtype Mu f = Into { out :: f (Mu f) }
 
+progToHaskDecls :: Program a -> Q [Dec]
+progToHaskDecls (Program { _decls = decls }) =
+  mapM declToHaskDec decls where
+    declToHaskDec :: Decl a -> DecQ
+    declToHaskDec (Decl {_name, _type, _body}) =
+      valD (varP (mkName _name)) (normalB $ termToHaskExpQ _body) []
+
 termToHaskExpQ :: Term a -> ExpQ
 termToHaskExpQ term = go term where
   go = \case
@@ -174,12 +195,12 @@ termToHaskExpQ term = go term where
     TmPromote a t                -> go t
     TmLet a pat t1 t2            -> letE [patToHaskDecQ pat t1] (go t2)
     TmLit a l                    -> case l of
-      LNat x                     -> litE (intPrimL (toInteger x))
+      LNat x                     -> litE (integerL (toInteger x))
       LBool True                 -> conE 'True
       LBool False                -> conE 'False
       LUnit                      -> conE '()
       LUndefined                 -> conE (mkName "undefined")
-    TmBinOp a op t1 t2           -> [| $(go t1) $(varE $ mkName (ppshow op)) $(go t2) |]
+    TmBinOp a op t1 t2           -> [| $(varE $ mkName (ppshow op)) $(go t1) $(go t2) |]
     TmITE a b tt tf              -> [|if $(go b) then $(go tt) else $(go tf)|]
     TmPntr a lbl                 -> undefined --S.empty
     TmPntrDeref a lbl            -> undefined --S.empty
@@ -187,9 +208,15 @@ termToHaskExpQ term = go term where
     TmFix a nm mty t             -> (varE 'fix) `appE` (lamE [varP $ mkName nm] (go t))
 
 patToHaskDecQ :: Pattern -> Term a -> DecQ
-patToHaskDecQ pat term = case pat of
-  PBind nm  -> valD (varP $ mkName nm) (normalB $ termToHaskExpQ term) []
-  PDelay nm -> valD (varP $ mkName nm) (normalB $ termToHaskExpQ term) []
+patToHaskDecQ pat term = valD (go pat) (normalB $ termToHaskExpQ term) []
+  where
+    go pat = case pat of
+        PBind nm  -> varP $ mkName nm
+        PDelay nm -> varP $ mkName nm
+        PTup p1 p2 -> tupP [go p1, go p2]
+        PCons p1 p2 -> conP (mkName ":") [go p1, go p2]
+        PStable p   -> go p
+
 
 
 
