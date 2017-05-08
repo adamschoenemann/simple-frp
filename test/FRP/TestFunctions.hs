@@ -368,6 +368,11 @@ frp_switch_safe = [prog|
     switch us xs e.
 |]
 
+-- wut!? unlifted types or smth
+hsterm_01 _ =
+  let x = [hsterm| 10 |]
+  in x
+
 prog_tails :: Program ()
 prog_tails =
   let mainbd = "us" -->

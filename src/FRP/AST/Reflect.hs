@@ -19,12 +19,11 @@ Description : Reflecting FRP-Types into the Haskell type-system
 module FRP.AST.Reflect where
 
 import           Language.Haskell.TH ( Exp (..), ExpQ, Lit (..), Pat (..), Q
-                                     , mkName, runQ)
+                                     , DecQ, mkName, runQ)
 
 import           FRP.AST
 import           FRP.AST.Construct
 import qualified Language.Haskell.TH as T
-
 import           Data.Data
 
 -- -----------------------------------------------------------------------------
