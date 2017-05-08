@@ -10,6 +10,9 @@ import Data.List (find)
 
 prog :: Parser (Program SourcePos)
 prog = do
+  imports <- many importp
   decls <- many decl
   _ <- eof
-  return $ Program [] decls
+  return $ Program imports decls
+
+importp = reserved "import" >> identifier <* symbol "."

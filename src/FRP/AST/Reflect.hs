@@ -15,6 +15,7 @@ Description : Reflecting FRP-Types into the Haskell type-system
 {-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module FRP.AST.Reflect where
 
@@ -68,17 +69,17 @@ deriving instance Show (Sing a)
 deriving instance Typeable (Sing a)
 
 -- |Reify a singleton back into an FRP type
-reify :: Sing t -> Type ()
-reify = \case
+reifySing :: Sing t -> Type ()
+reifySing = \case
   SNat    -> tynat
   SUnit   -> tyunit
   SBool   -> tybool
   SAlloc  -> tyalloc
 
-  SProd   t1 t2 -> reify t1 .*. reify t2
-  SSum    t1 t2 -> reify t1 .+. reify t2
-  SArr    t1 t2 -> reify t1 |-> reify t2
-  SStream t -> reify t
+  SProd   t1 t2 -> reifySing t1 .*. reifySing t2
+  SSum    t1 t2 -> reifySing t1 .+. reifySing t2
+  SArr    t1 t2 -> reifySing t1 |-> reifySing t2
+  SStream t -> reifySing t
 
 -- -----------------------------------------------------------------------------
 -- FRP
@@ -118,5 +119,4 @@ typeToSingExp typ = case typ of
   TyLater  _ t -> typeToSingExp t
   TyVar _ _    -> fail "FRP types must be fully instantiated when marshalled"
   TyRec _ _ _  -> fail "Recursive types are not supported"
-
 

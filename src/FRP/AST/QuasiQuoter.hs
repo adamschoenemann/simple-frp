@@ -21,6 +21,7 @@ import           Utils (safeLast)
 
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Quote
+import           Data.Maybe (catMaybes)
 import           Data.Data
 import           Control.Applicative
 import           Text.Parsec hiding ((<|>))
@@ -94,10 +95,20 @@ quoteHsTerm s = do
   exp <- termToHaskExpQ ast
   return exp
 
+quoteHsProg :: String -> Q [Dec]
 quoteHsProg s = do
   ast <- parseFRP P.prog s
-  progToHaskDecls ast
+  -- runIO $ print $ _imports ast
+  ms <- mapM (lookupValueName . (++ "_type")) $ _imports ast
+  let infos = catMaybes ms
+  -- infos <- lookupValueName "tail"
+  runIO $ print infos
+  case inferProg emptyCtx ast of
+    Left err -> fail (ppshow err ++ "\ninput:\n" ++ s)
+    Right ty -> progToHaskDecls ast
 
+-- importsToCtx :: [String] -> Ctx SourcePos
+-- importsToCtx
 
 -- |Helper function for quoting the result of a parser
 parseFRP :: Monad m => Parser p -> String -> m p
@@ -164,12 +175,15 @@ getImport imp = do
 
 newtype Mu f = Into { out :: f (Mu f) }
 
-progToHaskDecls :: Program a -> Q [Dec]
-progToHaskDecls (Program { _decls = decls }) =
-  mapM declToHaskDec decls where
-    declToHaskDec :: Decl a -> DecQ
+progToHaskDecls :: Data a => Program a -> Q [Dec]
+progToHaskDecls (Program { _decls = decls }) = do
+  sequence . concat . map declToHaskDec $ decls where
+    declToHaskDec :: Data a => Decl a -> [DecQ]
     declToHaskDec (Decl {_name, _type, _body}) =
-      valD (varP (mkName _name)) (normalB $ termToHaskExpQ _body) []
+      [ valD (varP (mkName _name)) (normalB $ termToHaskExpQ _body) []
+      , valD (varP (mkName $ _name ++ "_type"))
+          (normalB $ dataToExpQ (const Nothing) _type) []
+      ]
 
 termToHaskExpQ :: Term a -> ExpQ
 termToHaskExpQ term = go term where

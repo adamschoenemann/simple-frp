@@ -377,6 +377,17 @@ hsterm_02 = [hsterm|
 |]
 
 [hsprog|
+  const' : S alloc -> Nat -> S Nat
+  const' us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, const' us' x)).
+|]
+
+[hsprog|
+
+  import const'.
+
   nats : S alloc -> Nat -> S Nat
   nats us n =
     let cons(u, delay(us')) = us in
