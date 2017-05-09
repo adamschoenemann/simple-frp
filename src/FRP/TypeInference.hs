@@ -354,7 +354,10 @@ runInfer ctx inf =
 -- -----------------------------------------------------------------------------
 -- | A 'Constraint' represents that two types should unify
 newtype Constraint t = Constraint (Type t, Type t, Context t)
-  deriving (Eq)
+
+instance Eq t => Eq (Constraint t) where
+  Constraint (a1, a2, _) == Constraint (b1, b2, _) =
+      a1 == b1 && a2 == b2
 
 instance Functor Constraint where
   fmap f (Constraint (a,b,Ctx ctx)) = Constraint (fmap f a, fmap f b, Ctx $ M.map mapf ctx)

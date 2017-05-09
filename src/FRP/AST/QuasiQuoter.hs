@@ -98,11 +98,12 @@ quoteHsTerm s = do
 quoteHsProg :: String -> Q [Dec]
 quoteHsProg s = do
   ast <- parseFRP P.prog s
+  -- imports are impossibruh! :/
   -- runIO $ print $ _imports ast
-  ms <- mapM (lookupValueName . (++ "_type")) $ _imports ast
-  let infos = catMaybes ms
+  -- ms <- mapM (lookupValueName . (++ "_type")) $ _imports ast
+  -- let infos = catMaybes ms
   -- infos <- lookupValueName "tail"
-  runIO $ print infos
+  -- runIO $ print infos
   case inferProg emptyCtx ast of
     Left err -> fail (ppshow err ++ "\ninput:\n" ++ s)
     Right ty -> progToHaskDecls ast
