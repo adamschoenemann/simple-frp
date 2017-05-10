@@ -32,7 +32,7 @@ shouldInfer :: (Eq (f ()), Show (f ()), Functor f, Show t, Pretty t, Eq t)
             -> (f (), [Constraint ()])
             -> Expectation
 shouldInfer eith expect = case eith of
-  Left err  -> expectationFailure (ppshow err)
+  Left err  -> expectationFailure (show err)
   Right (t, (cs, stbls)) -> (unitFunc t, fmap unitFunc cs) `shouldBe` expect
 
 shouldTyErr :: Show t => Either e (Scheme t) -> Expectation

@@ -36,10 +36,12 @@ tynat   = reserved "Nat"   >> withPos (\p -> TyPrim p TyNat)
 tybool  = reserved "Bool" >> withPos (\p -> TyPrim p TyBool)
 tyalloc = reserved "alloc" >> withPos TyAlloc
 tyvar = withPos TyVar <*> identifier
-tyrec = do
-  _ <- reserved "mu"
-  v <- identifier
-  _ <- symbol "."
-  withPos TyRec <*> return v <*> ty
+
+tyrec = withPos TyRec <*> (reserved "mu" *> identifier <* symbol ".") <*> ty
+-- tyrec = do
+--   _ <- reserved "mu"
+--   v <- identifier
+--   _ <- symbol "."
+--   withPos TyRec <*> return v <*> ty
 
 
