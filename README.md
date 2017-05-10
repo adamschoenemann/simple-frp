@@ -4,7 +4,11 @@ Implementation of Krishnaswami's [simple-frp](https://people.mpi-sws.org/~neelk/
 It is very much research-grade software!
 
 ## Installation
-Using Stack
+Clone this repository. You can immediately compile and use the library and
+test definitions by running `stack repl --test`.
+
+If you want to use this library as a dependency, refer to
+[the stack FAQ](https://github.com/commercialhaskell/stack/blob/master/doc/faq.md#i-need-to-use-a-package-or-version-of-a-package-that-is-not-available-on-hackage-what-should-i-do).
 
 ## Organization
     src
