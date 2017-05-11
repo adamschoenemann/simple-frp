@@ -77,7 +77,7 @@ type Env = Map String (Either EvalTerm Value)
 instance Pretty (Map String (Either (Term a) Value)) where
   ppr n env = char '[' $+$ nest 2 body $+$ char ']' where
     body = vcat $ punctuate (char ',') $
-      map (\(k,v) -> text k <+> text "↦" <+> ppr (n+1) v) $ M.toList env
+      map (\(k,v) -> text k <+> text "|->" <+> ppr (n+1) v) $ M.toList env
 
 -- |The initial environment
 initEnv :: Env
@@ -236,6 +236,8 @@ data Term a
   | TmAlloc a
   -- |A fixpoint!
   | TmFix a Name (Maybe (Type a)) (Term a)
+  -- |Haskell input
+  | TmInput a Name
   deriving (Show, Eq, Functor, Data, Typeable)
 
 instance Pretty (Term a) where
@@ -283,6 +285,7 @@ instance Pretty (Term a) where
                                <+> prns (ppr (n) trm)
     TmInto _a ty trm        -> text "into" <+> parens (ppr 0 ty)
                                <+> prns (ppr (n) trm)
+    TmInput _a nm           -> text "input" <> (parens . text) nm
     where
       prns = if (n > 0)
              then parens
@@ -315,6 +318,7 @@ freeVars = S.toList . go where
     TmPntrDeref a lbl            -> S.empty
     TmAlloc a                    -> S.empty
     TmFix a nm mty t             -> go t // nm
+    TmInput a nm                 -> S.empty
 
   (+++) = S.union
   (//)  = flip S.delete
@@ -366,7 +370,7 @@ valToTerm = \case
   VPntr l          -> TmPntr () l
   VAlloc           -> TmAlloc ()
   VStable v        -> TmStable () (valToTerm v)
-  VInto v          -> TmInto () undefined (valToTerm v)
+  VInto v          -> TmInto () (TyPrim () TyUnit) (valToTerm v)
   VCons hd tl      -> TmCons () (valToTerm hd) (valToTerm tl)
   VLit l           -> TmLit () l
 

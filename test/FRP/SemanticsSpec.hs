@@ -32,12 +32,12 @@ spec = do
       it "works with a simple function" $ do
         let term = ("x" --> "x") <| 10
         -- ppdebug term
-        let r = evalExpr M.empty term
+        let r = evalExpr noInputs M.empty term
         r `shouldBe` VLit (LNat 10)
       it "works with two arguments" $ do
         let term = ("x" --> "y" --> "x" + "y") <| 10 <| 5
         -- ppdebug term
-        let r = evalExpr M.empty term
+        let r = evalExpr noInputs M.empty term
         r `shouldBe` VLit (LNat 15)
         -- ppdebug r
       it "adds a nested vars to scope" $ do
@@ -45,26 +45,26 @@ spec = do
         let app = lam <| ("z" --> 10 + "z")
         let term = app <| 5
         -- debug . ppshow $ term
-        let r = evalExpr M.empty term
+        let r = evalExpr noInputs M.empty term
         r `shouldBe` VLit (LNat 15)
         -- debug $ "result: " ++ (ppshow r)
       it "does not capture free variables" $ do
         let l1 = ("x" --> "y" --> "z" --> "x" <| ("y" + "z")) <|
                  ("y" --> "y" + 42)
         let term = l1 <| 6 <| 4
-        let r = evalExpr M.empty term
+        let r = evalExpr noInputs M.empty term
         r `shouldBe` VLit (LNat 52)
         -- debug $ "result: " ++ (ppshow r)
     describe "fixpoint" $ do
       it "works for const" $ do
         let fp = tmfix "x" tynat ("y" --> "y") <| 10
-        let v = evalExpr M.empty fp
+        let v = evalExpr noInputs M.empty fp
         v `shouldBe` (VLit (LNat 10))
         -- ppdebug v
       it "works for factorial" $ do
         let fact = tmfix "f" (tynat |-> tynat) ("n" --> tmite ("n" `eq` 1) 1 ("n" * ("f" <| ("n" - 1))))
         -- ppdebug fact
-        let v = evalExpr M.empty (fact <| 4)
+        let v = evalExpr noInputs M.empty (fact <| 4)
         v `shouldBe` (VLit (LNat 24))
         -- ppdebug v
       it "works for fibonacci" $ do
@@ -73,7 +73,7 @@ spec = do
                       "n"
                       ("f" <| ("n" - 1) + "f" <| ("n" - 2))
         -- ppdebug fib
-        let v = evalExpr M.empty (fib <| 7)
+        let v = evalExpr noInputs M.empty (fib <| 7)
         v `shouldBe` (VLit (LNat 13))
         -- ppdebug v
 
@@ -81,11 +81,11 @@ spec = do
       it "works with stream of allocators" $ do
         let fp = tmfix "xs" undefined $ tmcons tmalloc (tmdelay tmalloc "xs")
         let run s e n =
-              let (v, s')  = runExpr s M.empty e
+              let (v, s')  = runExpr s noInputs M.empty e
                   VCons _ (VPntr l) = v
               in  if n >= 10 then return () else do
                      v `shouldBe` VCons VAlloc (VPntr n)
-                     run (tick s') (tmpntrderef l) (n+1)
+                     run (tick noInputs s') (tmpntrderef l) (n+1)
 
         r <- run initialState fp 0
         r `shouldBe` ()
@@ -118,12 +118,12 @@ spec = do
         ppdebug v
         ppdebug s
         let VCons _ (VPntr l) = v
-        let (v', s') = runExpr (tick s) M.empty (tmpntrderef l)
+        let (v', s') = runExpr (tick noInputs s) noInputs M.empty (tmpntrderef l)
         debug "======== run 2 ======="
         ppdebug v'
         ppdebug s'
         let VCons _ (VPntr l') = v'
-        let (v'', s'') = runExpr (tick s') M.empty (tmpntrderef l')
+        let (v'', s'') = runExpr (tick noInputs s') noInputs M.empty (tmpntrderef l')
         debug "======== run 3 ======="
         ppdebug v''
         ppdebug s''
@@ -170,18 +170,20 @@ spec = do
     describe "tick" $ do
       let mkStore s = EvalState s 0
       it "sats tick [] = []" $ do
-        tick initialState `shouldBe` initialState
+        tick noInputs initialState `shouldBe` initialState
       it "sats tick [l : v now] = []" $ do
-        tick (mkStore M.empty) `shouldBe` initialState
+        tick noInputs (mkStore M.empty) `shouldBe` initialState
       it "sats tick [l : e later] = [l : v now]" $ do
         let s  = M.singleton 0 $ SVLater 10 M.empty
         let s' = M.singleton 0 $ SVNow   (VLit  $ LNat 10)
-        tick (mkStore $ s) `shouldBe` mkStore s'
+        tick noInputs (mkStore $ s) `shouldBe` mkStore s'
       it "sats tick [l1 : v now, l2 : e later] = [l2 : v' now]" $ do
         let s  = M.insert 0 (SVNow (VLit $ LNat 1)) $ M.singleton 1 $ SVLater 10 M.empty
         let s' = M.singleton 1 $ SVNow  (VLit $ LNat 10)
-        tick (mkStore $ s) `shouldBe` mkStore s'
+        tick noInputs (mkStore $ s) `shouldBe` mkStore s'
       it "sats tick [0 : e later, 1 : *0 later, 2 : v now] = [0 : v now, 1 : v now]" $ do
         let s  = M.insert 0 (SVLater 1 M.empty) $ M.insert 1 (SVLater (tmpntrderef 0) M.empty) $ M.singleton 2 (SVNow (VLit $ LNat 42))
         let s' = M.insert 0 (SVNow (VLit $ LNat 1)) $ M.singleton 1 $ SVNow (VLit $ LNat 1)
-        tick (mkStore $ s) `shouldBe` mkStore s'
+        tick noInputs (mkStore $ s) `shouldBe` mkStore s'
+
+    -- TODO: Test inputs

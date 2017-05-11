@@ -633,8 +633,10 @@ infer term = case term of
   TmLit a LUndefined -> TyVar a <$> freshName
 
   TmAlloc a         -> return (TyAlloc a)
+
   TmPntr a l        -> typeErrM (NotSyntax term)
   TmPntrDeref a l   -> typeErrM (NotSyntax term)
+  TmInput a nm      -> typeErrM (NotSyntax term)
 
   TmFst a e -> do
     t1 <- infer e

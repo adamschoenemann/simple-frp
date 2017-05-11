@@ -19,6 +19,7 @@ module FRP
   , module FRP.Semantics
   , module FRP.AST.QuasiQuoter
   , transform
+  , transform'
   , execute
   , FRPHask
   )
@@ -28,7 +29,10 @@ import FRP.AST
 import FRP.AST.Construct
 import FRP.AST.Reflect
 import FRP.AST.QuasiQuoter
+import FRP.Pretty (ppshow)
 import FRP.Semantics
+import Debug.Trace
+import qualified Data.Map.Strict as M
 
 -- |Type-class that represents a conversion from a FRP value of
 -- a type to a Haskell value of a type
@@ -83,21 +87,24 @@ instance FRPHask t1 a => FRPHask (TStream t1) [a] where
 
 
 -- |Use a FRP program to transform a Haskell stream @[a]@ to @[b]@
--- lazy evaluation allows us to do this, where we construct the possibly infinite
--- term of conses from the input list that is not fully evaluated until
--- the ith iteration
 transform :: (FRPHask t1 a, FRPHask t2 b)
           => FRP (TStream TAlloc :->: TStream t1 :->: TStream t2)
           -> [a] -> [b]
 transform (FRP env trm (SArr us (SArr (SStream s1) (SStream s2)))) as =
-  map (toHask s2) $ toHaskList $ runTermInEnv env $ mkExpr trm s1 as
+  run initialState (mkExpr trm) as
   where
-    mkExpr :: (FRPHask t a) => Term () -> Sing t -> [a] -> Term ()
-    mkExpr tm s xs = tm <| fixed tmalloc <| streamed s xs
+    run sig e = \case
+      [] -> []
+      (x : xs) ->
+        let inputs = Inputs (M.singleton "input" (toFRP s1 x))
+            (v, sig') = runExpr (tick inputs sig) inputs env e
+        in  case v of
+          VCons y (VPntr l) -> toHask s2 y : run sig' (tmpntrderef l) xs
+          v                 ->
+              error $ "got " ++ ppshow v ++ " expected VCons x (VPntr l)"
 
-    streamed s [] = error "input stream terminated"
-    streamed s (x : xs) = tmcons (valToTerm . toFRP s $ x) (tmdelay tmalloc $ streamed s xs)
-
+    mkExpr :: Term () -> Term ()
+    mkExpr tm = tm <| fixed tmalloc <| TmInput () "input"
 
 -- |Execute a FRP program that produces a stream of @[a]@s
 execute :: (FRPHask t a) => FRP (TStream TAlloc :->: TStream t) -> [a]

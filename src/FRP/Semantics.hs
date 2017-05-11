@@ -5,7 +5,9 @@ Description : Operational Semantics
 This module implements the operational semantics from the paper
 -}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module FRP.Semantics (
     StoreVal(..)
@@ -13,6 +15,7 @@ module FRP.Semantics (
   , Store
   , tick
   , EvalState(..)
+  , Inputs(..)
   , initialState
   , EvalM
   , toHaskList
@@ -22,11 +25,12 @@ module FRP.Semantics (
   , stepProgram
   , runProgram
   , interpProgram
+  , noInputs
   ) where
 
 import           Utils (unsafeLookup)
 import           Control.Monad.Reader
-import           Control.Monad.State
+import           Control.Monad.State.Strict
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as M
 import           Debug.Trace
@@ -70,9 +74,26 @@ instance Pretty EvalState where
     text "labelGen =" <+> integer lg
     $$ ppr n s
 
+newtype Inputs = Inputs (Map Name Value)
+  deriving (Show, Eq)
+
+instance Pretty Inputs where
+  ppr n (Inputs m) = vcat $ map text $ M.keys m
+
+noInputs :: Inputs
+noInputs = Inputs M.empty
+
+data EvalRead = EvalRead { _env :: Env, _inputs :: Inputs }
+  deriving (Show, Eq)
+
+instance Pretty EvalRead where
+  ppr n (EvalRead {_env, _inputs}) =
+    text "env: " $$ ppr n _env $$ text "inputs: " $$ ppr n _inputs
+
 -- |The Eval monad handles evaluation of programs
-newtype EvalM a = EvalM {unEvalM :: StateT EvalState (Reader Env) a}
-  deriving (Functor, Applicative, Monad, MonadState EvalState, MonadReader Env)
+newtype EvalM a = EvalM {unEvalM :: StateT EvalState (Reader EvalRead) a}
+  deriving ( Functor, Applicative, Monad, MonadState EvalState
+           , MonadReader EvalRead)
 
 -- |the initial state for the evaluator is with an empty Store and
 -- a label generator at 0
@@ -98,13 +119,13 @@ lookupPntr :: Label -> EvalM StoreVal
 lookupPntr lbl = do
   store <- getStore
   case M.lookup lbl store of
-    Nothing -> error $ "pntr " ++ show lbl ++ " not in store " ++ show store
+    Nothing -> error $ "pntr " ++ show lbl ++ " not in store " ++ ppshow store
     Just x  -> return x
 
 -- |Get a Value from the Env
 useVar :: String -> EvalM Value
 useVar x = do
-  env <- ask
+  env <- _env <$> ask
   case M.lookup x env of
     Nothing        -> crash $ "var " ++ x ++ " not in env."
     Just (Left  t) -> eval t
@@ -126,28 +147,40 @@ genLabel = do
   return gen
 
 -- |Evaluate an expression in an environment, but with an initial state
-evalExpr :: Env -> EvalTerm -> Value
+evalExpr :: Inputs -> Env -> EvalTerm -> Value
 evalExpr = evalExpr' initialState
 
 -- |Evaluate an expression in a given state and environment
-evalExpr' :: EvalState -> Env -> EvalTerm -> Value
-evalExpr' s env term = fst $ runExpr s env term
+evalExpr' :: EvalState -> Inputs -> Env -> EvalTerm -> Value
+evalExpr' s inputs env term = fst $ runExpr s inputs env term
 
 -- |Run an expression\/term in a given state and environment
-runExpr :: EvalState -> Env -> EvalTerm -> (Value, EvalState)
-runExpr initState initEnv term =
-  let (v, s) = runReader (runStateT (unEvalM $ eval term) initState) initEnv
-  in  -- trace ("runExpr " ++ ppshow term ++ " with lg " ++ show (_labelGen initState) ++ " = " ++ ppshow v) $
-      (v,s)
+runExpr :: EvalState -> Inputs -> Env -> EvalTerm -> (Value, EvalState)
+runExpr initState inputs initEnv term =
+  let er = EvalRead { _env = initEnv, _inputs = inputs }
+      (v, s) = runReader (runStateT (unEvalM $ eval term) initState) er
+  in  (v,s)
+
+localEnv :: (Env -> Env) -> EvalM a -> EvalM a
+localEnv fn = local envfn where
+  envfn er = er {_env = fn (_env er)}
+
+getInput :: Name -> EvalM Value
+getInput nm = do
+  Inputs inputs <- _inputs <$> ask
+  let v = unsafeLookup nm inputs
+  l <- allocVal (SVLater (TmInput () nm) initEnv)
+  return (VCons v $ VPntr l)
 
 -- |Main evaluation function. This encodes the operational semantics from
 -- the paper
 eval :: EvalTerm -> EvalM Value
 eval term = case term of
+  TmInput _a nm -> getInput nm
   TmVar _a x -> useVar x
   TmLit _a x -> return $ VLit x
   -- eval a lambda to a closure that captures the current scope
-  TmLam _a x _ty e -> VClosure x e <$> ask
+  TmLam _a x _ty e -> VClosure x e . _env <$> ask
 
   TmApp _a e1 e2 -> do
     e3 <- eval e1
@@ -155,7 +188,7 @@ eval term = case term of
       VClosure x e1' env' -> do
         v2 <- eval e2
         let env'' = M.insert x (Right v2) env'
-        local (M.union env'') $ eval e1'
+        localEnv (M.union env'') $ eval e1'
       _ -> crash $ "expected closure, got " ++ (ppshow e3)
 
   TmBinOp _a op el er -> evalBinOp op el er
@@ -172,14 +205,14 @@ eval term = case term of
   TmInl _a trm       -> VInl <$> eval trm
   TmInr _a trm       -> VInr <$> eval trm
   TmCons _a hd tl    -> VCons <$> eval hd <*> eval tl
-  TmFix _a x ty e    -> local (M.insert x (Left $ term)) $ eval e
+  TmFix _a x ty e    -> localEnv (M.insert x (Left $ term)) $ eval e
 
   -- delay a term by allocating it on the store
   TmDelay _a e' e -> do
     v <- eval e'
     case v of
       VAlloc -> do
-        env' <- ask
+        env' <- _env <$> ask
         label <- allocVal (SVLater e env')
         return $ VPntr label
       _ -> crash $ "expected VAlloc, got" ++ (ppshow v)
@@ -197,15 +230,15 @@ eval term = case term of
   TmCase _a trm (nml, trml) (nmr, trmr) -> do
     res <- eval trm
     case res of
-      VInl vl -> local (M.insert nml (Right vl)) $ eval trml
-      VInr vr -> local (M.insert nmr (Right vr)) $ eval trmr
+      VInl vl -> localEnv (M.insert nml (Right vl)) $ eval trml
+      VInr vr -> localEnv (M.insert nmr (Right vr)) $ eval trmr
       _       -> crash "not well-typed"
 
   -- eval a let by binding the name to the scope using 'matchPat'
   TmLet _a pat e e' -> do
     v <- eval e
     env' <- matchPat pat v
-    local (M.union env') $ eval e'
+    localEnv (M.union env') $ eval e'
 
   TmAlloc _a -> return VAlloc
   TmPntr _a l -> return $ VPntr l
@@ -237,10 +270,11 @@ eval term = case term of
     matchPat (PTup p1 p2) (VTup v1 v2) =
       M.union <$> matchPat p1 v1 <*> matchPat p2 v2
     matchPat pat v = do
-      env <- ask
+      er <- ask
+      let env = _env er
       store <- get
       error $ ppshow pat ++ " cannot match " ++ ppshow v
-            ++ "\nenv: " ++ (ppshow env) ++ "\nstore: " ++ ppshow store
+            ++ "\nenv: " ++ ppshow env ++ "\nstore: " ++ ppshow store
 
     -- evaluate a binary operator
     evalBinOp op el er = case op of
@@ -283,12 +317,12 @@ eval term = case term of
 -- pointers from smallest-to-biggest since allocated values can
 -- only depend on other allocations with a pointer label that is
 -- smaller than their own.
-tick :: EvalState -> EvalState
-tick st
+tick :: Inputs -> EvalState -> EvalState
+tick inputs st
   | M.null (_store st) = st
   | otherwise = M.foldlWithKey' tock st (_store st) where
       tock acc k (SVLater e env) =
-          let (v, st') = runExpr acc env e
+          let (v, st') = runExpr acc inputs env e
               s = _store st'
           in  st' { _store  = M.insert k (SVNow v) s }
       tock acc k (SVNow _)  = acc { _store = M.delete k (_store acc) }
@@ -299,7 +333,8 @@ stepProgram (Program {_decls = decls}) =
   let main = maybe (error "no main function") id
            $ find (\d -> _name d == "main") decls
   in  case main of
-    Decl _a _ty _nm body -> runExpr initialState globals (mainEvalTerm $ unitFunc body)
+    Decl _a _ty _nm body ->
+      runExpr initialState noInputs globals (mainEvalTerm $ unitFunc body)
   where
     globals    = globalEnv decls
 
@@ -309,8 +344,8 @@ runTermInEnv env trm =
   keepRunning initialState trm
   where
     keepRunning s e  =
-      let (p, s') = runExpr s env e
-          s'' = tick s'
+      let (p, s') = runExpr s noInputs env e
+          s'' = tick noInputs s'
       in case p of
         VCons v (VPntr l) -> VCons (deepRunning s'' v) (keepRunning s'' (tmpntrderef l))
         _                 -> error $ ppshow p ++ " not expected"
@@ -352,4 +387,4 @@ mainEvalTerm body = tmapp body (tmfix "xs" undefined $ tmcons tmalloc (tmdelay t
 globalEnv :: [Decl a] -> Env
 globalEnv decls = foldl go M.empty decls
   where
-    go env (Decl _a t n b) = M.insert n (Right $ evalExpr env $ unitFunc b) env
+    go env (Decl _a t n b) = M.insert n (Right $ evalExpr noInputs env $ unitFunc b) env
