@@ -19,7 +19,6 @@ module FRP
   , module FRP.Semantics
   , module FRP.AST.QuasiQuoter
   , transform
-  , transform'
   , execute
   , FRPHask
   )
@@ -84,31 +83,32 @@ instance FRPHask t1 a => FRPHask (TStream t1) [a] where
   toHask sing v                       = haskErr "expected stream value" sing v
 
   toFRP (SStream s) (x : xs) = VCons (toFRP s x) (toFRP (SStream s) xs)
+  toFRP sing        []       = error "Cannot convert inductive lists to FRP"
+
 
 
 -- |Use a FRP program to transform a Haskell stream @[a]@ to @[b]@
 transform :: (FRPHask t1 a, FRPHask t2 b)
           => FRP (TStream TAlloc :->: TStream t1 :->: TStream t2)
           -> [a] -> [b]
-transform (FRP env trm (SArr us (SArr (SStream s1) (SStream s2)))) as =
+transform frp [] = []
+transform (FRP env trm (us `SArr` SStream s1 `SArr` SStream s2)) as =
   run initialState (mkExpr trm) as
   where
-    run sig e = \case
-      [] -> []
-      (x : xs) ->
-        let inputs = Inputs (M.singleton "input" (toFRP s1 x))
-            (v, sig') = runExpr (tick inputs sig) inputs env e
-        in  case v of
-          VCons y (VPntr l) -> toHask s2 y : run sig' (tmpntrderef l) xs
-          v                 ->
-              error $ "got " ++ ppshow v ++ " expected VCons x (VPntr l)"
+    run sig e []       = []
+    run sig e (x : xs) = step (runExpr (tick inputs sig) inputs env e)
+      where
+        inputs = mkInputs x
+        step (VCons y (VPntr l), sig') = toHask s2 y : run sig' (tmpntrderef l) xs
+        step v                         = crash v
 
-    mkExpr :: Term () -> Term ()
-    mkExpr tm = tm <| fixed tmalloc <| TmInput () "input"
+    mkInputs x = Inputs (M.singleton "input" (toFRP s1 x))
+    crash v    = error $ "got " ++ ppshow v ++ " expected VCons x (VPntr l)"
+    mkExpr tm  = tm <| fixed tmalloc <| TmInput () "input"
 
 -- |Execute a FRP program that produces a stream of @[a]@s
 execute :: (FRPHask t a) => FRP (TStream TAlloc :->: TStream t) -> [a]
-execute frp@(FRP env trm sing@(SArr us (SStream s))) =
+execute (FRP env trm (us `SArr` SStream s)) =
   map (toHask s) $ toHaskList $ runTermInEnv env $ mkExpr trm
   where
     mkExpr tm = tm <| fixed tmalloc
