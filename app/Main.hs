@@ -7,6 +7,7 @@ module Main where
 
 import FRP
 import FRP.AST.Reflect
+import Data.Function (fix)
 
 -- frp_incr :: FRP (TStream TAlloc :->: TStream TNat)
 frp_incr = [prog|
@@ -68,7 +69,51 @@ frp_switch_safe = [prog|
     switch us xs e.
 |]
 
+[hsprog|
+  const' : S alloc -> Nat -> S Nat
+  const' us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, const' us' x)).
+
+  nats : S alloc -> Nat -> S Nat
+  nats us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats us' (x + 1))).
+
+  switch : S alloc -> S a -> (mu f. S a + f) -> S a
+  switch us xs e =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    case out (mu f. (S a) + f) e of
+      | inl ys -> ys
+      | inr t  -> let delay(e') = t in
+                  cons(x, delay (u, switch us' xs' e')).
+
+  eventually : S alloc -> Nat -> S a -> (mu f. S a + f)
+  eventually us n xs =
+    if n == 0
+      then into (mu f. S a + f) inl xs
+      else let cons(u, delay(us')) = us in
+           let cons(x, delay(xs')) = xs in
+           let stable(n') = promote(n)  in
+           into (mu f. S a + f) inr delay(u, eventually us' (n' - 1) xs').
+
+  frp_main : S alloc -> S Nat -> S Nat
+  frp_main us xs =
+    let e = eventually us 100 (nats us 0) in
+    switch us xs e.
+|]
+
+allocs = () : allocs
+
 main :: IO ()
 main = do
-  let xs = transform' frp_switch_safe [100,99..]
+  let xs = frp_main allocs [100 :: Int,99..] :: [Int]
   putStrLn . show $ take 10000000 xs
+
+-- main :: IO ()
+-- main = do
+--   let xs = transform frp_switch_safe [100 :: Int,99..] :: [Int]
+--   putStrLn . show $ take 10000000 xs

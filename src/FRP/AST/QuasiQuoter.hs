@@ -5,6 +5,7 @@ Description : Quasi-Quoters for FRP programs
 {-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NamedFieldPuns            #-}
+{-# LANGUAGE BangPatterns #-}
 
 module FRP.AST.QuasiQuoter where
 
@@ -28,6 +29,7 @@ import           Text.Parsec hiding ((<|>))
 import           Data.List (find)
 import           Text.Parsec.String
 import           Control.Monad.Fix
+import           Debug.Trace
 
 -- |Quote a program without type-checking it
 unsafeProg :: QuasiQuoter
@@ -186,6 +188,9 @@ progToHaskDecls (Program { _decls = decls }) = do
           (normalB $ dataToExpQ (const Nothing) _type) []
       ]
 
+delay :: () -> a -> a
+delay !u a = a
+
 termToHaskExpQ :: Term a -> ExpQ
 termToHaskExpQ term = go term where
   go = \case
@@ -196,17 +201,17 @@ termToHaskExpQ term = go term where
     TmInr a t                    -> [|Right $(go t)|]
     TmCase a t (ln, lt) (rn, rt) ->
         [| case $(go t) of
-             Left $(varP (mkName ln))   -> $(go lt)
-             Right $(varP (mkName rn))  -> $(go rt)
+             Left  $(varP (mkName ln)) -> $(go lt)
+             Right $(varP (mkName rn)) -> $(go rt)
         |]
     TmLam a nm mty t             -> lamE [varP $ mkName nm] (go t)
     TmVar a nm                   -> varE (mkName nm)
     TmApp a  t1 t2               -> [|$(go t1) $(go t2)|]
-    TmCons a t1 t2               -> [|$(go t1) : $(go t2)|]
+    TmCons a t1 t2               -> conE (mkName ":") `appE` go t1 `appE` go t2 -- [|$(go t1) : $(go t2)|]
     TmOut a  _ t                 -> [|out $(go t)|]
     TmInto a _ t                 -> [|Into $(go t)|]
     TmStable a t                 -> go t
-    TmDelay a t1 t2              -> go t2
+    TmDelay a t1 t2              -> varE 'delay `appE` go t1 `appE` go t2
     TmPromote a t                -> go t
     TmLet a pat t1 t2            -> letE [patToHaskDecQ pat t1] (go t2)
     TmLit a l                    -> case l of
