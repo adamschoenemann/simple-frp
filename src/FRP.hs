@@ -35,7 +35,7 @@ import qualified Data.Map.Strict as M
 
 -- |Type-class that represents a conversion from a FRP value of
 -- a type to a Haskell value of a type
-class FRPHask (t :: Ty) (a :: *) | t -> a where
+class FRPHask (t :: Ty) (a :: *) | a -> t where
   toHask :: Sing t -> Value -> a
   toFRP :: Sing t -> a -> Value
 
@@ -50,6 +50,12 @@ instance FRPHask TNat Int where
   toHask sing v               = haskErr "expected nat value" sing v
 
   toFRP _ x = VLit . LNat $ x
+
+instance FRPHask TNat Integer where
+  toHask sing (VLit (LNat x)) = toInteger x
+  toHask sing v               = haskErr "expected nat value" sing v
+
+  toFRP _ x = VLit . LNat $ fromInteger x
 
 instance FRPHask TBool Bool where
   toHask sing (VLit (LBool x)) = x

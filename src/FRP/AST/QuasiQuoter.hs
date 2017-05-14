@@ -217,8 +217,9 @@ termToHaskExpQ term = go term where
       LUndefined                 -> conE (mkName "undefined")
     TmBinOp a op t1 t2           -> [| $(varE $ mkName (ppshow op)) $(go t1) $(go t2) |]
     TmITE a b tt tf              -> [|if $(go b) then $(go tt) else $(go tf)|]
-    TmPntr a lbl                 -> undefined --S.empty
-    TmPntrDeref a lbl            -> undefined --S.empty
+    TmPntr a lbl                 -> undefined
+    TmPntrDeref a lbl            -> undefined
+    TmInput a nm                 -> undefined
     TmAlloc a                    -> conE '()
     TmFix a nm mty t             -> (varE 'fix) `appE` (lamE [varP $ mkName nm] (go t))
 

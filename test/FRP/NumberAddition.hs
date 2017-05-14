@@ -20,7 +20,7 @@ frp_add = [prog|
 
 main :: IO ()
 main = interact (unlines . process . lines) where
-  process = map (("result: " ++) . show) . transform frp_add .
+  process = map (("result: " ++) . (show :: Int -> String)) . transform frp_add .
             map (read :: String -> (Int,Int))
 
 -- main :: IO ()

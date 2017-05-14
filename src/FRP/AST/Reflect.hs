@@ -17,7 +17,13 @@ Description : Reflecting FRP-Types into the Haskell type-system
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module FRP.AST.Reflect where
+module FRP.AST.Reflect (
+    Ty(..)
+  , Sing(..)
+  , FRP(..)
+  , reifySing
+  , typeToSingExp
+  ) where
 
 import           Language.Haskell.TH ( Exp (..), ExpQ, Lit (..), Pat (..), Q
                                      , DecQ, mkName, runQ)
