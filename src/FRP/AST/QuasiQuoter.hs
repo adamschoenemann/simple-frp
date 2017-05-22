@@ -204,14 +204,14 @@ termToHaskExpQ term = go term where
              Left  $(varP (mkName ln)) -> $(go lt)
              Right $(varP (mkName rn)) -> $(go rt)
         |]
-    TmLam a nm mty t             -> lamE [varP $ mkName nm] (go t)
+    TmLam a nm mty t             -> lamE [bangP . varP $ mkName nm] (go t)
     TmVar a nm                   -> varE (mkName nm)
     TmApp a  t1 t2               -> [|$(go t1) $(go t2)|]
     TmCons a t1 t2               -> conE (mkName ":") `appE` go t1 `appE` go t2 -- [|$(go t1) : $(go t2)|]
     TmOut a  _ t                 -> [|out $(go t)|]
     TmInto a _ t                 -> [|Into $(go t)|]
     TmStable a t                 -> go t
-    TmDelay a t1 t2              -> varE 'delay `appE` go t1 `appE` go t2
+    TmDelay a t1 t2              -> go t2 -- varE 'delay `appE` go t1 `appE` go t2
     TmPromote a t                -> go t
     TmLet a pat t1 t2            -> letE [patToHaskDecQ pat t1] (go t2)
     TmLit a l                    -> case l of
@@ -219,7 +219,7 @@ termToHaskExpQ term = go term where
       LBool True                 -> conE 'True
       LBool False                -> conE 'False
       LUnit                      -> conE '()
-      LUndefined                 -> conE (mkName "undefined")
+      LUndefined                 -> varE (mkName "undefined")
     TmBinOp a op t1 t2           -> [| $(varE $ mkName (ppshow op)) $(go t1) $(go t2) |]
     TmITE a b tt tf              -> [|if $(go b) then $(go tt) else $(go tf)|]
     TmPntr a lbl                 -> undefined
@@ -229,7 +229,7 @@ termToHaskExpQ term = go term where
     TmFix a nm mty t             -> (varE 'fix) `appE` (lamE [varP $ mkName nm] (go t))
 
 patToHaskDecQ :: Pattern -> Term a -> DecQ
-patToHaskDecQ pat term = valD (go pat) (normalB $ termToHaskExpQ term) []
+patToHaskDecQ pat term = valD (go $ pat) (normalB $ termToHaskExpQ term) []
   where
     go pat = case pat of
         PBind nm  -> varP $ mkName nm

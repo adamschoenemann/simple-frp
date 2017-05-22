@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LiberalTypeSynonyms #-}
 
 module Main where
 
@@ -106,11 +107,87 @@ frp_switch_safe = [prog|
     switch us xs e.
 |]
 
+[hsprog|
+  buffer : S alloc -> Nat -> S Nat -> S Nat
+  buffer us n xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    let stable(x') = promote(x) in
+    cons(n, delay(u, buffer us' x' xs')).
+
+  forward : S alloc -> S Nat -> @(S Nat)
+  forward us xs =
+    let cons(u, delay(us')) = us in
+    let cons(x, delay(xs')) = xs in
+    let stable(x') = promote(x) in
+    delay(u, buffer us' x' xs').
+
+  scary_const : S alloc -> S Nat -> S (S Nat)
+  scary_const us xs =
+    let cons(u, delay(us')) = us in
+    let delay(xs') = forward us xs in
+    cons(xs, delay(u, scary_const us' xs')).
+
+  nats' : S alloc -> Nat -> S Nat
+  nats' us n =
+    let cons(u, delay(us')) = us in
+    let stable(x) = promote(n) in
+    cons(x, delay(u, nats' us' (x + 1))).
+
+  scary_main : S alloc -> S (S Nat)
+  scary_main us = scary_const us (nats' us 0).
+|]
+
+-- [hsprog|
+
+-- selfapp : (@a -> a) -> S alloc -> @(mu af. #(S alloc -> af -> a)) -> a
+-- selfapp f us v =
+--   let cons(u, delay(us')) = us in
+--   let delay(x) = v in
+--   f delay(u,
+--     let stable(w) = out (mu af. #(S alloc -> af -> a)) x in
+--     let cons(u', us'') = us' in
+--     let y = delay(u', into (mu af. #(S alloc -> af -> a)) stable(w)) in
+--     w us' y
+--   ).
+
+
+-- fixedpoint : #(@a -> a) -> S alloc -> a
+-- fixedpoint h us =
+--   let cons(u, delay(us')) = us in
+--   let stable(f) = h in
+--   let delay(y) = delay(u, into (mu af. #(S alloc -> af -> a)) stable(selfapp f)) in
+--   selfapp f us delay(u,y).
+
+
+-- ones : S alloc -> S Nat
+-- ones us =
+--   let fn = stable(\xs -> cons(1, xs)) in
+--   fixedpoint fn us.
+
+-- fix_main : S alloc -> S Nat
+-- fix_main us = ones us.
+-- |]
+
+newtype Fun a b c = Fun {unFun :: a -> c -> b}
+
+selfapp :: (a -> a) -> [()] -> Mu (Fun [()] a) -> a
+selfapp f us v =
+  let u : us' = us
+      x = v
+  in f (let w         = unFun . out $ x
+            u' : us'' = us'
+            y         = Into (Fun w)
+        in w us' y)
+
 allocs = () : allocs
 
 main :: IO ()
 main = do
-  let xs = frp_main allocs [100 :: Int,99..] :: [Int]
+  -- let xs = fix_main allocs
+  -- putStrLn . show . take 100000 $ xs
+
+  let xs = scary_main allocs [100 :: Int,99..] :: [Int]
   putStrLn . show $ take 10000000 xs
 
 -- main :: IO ()
